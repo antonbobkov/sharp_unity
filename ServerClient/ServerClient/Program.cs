@@ -12,28 +12,51 @@ namespace Client
     {
         static void Main(string[] args)
         {
-            IPHostEntry hostDnsEntry = Dns.GetHostEntry("localhost");
-            IPAddress serverIp = hostDnsEntry.AddressList[0];
+            IPHostEntry hostDnsEntry = Dns.GetHostEntry(Dns.GetHostName());
+            IPHostEntry localDnsEntry = Dns.GetHostEntry("localhost");
 
-            Console.WriteLine(serverIp);
+            var hostIPs = Dns.GetHostEntry(Dns.GetHostName()).AddressList.Select(x => x);
+            var localIPs = Dns.GetHostEntry("localhost").AddressList.Select(x => x);
 
-            while (true)
+            var allIPs = hostIPs.Concat(localIPs);
+
+            foreach (IPAddress address in allIPs)
             {
+                Console.WriteLine("Type: {0}, Address: {1}", address.AddressFamily,
+                                                             address);
+            }
+
+            Console.WriteLine();
+
+            foreach (IPAddress address in allIPs)
+            {
+                Console.WriteLine("Trying {0} {1}", address.AddressFamily,
+                                                             address);
                 Socket daytimeSocket = new Socket(
-                    serverIp.AddressFamily,
+                    address.AddressFamily,
                     SocketType.Stream,
                     ProtocolType.Tcp);
 
-                daytimeSocket.Connect(serverIp, 13);
-                string data;
-                using (Stream timeServiceStream = new NetworkStream(daytimeSocket, true))
-                using (StreamReader timeServiceReader = new StreamReader(timeServiceStream))
+                try
                 {
-                    data = timeServiceReader.ReadToEnd();
+                    daytimeSocket.Connect(address, 13);
+                    string data;
+                    using (Stream timeServiceStream = new NetworkStream(daytimeSocket, true))
+                    using (StreamReader timeServiceReader = new StreamReader(timeServiceStream))
+                    {
+                        data = timeServiceReader.ReadToEnd();
+                    }
+
+                    Console.WriteLine("{0}: {1}", data.Length, data);
+
+                }
+                catch( Exception )
+                {
+                    Console.WriteLine("Failed");
+//                    Console.WriteLine(ex.ToString());
                 }
 
-                Console.WriteLine("{0}: {1}", data.Length, data);
-
+                Console.WriteLine();
                 daytimeSocket.Dispose();
             }
         }
