@@ -2,3 +2,5 @@ C:\Users\Anton\test\sharpnetworking\ServerClient\Server\bin\Debug\Server.exe
 C:\Users\Anton\test\sharpnetworking\ServerClient\Server\bin\Debug\Server.pdb
 C:\Users\Anton\test\sharpnetworking\ServerClient\Server\obj\x86\Debug\Server.exe
 C:\Users\Anton\test\sharpnetworking\ServerClient\Server\obj\x86\Debug\Server.pdb
+C:\Users\Anton\Projects\sharpnetworking\ServerClient\Server\obj\x86\Debug\Server.exe
+C:\Users\Anton\Projects\sharpnetworking\ServerClient\Server\obj\x86\Debug\Server.pdb
