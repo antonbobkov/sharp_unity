@@ -17,8 +17,10 @@ namespace Client
 
             var hostIPs = Dns.GetHostEntry(Dns.GetHostName()).AddressList.Select(x => x);
             var localIPs = Dns.GetHostEntry("localhost").AddressList.Select(x => x);
+            var extraIPs = new IPAddress[] { IPAddress.Parse("192.168.1.66") }.Select(x => x);
 
-            var allIPs = hostIPs.Concat(localIPs);
+            var allIPs = hostIPs.Concat(localIPs).Concat(extraIPs);
+
 
             foreach (IPAddress address in allIPs)
             {
