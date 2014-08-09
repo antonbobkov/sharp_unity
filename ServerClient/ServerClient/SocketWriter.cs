@@ -59,7 +59,8 @@ namespace ServerClient
         {
             stm.WriteByte((byte)mt);
 
-            Serialize(stm, message);
+            if(message != null)
+                Serialize(stm, message);
         }
 
         static void SendStream(Stream network, Stream message)

@@ -34,7 +34,7 @@ namespace ServerClient
                         int bt = readStream.ReadByte();
 
                         if (bt == -1)
-                            messageProcessor(readStream, MessageType.DISCONNECT);
+                            throw new IOException("End of stream");
 
                         messageProcessor(readStream, (MessageType)bt);
                     }

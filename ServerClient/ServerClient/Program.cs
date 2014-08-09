@@ -124,12 +124,13 @@ namespace ServerClient
                         Console.Write(sb.ToString());
                     });
                 }
-                else if ("connect".StartsWith(sCommand))
+                else if ("connect".StartsWith(sCommand) || "mconnect".StartsWith(sCommand))
                 {
                     msgs.Add(() =>
                     {
                         string sIpAddr = ip.ToString();
                         string sPort = nStartPort.ToString();
+                        bool askForTable = "mconnect".StartsWith(sCommand);
 
                         if (param.Count >= 2)
                             sIpAddr = param[1];
@@ -145,6 +146,9 @@ namespace ServerClient
                             Console.WriteLine("Already connected/connecting");
                         else
                             Console.WriteLine("Connection started");
+
+                        if (askForTable)
+                            dc.Sync_AskForTable(ep);
                     });
                 }
                 else

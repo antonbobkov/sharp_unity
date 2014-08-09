@@ -40,7 +40,7 @@ namespace ServerClient
                 ), sckListen);        
         }
 
-        Node NodeByEP(IPEndPoint ep)
+        public Node NodeByEP(IPEndPoint ep)
         {
             var res = from nd in nodes
                       where nd.Address.Equals(ep)
@@ -51,6 +51,16 @@ namespace ServerClient
                 throw new InvalidDataException("several nodes with same endpoint " + res.First().Address.ToString());
             else
                 return res.FirstOrDefault();
+        }
+
+        public void Sync_AskForTable(IPEndPoint ep)
+        {
+            Node n = NodeByEP(ep);
+
+            if (n == null)
+                throw new InvalidOperationException("No such node " + ep.ToString());
+
+            n.SendMessage(MessageType.TABLE_REQUEST);
         }
 
         void ProcessMessage(IPEndPoint their_addr, Stream stm, MessageType mt)
@@ -67,12 +77,35 @@ namespace ServerClient
 
                 processQueue(() => this.Sync_NewName(this.NodeByEP(their_addr), msg));
             }
+            else if (mt == MessageType.TABLE_REQUEST)
+            {
+                processQueue(() => this.Sync_TableRequest(this.NodeByEP(their_addr)));
+            }
+            else if (mt == MessageType.TABLE)
+            {
+                var table = (IPEndPoint[]) SocketReader.ReadSerializedMessage(stm);
+                processQueue(() => this.Sync_OnTable(table));
+            }
             else
             {
                 throw new InvalidOperationException("Unexpected message type " + mt.ToString());
             }
         }
 
+        void Sync_TableRequest(Node n)
+        {
+            var listOfPeers = from nd in nodes
+                              where nd.Ready()
+                              select nd.Address;
+
+            n.SendMessage(MessageType.TABLE, listOfPeers.ToArray());
+        }
+
+        void Sync_OnTable(IPEndPoint[] table)
+        {
+            new List<IPEndPoint>(table).ForEach((ep) => Sync_TryConnect(ep));
+        }
+            
         void Sync_NewMessage(Node n, string msg)
         {
             Console.WriteLine("{0} says: {1}", n.Name, msg);

@@ -68,7 +68,7 @@ namespace ServerClient
             return sb.ToString();
         }
 
-        public void SendMessage(MessageType mt, object message)
+        public void SendMessage(MessageType mt, object message = null)
         {
             if (!Ready())
                 Console.WriteLine("Warning: socket not ready yet {0}", Description());
@@ -107,16 +107,16 @@ namespace ServerClient
 
         public void Connect(Handshake my_info, Action<IOException, Disconnect> processDisonnect)
         {
-            Socket sck = GetReadyForNewWritingConnection();
+            Socket sck = GetReadyForNewWritingConnection(my_info);
 
             sck.Connect(Address);
 
-            AcceptWritingConnection(sck, my_info, processDisonnect);
+            AcceptWritingConnection(sck, processDisonnect);
         }
 
         public void StartConnecting(Action doWhenConnected, Handshake my_info, Action<IOException, Disconnect> processDisonnect)
         {
-            Socket sck = GetReadyForNewWritingConnection();
+            Socket sck = GetReadyForNewWritingConnection(my_info);
 
             new Thread
                 (() =>
@@ -124,19 +124,20 @@ namespace ServerClient
                         sck.Connect(Address);
                         actionQueue(() =>
                             {
-                                AcceptWritingConnection(sck, my_info, processDisonnect);
+                                AcceptWritingConnection(sck, processDisonnect);
                                 doWhenConnected.Invoke();
                             });
                     }
                 ).Start();
         }
 
-        Socket GetReadyForNewWritingConnection()
+        Socket GetReadyForNewWritingConnection(Handshake my_info)
         {
             if (!CanConnect())
                 throw new InvalidOperationException("Unexpected connection request in " + Description());
 
             writerConnectionInProgress = true;
+            SendMessage(MessageType.HANDSHAKE, my_info);            
 
             return new Socket(
                     Address.AddressFamily,
@@ -144,7 +145,7 @@ namespace ServerClient
                     ProtocolType.Tcp);
         }
 
-        void AcceptWritingConnection(Socket sck, Handshake my_info, Action<IOException, Disconnect> processDisonnect)
+        void AcceptWritingConnection(Socket sck, Action<IOException, Disconnect> processDisonnect)
         {
             writerConnectionInProgress = false;
 
@@ -155,7 +156,6 @@ namespace ServerClient
                                         processDisonnect(ioex, Disconnect.WRITE);
                                     })
                                );
-            SendMessage(MessageType.HANDSHAKE, my_info);            
         }
     }
 }
