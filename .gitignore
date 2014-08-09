@@ -1,1 +1,17 @@
 *.suo
+ServerClient/Server/bin/Debug/Server.exe
+ServerClient/Server/bin/Debug/Server.pdb
+ServerClient/Server/bin/Debug/ServerClient.exe
+ServerClient/Server/bin/Debug/ServerClient.pdb
+ServerClient/Server/obj/x86/Debug/DesignTimeResolveAssemblyReferencesInput.cache
+ServerClient/Server/obj/x86/Debug/Server.csproj.FileListAbsolute.txt
+ServerClient/Server/obj/x86/Debug/Server.csprojResolveAssemblyReference.cache
+ServerClient/Server/obj/x86/Debug/Server.exe
+ServerClient/Server/obj/x86/Debug/Server.pdb
+ServerClient/ServerClient/bin/Debug/ServerClient.exe
+ServerClient/ServerClient/bin/Debug/ServerClient.pdb
+ServerClient/ServerClient/obj/x86/Debug/Client.csproj.FileListAbsolute.txt
+ServerClient/ServerClient/obj/x86/Debug/Client.csprojResolveAssemblyReference.cache
+ServerClient/ServerClient/obj/x86/Debug/DesignTimeResolveAssemblyReferencesInput.cache
+ServerClient/ServerClient/obj/x86/Debug/ServerClient.exe
+ServerClient/ServerClient/obj/x86/Debug/ServerClient.pdb
