@@ -108,6 +108,7 @@ namespace ServerClient
                 targetNode = new Node(theirInfo, processQueue);
                 nodes.Add(targetNode);
             }
+            targetNode.Name = theirInfo.name;
 
             targetNode.AcceptConnection(sck,
                 (ep, stm, mt) => this.ProcessMessage(ep, stm, mt),
