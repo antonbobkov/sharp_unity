@@ -20,6 +20,8 @@ namespace ServerClient
         }
     }
 
+    enum Disconnect {READ, WRITE};
+
     class Node
     {
         Handshake info;
@@ -45,20 +47,18 @@ namespace ServerClient
         SocketWriter writer = new SocketWriter();
         SocketReader reader;
 
+        Action<Action> actionQueue;
+
         public bool CanRead() { return reader != null; }
         public bool CanWrite() { return writer.CanWrite(); }
         public bool CanConnect() { return !CanWrite() && !writerConnectionInProgress; }
 
         public bool Ready() { return CanRead() && CanWrite(); }
 
-        public Node(IPEndPoint ep, string name = "")
-        {
-            info = new Handshake(ep, "");
-        }
-
-        public Node(Handshake info_)
+        public Node(Handshake info_, Action<Action> actionQueue_)
         {
             info = info_;
+            actionQueue = actionQueue_;
         }
 
         public string Description()
@@ -78,24 +78,43 @@ namespace ServerClient
             writer.SendMessage(mt, message);
         }
 
-        public void AcceptConnection(Socket readingSocket, Action<IPEndPoint, Stream, MessageType> messageProcessor)
+        public void AcceptConnection(Socket readingSocket,
+            Action<IPEndPoint, Stream, MessageType> messageProcessor,
+            Action<IOException, Disconnect> processDisonnect)
         {
             if (CanRead())
                 throw new InvalidOperationException("reader is aready initialized in " + Description());
 
-            reader = new SocketReader((stm, mtp) => messageProcessor(this.Address, stm, mtp), readingSocket);
+            reader = new SocketReader((stm, mtp) => messageProcessor(this.Address, stm, mtp),
+                                        (ioex) => actionQueue( () =>
+                                            {
+                                                this.DisconnectReader();
+                                                processDisonnect(ioex, Disconnect.READ);
+                                            }),
+
+            readingSocket);
         }
 
-        public void Connect(Handshake my_info)
+        void DisconnectReader()
+        {
+            reader = null;
+        }
+
+        void DisconnectWriter()
+        {
+            writer = new SocketWriter();
+        }
+
+        public void Connect(Handshake my_info, Action<IOException, Disconnect> processDisonnect)
         {
             Socket sck = GetReadyForNewWritingConnection();
 
             sck.Connect(Address);
-            
-            AcceptWritingConnection(sck, my_info);
+
+            AcceptWritingConnection(sck, my_info, processDisonnect);
         }
 
-        public void StartConnecting(Action<Action> finalize, Handshake my_info)
+        public void StartConnecting(Action doWhenConnected, Handshake my_info, Action<IOException, Disconnect> processDisonnect)
         {
             Socket sck = GetReadyForNewWritingConnection();
 
@@ -103,7 +122,11 @@ namespace ServerClient
                 (() =>
                     {
                         sck.Connect(Address);
-                        finalize(() => AcceptWritingConnection(sck, my_info));
+                        actionQueue(() =>
+                            {
+                                AcceptWritingConnection(sck, my_info, processDisonnect);
+                                doWhenConnected.Invoke();
+                            });
                     }
                 ).Start();
         }
@@ -121,11 +144,17 @@ namespace ServerClient
                     ProtocolType.Tcp);
         }
 
-        void AcceptWritingConnection(Socket sck, Handshake my_info)
+        void AcceptWritingConnection(Socket sck, Handshake my_info, Action<IOException, Disconnect> processDisonnect)
         {
             writerConnectionInProgress = false;
 
-            writer.StartWriting(sck);
+            writer.StartWriting(sck,
+                                (ioex) => actionQueue( () =>
+                                    {
+                                        this.DisconnectWriter();
+                                        processDisonnect(ioex, Disconnect.WRITE);
+                                    })
+                               );
             SendMessage(MessageType.HANDSHAKE, my_info);            
         }
     }

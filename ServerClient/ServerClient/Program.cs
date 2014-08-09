@@ -58,7 +58,7 @@ namespace ServerClient
 
             var msgs = new BlockingCollection<Action>();
 
-            DataCollection dc = new DataCollection(my_addr, "", msgs);
+            DataCollection dc = new DataCollection(my_addr, "", (action) => msgs.Add(action));
 
             dc.StartListening(sckListen);
 

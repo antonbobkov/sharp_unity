@@ -23,23 +23,12 @@ namespace ServerClient
             set { my_info.name = value; }
         }
 
-        BlockingCollection<Action> msgs;
-        Action<Action> ProcessLater(Action action2)
-        {
-            return (action1) =>
-                {
-                    msgs.Add(() =>
-                        {
-                            action1.Invoke();
-                            action2.Invoke();
-                        });
-                };
-        }
+        Action<Action> processQueue;
 
-        public DataCollection(IPEndPoint myAddr, string name, BlockingCollection<Action> msgs_)
+        public DataCollection(IPEndPoint myAddr, string name, Action<Action> processQueue_)
         {
             my_info = new Handshake(myAddr, name);
-            msgs = msgs_;
+            processQueue = processQueue_;
         }
 
         public void StartListening(Socket sckListen)
@@ -47,7 +36,7 @@ namespace ServerClient
             SocketListener sl = new SocketListener(
                 ConnectionProcessor.ProcessWithHandshake(
                     (info, sck) =>
-                        msgs.Add(() => this.Sync_NewIncomingConnection(info, sck))
+                        processQueue(() => this.Sync_NewIncomingConnection(info, sck))
                 ), sckListen);        
         }
 
@@ -70,13 +59,13 @@ namespace ServerClient
             {
                 string msg = (string)SocketReader.ReadSerializedMessage(stm);
 
-                msgs.Add(() => this.Sync_NewMessage(this.NodeByEP(their_addr), msg));
+                processQueue(() => this.Sync_NewMessage(this.NodeByEP(their_addr), msg));
             }
             else if (mt == MessageType.NAME)
             {
                 string msg = (string)SocketReader.ReadSerializedMessage(stm);
 
-                msgs.Add(() => this.Sync_NewName(this.NodeByEP(their_addr), msg));
+                processQueue(() => this.Sync_NewName(this.NodeByEP(their_addr), msg));
             }
             else
             {
@@ -95,6 +84,20 @@ namespace ServerClient
             n.Name = msg;
         }
 
+        void Sync_ProcessDisconnect(IOException ioex, Disconnect ds, Node n)
+        {
+            Console.WriteLine("Node {0} disconnected ({1})", n.Name, ds);
+        }
+
+        void StartConnecting(Node n)
+        {
+            n.StartConnecting(
+                () => this.Sync_OutgoingConnectionReady(n),
+                my_info,
+                (ioex, ds) => this.Sync_ProcessDisconnect(ioex, ds, n)
+                );
+        }
+
         void Sync_NewIncomingConnection(Handshake theirInfo, Socket sck)
         {
             Node targetNode;
@@ -102,25 +105,25 @@ namespace ServerClient
             targetNode = NodeByEP(theirInfo.addr);
             if (targetNode == null)
             {
-                targetNode = new Node(theirInfo);
+                targetNode = new Node(theirInfo, processQueue);
                 nodes.Add(targetNode);
             }
 
-            targetNode.AcceptConnection(sck, (ep, stm, mt) => this.ProcessMessage(ep, stm, mt));
+            targetNode.AcceptConnection(sck,
+                (ep, stm, mt) => this.ProcessMessage(ep, stm, mt),
+                (ioex, ds) => this.Sync_ProcessDisconnect(ioex, ds, targetNode));
 
-            if(targetNode.CanConnect())
-                targetNode.StartConnecting(ProcessLater(
-                                                         () => this.Sync_OutgoingConnectionReady(targetNode)
-                                                       ), my_info);
+            if (targetNode.CanConnect())
+                StartConnecting(targetNode);
 
             if(targetNode.Ready())
-                msgs.Add(() => this.Sync_ConnectionFinalized(targetNode));
+                processQueue(() => this.Sync_ConnectionFinalized(targetNode));
         }
 
         void Sync_OutgoingConnectionReady(Node n)
         {
             if(n.Ready())
-                msgs.Add(() => this.Sync_ConnectionFinalized(n));
+                processQueue(() => this.Sync_ConnectionFinalized(n));
         }
         
         void Sync_ConnectionFinalized(Node n)
@@ -134,18 +137,16 @@ namespace ServerClient
 
             if (n == null)
             {
-                n = new Node(their_addr);
+                n = new Node(new Handshake(their_addr, ""), processQueue);
                 nodes.Add(n);
             }
 
-            if(n.CanWrite())
+            if (n.CanWrite())
                 throw new InvalidOperationException("Already connected to " + their_addr.ToString());
-            else if(!n.CanConnect())
+            else if (!n.CanConnect())
                 throw new InvalidOperationException("Connection in progress " + their_addr.ToString());
             else
-                n.StartConnecting(ProcessLater  (
-                                                    () => this.Sync_OutgoingConnectionReady(n)
-                                                ), my_info);
+                StartConnecting(n);
         }
 
         public bool Sync_TryConnect(IPEndPoint their_addr)

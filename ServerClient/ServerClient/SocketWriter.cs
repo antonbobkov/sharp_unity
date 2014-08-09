@@ -12,15 +12,17 @@ namespace ServerClient
     {
         Socket socketWrite;
         BlockingCollection<Action<Stream>> bcMessages = new BlockingCollection<Action<Stream>> ();
+        Action<IOException> errorResponse;
 
         public bool CanWrite() { return socketWrite != null; }
 
-        public void StartWriting(Socket socketWrite_)
+        public void StartWriting(Socket socketWrite_, Action<IOException> errorResponse_)
         {
             if (CanWrite())
                 throw new InvalidOperationException("SocketWriter's socketWrite already initialized");
 
             socketWrite = socketWrite_;
+            errorResponse = errorResponse_;
             new Thread(() => this.ProcessThread()).Start();
         }
 
@@ -35,9 +37,16 @@ namespace ServerClient
 
         void ProcessThread()
         {
-            using (NetworkStream connectionStream = new NetworkStream(socketWrite, true))
-                while (true)
-                    bcMessages.Take().Invoke(connectionStream);
+            try
+            {
+                using (NetworkStream connectionStream = new NetworkStream(socketWrite, true))
+                    while (true)
+                        bcMessages.Take().Invoke(connectionStream);
+            }
+            catch (IOException ioe)
+            {
+                errorResponse(ioe);
+            }
         }
 
         static void Serialize(Stream stm, object obj)
