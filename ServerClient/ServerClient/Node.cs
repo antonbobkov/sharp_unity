@@ -70,10 +70,12 @@ namespace ServerClient
 
         public void SendMessage(MessageType mt, object message = null)
         {
+            /*
             if (!Ready())
                 Console.WriteLine("Warning: socket not ready yet {0}", Description());
             if (!CanWrite())
                 Console.WriteLine("Warning: socket not ready for writing yet - buffering ({0})", Description());
+             */ 
 
             writer.SendMessage(mt, message);
         }
