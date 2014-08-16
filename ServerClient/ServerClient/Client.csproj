@@ -43,6 +43,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="BlockingCollection.cs" />
     <Compile Include="DataCollection.cs" />
     <Compile Include="Message.cs" />
     <Compile Include="Node.cs" />
