@@ -11,58 +11,13 @@ namespace ServerClient
 {
     class Program
     {
-        const int nStartPort = 3000;
-        const int nPortTries = 10;
 
-        static void PewPewPewThread(BlockingCollection<Action> msgs)
-        {
-            while (true)
-                msgs.Take().Invoke();
-        }
 
         static void Main(string[] args)
         {
-            IPHostEntry localDnsEntry = Dns.GetHostEntry(Dns.GetHostName());
-            IPAddress ip = localDnsEntry.AddressList.First
-                (ipaddr => 
-                    ipaddr.AddressFamily.ToString() == ProtocolFamily.InterNetwork.ToString());
+            ActionSyncronizer sync = new ActionSyncronizer();
+            NodeHost myHost = new NodeHost(sync.GetAsDelegate());
 
- 
-            Socket sckListen = new Socket(
-                    ip.AddressFamily,
-                    SocketType.Stream,
-                    ProtocolType.Tcp);
-
-            IPEndPoint my_addr = null;
-            int i;
-            for (i = 0; i < nPortTries; ++i)
-            {
-                try
-                {
-                    int nPort = nStartPort + i;
-                    my_addr = new IPEndPoint(ip, nPort);
-                    sckListen.Bind(my_addr);
-                    Console.WriteLine("Listening at {0}:{1}", ip, nPort);
-                    break;
-                }
-                catch (SocketException)
-                { }
-            }
-
-            if (i == nPortTries)
-            {
-                Console.WriteLine("Unsucessful binding to ports");
-                return;
-            }
-            sckListen.Listen(10);
-
-            var msgs = new BlockingCollection<Action>();
-
-            DataCollection dc = new DataCollection(my_addr, "", (action) => msgs.Add(action));
-
-            dc.StartListening(sckListen);
-
-            new Thread(() => PewPewPewThread(msgs)).Start();
 
             while (true)
             {
@@ -72,7 +27,7 @@ namespace ServerClient
 
                 if ("message".StartsWith(sCommand))
                 {
-                    msgs.Add(() =>
+                    sync.Add(() =>
                     {
                         if (param.Count < 3)
                             return;
@@ -82,7 +37,7 @@ namespace ServerClient
 
                         string message = String.Join(" ", param.ToArray());
 
-                        Node n = dc.GetNodes().FirstOrDefault(nd => nd.Name == name);
+                        Node n = myHost.dc.GetNodes().FirstOrDefault(nd => nd.Name == name);
                         if (n == null)
                         {
                             Console.WriteLine("Invalid name");
@@ -94,26 +49,26 @@ namespace ServerClient
                 }
                 else if ("name".StartsWith(sCommand))
                 {
-                    msgs.Add(() =>
+                    sync.Add(() =>
                     {
                         if (param.Count != 2)
                             return;
                         string name = param[1];
 
                         Console.WriteLine("Name set to \"{0}\"", name);
-                        dc.Name = name;
+                        myHost.dc.Name = name;
 
-                        foreach (Node n in dc.GetNodes())
+                        foreach (Node n in myHost.dc.GetNodes())
                             n.SendMessage(MessageType.NAME, name);
                     });
                 }
                 else if ("list".StartsWith(sCommand))
                 {
-                    msgs.Add(() =>
+                    sync.Add(() =>
                     {
                         StringBuilder sb = new StringBuilder();
 
-                        foreach (Node n in dc.GetNodes())
+                        foreach (Node n in myHost.dc.GetNodes())
                         {
                             sb.Append(n.Address.ToString());
                             if (n.Name != "")
@@ -126,10 +81,10 @@ namespace ServerClient
                 }
                 else if ("connect".StartsWith(sCommand) || "mconnect".StartsWith(sCommand))
                 {
-                    msgs.Add(() =>
+                    sync.Add(() =>
                     {
-                        string sIpAddr = ip.ToString();
-                        string sPort = nStartPort.ToString();
+                        string sIpAddr = NodeHost.GetMyIP().ToString();
+                        string sPort = NodeHost.nStartPort.ToString();
                         bool askForTable = "mconnect".StartsWith(sCommand);
 
                         if (param.Count >= 2)
@@ -142,13 +97,13 @@ namespace ServerClient
 
                         Console.WriteLine("Connecting to {0}:{1}", ep.Address, ep.Port);
 
-                        if (!dc.Sync_TryConnect(ep))
+                        if (!myHost.dc.Sync_TryConnect(ep))
                             Console.WriteLine("Already connected/connecting");
                         else
                             Console.WriteLine("Connection started");
 
                         if (askForTable)
-                            dc.Sync_AskForTable(ep);
+                            myHost.dc.Sync_AskForTable(ep);
                     });
                 }
                 else
