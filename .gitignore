@@ -1,0 +1,5 @@
+*.meta
+*.pdb
+*.manifest
+*.exe
+*.cache
