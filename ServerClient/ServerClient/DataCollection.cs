@@ -1,5 +1,5 @@
 ﻿using System;
-using System.Collections.Concurrent;
+using ServerClient.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -48,7 +48,7 @@ namespace ServerClient
             int n = res.Count();
 
             if (n > 1)
-                throw new InvalidDataException("several nodes with same endpoint " + res.First().Address.ToString());
+                throw new InvalidOperationException("several nodes with same endpoint " + res.First().Address.ToString());
             else
                 return res.FirstOrDefault();
         }

@@ -1,4 +1,4 @@
-﻿using System.Collections.Concurrent;
+﻿using ServerClient.Concurrent;
 using System.Net.Sockets;
 using System.Threading;
 using System;
@@ -65,7 +65,18 @@ namespace ServerClient
 
         static void SendStream(Stream network, Stream message)
         {
-            message.CopyTo(network);
+            //message.CopyTo(network);
+            CopyStream(message, network);
+        }
+    
+        static void CopyStream(Stream input, Stream output)
+        {
+            byte[] buffer = new byte[32768];
+            int read;
+            while ((read = input.Read(buffer, 0, buffer.Length)) > 0)
+            {
+                output.Write (buffer, 0, read);
+            }
         }
     }
 }

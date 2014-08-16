@@ -1,5 +1,5 @@
 ﻿using System;
-using System.Collections.Concurrent;
+using ServerClient.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
@@ -80,7 +80,7 @@ namespace ServerClient
 
                         param.RemoveRange(0, 2);
 
-                        string message = String.Join(" ", param);
+                        string message = String.Join(" ", param.ToArray());
 
                         Node n = dc.GetNodes().FirstOrDefault(nd => nd.Name == name);
                         if (n == null)
