@@ -14,6 +14,7 @@ namespace ServerClient
     {
         List<Node> nodes = new List<Node>();
         Handshake my_info;
+        public Game game = null;
 
         public IEnumerable<Node> GetNodes() { return nodes; }
 
@@ -53,6 +54,12 @@ namespace ServerClient
                 return res.FirstOrDefault();
         }
 
+        public void Broadcast(MessageType mt, object o)
+        {
+            foreach (Node n in GetNodes())
+                n.SendMessage(mt, o);
+        }
+
         public void Sync_AskForTable(IPEndPoint ep)
         {
             Node n = NodeByEP(ep);
@@ -86,10 +93,20 @@ namespace ServerClient
                 var table = (IPEndPoint[]) SocketReader.ReadSerializedMessage(stm);
                 processQueue(() => this.Sync_OnTable(table));
             }
+            else if (mt == MessageType.GENERATE_GAME)
+            {
+                var info = (GameInitializer)SocketReader.ReadSerializedMessage(stm);
+                Sync_GenerateGame(info);
+            }
             else
             {
                 throw new InvalidOperationException("Unexpected message type " + mt.ToString());
             }
+        }
+
+        public void Sync_GenerateGame(GameInitializer info)
+        {
+            game = Game.GenerateGame(info);
         }
 
         void Sync_TableRequest(Node n)

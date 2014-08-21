@@ -18,7 +18,6 @@ namespace ServerClient
             ActionSyncronizer sync = new ActionSyncronizer();
             NodeHost myHost = new NodeHost(sync.GetAsDelegate());
 
-
             while (true)
             {
                 string sInput = Console.ReadLine();
@@ -105,6 +104,22 @@ namespace ServerClient
                         if (askForTable)
                             myHost.dc.Sync_AskForTable(ep);
                     });
+                }
+                else if ("draw".StartsWith(sCommand))
+                {
+                    sync.Add(() =>
+                    {
+                        if (myHost.dc.game == null)
+                            return;
+
+                        myHost.dc.game.ConsoleOut();
+                    });
+                }
+                else if ("generate".StartsWith(sCommand))
+                {
+                    GameInitializer init = new GameInitializer(System.DateTime.Now.Millisecond);
+                    myHost.dc.Broadcast(MessageType.GENERATE_GAME, init);
+                    myHost.dc.Sync_GenerateGame(init);
                 }
                 else
                     Console.WriteLine("Unknown command");

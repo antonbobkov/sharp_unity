@@ -3,3 +3,5 @@
 *.manifest
 *.exe
 *.cache
+*.suo
+sharp/ClientServer/obj/x86/Debug/ServerClient.csproj.FileListAbsolute.txt

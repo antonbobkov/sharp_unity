@@ -1,8 +1,4 @@
-﻿using System;
-using System.IO;
-using System.Net;
-
-namespace ServerClient
+﻿namespace ServerClient
 {
-    public enum MessageType : byte { HANDSHAKE, MESSAGE, NAME, TABLE_REQUEST, TABLE};
+    public enum MessageType : byte { HANDSHAKE, MESSAGE, NAME, TABLE_REQUEST, TABLE, GENERATE_GAME};
 }
