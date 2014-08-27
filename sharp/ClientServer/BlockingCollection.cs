@@ -18,7 +18,6 @@ namespace ServerClient.Concurrent
                 q.Enqueue(t);
                 arrayReady.Set();
             }
-
         }
         public T Take()
         {

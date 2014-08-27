@@ -1,0 +1,7 @@
+<?xml version="1.0"?>
+<HandshakeXML xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <ip>192.168.1.66</ip>
+  <port>3000</port>
+  <name>sup</name>
+  <id>c58e2a3d-3e24-412e-b217-fdba50be6cf5</id>
+</HandshakeXML>

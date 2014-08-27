@@ -5,6 +5,7 @@ using System;
 using System.IO;
 using System.Runtime.Serialization.Formatters.Binary;
 using System.Runtime.Serialization;
+using System.Xml.Serialization;
 
 namespace ServerClient
 {
@@ -26,13 +27,13 @@ namespace ServerClient
             new Thread(() => this.ProcessThread()).Start();
         }
 
-        public void SendMessage(MessageType mt, object message)
+        public void SendMessage<T>(MessageType mt, T message)
         {
             MemoryStream ms = new MemoryStream();
             StreamSerializedMessage(ms, mt, message);
             ms.Position = 0;
 
-            bcMessages.Add(stm => SendStream(stm, ms));
+            bcMessages.Add(stm => Serializer.SendStream(stm, ms));
         }
 
         void ProcessThread()
@@ -41,7 +42,10 @@ namespace ServerClient
             {
                 using (NetworkStream connectionStream = new NetworkStream(socketWrite, true))
                     while (true)
+                    {
                         bcMessages.Take().Invoke(connectionStream);
+                        connectionStream.Flush();
+                    }
             }
             catch (IOException ioe)
             {
@@ -49,34 +53,12 @@ namespace ServerClient
             }
         }
 
-        static void Serialize(Stream stm, object obj)
-        {
-            IFormatter formatter = new BinaryFormatter();
-            formatter.Serialize(stm, obj);
-        }
-
-        static void StreamSerializedMessage(Stream stm, MessageType mt, object message)
+        public static void StreamSerializedMessage<T>(Stream stm, MessageType mt, T message)
         {
             stm.WriteByte((byte)mt);
 
-            if(message != null)
-                Serialize(stm, message);
-        }
-
-        static void SendStream(Stream network, Stream message)
-        {
-            //message.CopyTo(network);
-            CopyStream(message, network);
-        }
-    
-        static void CopyStream(Stream input, Stream output)
-        {
-            byte[] buffer = new byte[32768];
-            int read;
-            while ((read = input.Read(buffer, 0, buffer.Length)) > 0)
-            {
-                output.Write (buffer, 0, read);
-            }
+            if (message != null)
+                Serializer.Serialize(stm, message);
         }
     }
 }

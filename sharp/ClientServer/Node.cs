@@ -4,32 +4,72 @@ using System.Net.Sockets;
 using System.Text;
 using System.IO;
 using System.Threading;
+using System.Diagnostics;
+using System.Xml.Serialization;
 
 namespace ServerClient
 {
     [Serializable]
-    class Handshake
+    public class IPEndPointSer
     {
-        public IPEndPoint addr;
-        public string name;
+        public byte[] ipAddr;
+        public int port;
 
-        public Handshake(IPEndPoint addr_, string name_)
+        public IPEndPointSer() { }
+        public IPEndPointSer(IPEndPoint Addr_) { Addr = Addr_; }
+
+        [XmlIgnoreAttribute]
+        public IPEndPoint Addr
         {
-            addr = addr_;
+            get { return new IPEndPoint(new IPAddress(ipAddr), port); }
+            set { ipAddr = value.Address.GetAddressBytes(); port = value.Port; }
+        }        
+    }
+    
+    [Serializable]
+    public class Handshake
+    {
+        public IPEndPointSer _addr = new IPEndPointSer();
+        
+        [XmlIgnoreAttribute]
+        public IPEndPoint Addr
+        {
+            get { return _addr.Addr; }
+            set { _addr.Addr = value; }
+        }
+
+        public string name;
+        public Guid id;
+
+        public Handshake() { }
+        public Handshake(IPEndPoint Addr_, string name_, Guid id_)
+        {
+            Addr = Addr_;
             name = name_;
+            id = id_;
         }
     }
 
-    enum Disconnect {READ, WRITE};
+    enum Disconnect { READ, WRITE };
 
     class Node
     {
         Handshake info;
 
+        public void UpdateHandshake(Handshake info_)
+        {
+            Debug.Assert(info_.Addr.ToString() == info.Addr.ToString());
+            info = info_;
+        }
+
+        public Guid Id
+        {
+            get { return info.id; }
+        }
+
         public IPEndPoint Address
         {
-            get{ return info.addr; }
-            private set{ info.addr = value; }
+            get{ return info.Addr; }
         }
        
         public string Name
@@ -61,22 +101,25 @@ namespace ServerClient
             actionQueue = actionQueue_;
         }
 
+        public Node(IPEndPoint addr_, Action<Action> actionQueue_)
+            :this(new Handshake(addr_, "", new Guid()), actionQueue_)
+        {
+        }
+
         public string Description()
         {
             var sb = new StringBuilder();
-            sb.AppendFormat("{0} ({1}) R:{2} W:{3} CW:{4}", Address, Name, CanRead(), CanWrite(), CanConnect());
+            sb.AppendFormat("{0} ({1}, {5}) R:{2} W:{3} CW:{4}", Address, Name, CanRead(), CanWrite(), CanConnect(), info.id.ToString("D"));
             return sb.ToString();
         }
 
-        public void SendMessage(MessageType mt, object message = null)
+        public void SendMessage(MessageType mt)
         {
-            /*
-            if (!Ready())
-                Console.WriteLine("Warning: socket not ready yet {0}", Description());
-            if (!CanWrite())
-                Console.WriteLine("Warning: socket not ready for writing yet - buffering ({0})", Description());
-             */ 
+            writer.SendMessage<object>(mt, null);
+        }
 
+        public void SendMessage<T>(MessageType mt, T message)
+        {
             writer.SendMessage(mt, message);
         }
 
@@ -139,7 +182,8 @@ namespace ServerClient
                 throw new InvalidOperationException("Unexpected connection request in " + Description());
 
             writerConnectionInProgress = true;
-            SendMessage(MessageType.HANDSHAKE, my_info);            
+            SendMessage(MessageType.HANDSHAKE, my_info);
+            //SendMessage(MessageType.HANDSHAKE, my_info);            
 
             return new Socket(
                     Address.AddressFamily,

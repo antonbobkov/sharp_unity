@@ -2,13 +2,38 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Diagnostics;
 
 namespace ServerClient
 {
+    [Serializable]
+    public struct Point
+    {
+        public int x, y;
+
+        public Point(int x_, int y_) { x = x_; y = y_; }
+
+        public static Point operator +(Point p1, Point p2) { return new Point(p1.x + p2.x, p1.y + p2.y); }
+    }
+
     class Player
     {
-        public int xPos;
-        public int yPos;
+        public Point pos;
+        public Node n;
+    }
+
+    [Serializable]
+    public class PlayerMoveInfo
+    {
+        public Guid id;
+        public Point pos;
+
+        public PlayerMoveInfo() { }
+        public PlayerMoveInfo(Guid id_, Point pos_)
+        {
+            id = id_;
+            pos = pos_;
+        }
     }
 
     class Tile
@@ -18,15 +43,20 @@ namespace ServerClient
     }
 
     [Serializable]
-    class GameInitializer
+    public class GameInitializer
     {
-        public int numberOfPlayers = 5;
+        public int numberOfPlayers;
         public int worldWidth = 20;
         public int worldHeight = 10;
         public int seed;
         public double density = .3;
 
-        public GameInitializer(int seed_) { seed = seed_; }
+        public GameInitializer() { }
+        public GameInitializer(int seed_, int numberOfPlayers_)
+        { 
+            seed = seed_;
+            numberOfPlayers = numberOfPlayers_;
+        }
     }
 
     class Game
@@ -34,46 +64,59 @@ namespace ServerClient
         public GameInitializer info;
 
         public Tile[,] world;
-        public List<Player> players = new List<Player>();
+        public Dictionary<Guid, Player> players = new  Dictionary<Guid, Player>();
 
-        public static Game GenerateGame(GameInitializer info)
+        public Game(IEnumerable<Node> nodes, Guid me, GameInitializer info_)
         {
-            Random seededRandom = new Random(info.seed);
+            info = info_;
 
-            Game g = new Game { world = new Tile[info.worldWidth, info.worldHeight] };
+            foreach (Node n in nodes)
+                players.Add(n.Id, new Player(){ n = n });
+            players.Add(me, new Player() { n = null });
 
-            for(int x = 0; x < g.world.GetLength(0); ++x)
-                for (int y = 0; y < g.world.GetLength(1); ++y)
+            Generate();
+        }
+        
+        void Generate()
+        {
+            ServerClient.Random seededRandom = new ServerClient.Random(info.seed);
+
+            Debug.Assert(info.numberOfPlayers == players.Count());
+
+            world = new Tile[info.worldWidth, info.worldHeight];
+
+            for(int x = 0; x < world.GetLength(0); ++x)
+                for (int y = 0; y < world.GetLength(1); ++y)
                 {
-                    g.world[x, y] = new Tile();
+                    world[x, y] = new Tile();
                     if (seededRandom.NextDouble() < info.density)
-                        g.world[x, y].solid = true;
+                        world[x, y].solid = true;
                     else
-                        g.world[x, y].solid = false;
+                        world[x, y].solid = false;
                 }
 
-            for (int pl = 0; pl < info.numberOfPlayers; ++pl)
-            { 
-                Player p = new Player();
+            var playersInOrder = from pair in players.OrderBy(p => p.Key)
+                                 select pair.Value;
+
+            foreach (Player p in playersInOrder)
+            {
                 while (true)
                 {
-                    p.xPos = seededRandom.Next(0, g.world.GetLength(0));
-                    p.yPos = seededRandom.Next(0, g.world.GetLength(1));
+                    p.pos.x = seededRandom.Next(0, world.GetLength(0));
+                    p.pos.y = seededRandom.Next(0, world.GetLength(1));
 
-                    if (g.world[p.xPos, p.yPos].solid == false)
+                    Tile t = world[p.pos.x, p.pos.y];
+
+                    if (t.solid == false)
                     {
-                        g.world[p.xPos, p.yPos].solid = true;
+                        t.solid = true;
                         break;
                     }
                 }
-                g.players.Add(p);
             }
 
-            foreach(Player p in g.players)
-                g.world[p.xPos, p.yPos].solid = false;
-
-            g.info = info;
-            return g;
+            foreach (Player p in playersInOrder)
+                world[p.pos.x, p.pos.y].solid = false;
         }
 
         public void ConsoleOut()
@@ -90,8 +133,8 @@ namespace ServerClient
                     else
                         pic[x, y] = ' ';
 
-            foreach (Player p in players)
-                pic[p.xPos, p.yPos] = '@';
+            foreach (var pair in players)
+                pic[pair.Value.pos.x, pair.Value.pos.y] = pair.Key.ToString("N")[0];
 
             for (int y = 0; y < szY; ++y)
             {

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="windows-1251"?>
+<HandshakeXML xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <ip>192.168.1.66</ip>
+  <port>3000</port>
+  <name>sup</name>
+  <id>6bd49c31-034a-4b62-a559-755f9f5db2f7</id>
+</HandshakeXML>

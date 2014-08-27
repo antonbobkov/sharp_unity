@@ -21,7 +21,10 @@ namespace ServerClient
         void ProcessThread()
         {
             while (true)
-                processConnection(sckListen.Accept());
+            {
+                Socket sck = sckListen.Accept();
+                processConnection(sck);
+            }
         }
     }
 
@@ -40,11 +43,11 @@ namespace ServerClient
 
                 if (nTp != (int)MessageType.HANDSHAKE)
                 {
-                    Console.WriteLine("Invalid incoming connection message (expecting handshake): type {0} {1}", nTp, (MessageType) nTp);
+                    DataCollection.LogWriteLine("Invalid incoming connection message (expecting handshake): type {0} {1}", nTp, (MessageType) nTp);
                     return;
                 }
 
-                Handshake their_info = (Handshake)SocketReader.ReadSerializedMessage(connectionStream);
+                Handshake their_info = Serializer.Deserialize<Handshake>(connectionStream);
 
                 processConnection(their_info, sckRead);
             }

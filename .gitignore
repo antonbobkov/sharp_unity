@@ -5,3 +5,6 @@
 *.cache
 *.suo
 sharp/ClientServer/obj/x86/Debug/ServerClient.csproj.FileListAbsolute.txt
+sharp/ClientServer/bin/Debug/ClientServer.exe.config
+sharp/ClientServer/bin/Debug/ClientServer.vshost.exe.config
+*TemporaryGeneratedFile*

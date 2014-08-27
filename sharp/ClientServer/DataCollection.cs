@@ -6,17 +6,38 @@ using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
-
+using System.Diagnostics;
+using System.Text;
+using System.Runtime.Serialization.Formatters.Binary;
+using System.Xml.Serialization;
 
 namespace ServerClient
 {
     class DataCollection
     {
+        static public Action<string> log = msg => Console.WriteLine(msg);
+
+        static public void LogWriteLine(string msg, params object[] vals)
+        {
+            StringBuilder sb = new StringBuilder();
+            sb.AppendFormat(msg, vals);
+            log(sb.ToString());
+        }
+
         List<Node> nodes = new List<Node>();
         Handshake my_info;
+        public Guid Id
+        {
+            get { return my_info.id; }
+        }
         public Game game = null;
 
-        public IEnumerable<Node> GetNodes() { return nodes; }
+        public IEnumerable<Node> GetReadyNodes()
+        {
+            return from nd in nodes
+                   where nd.Ready()
+                   select nd;
+        }
 
         public string Name
         {
@@ -28,35 +49,40 @@ namespace ServerClient
 
         public DataCollection(IPEndPoint myAddr, string name, Action<Action> processQueue_)
         {
-            my_info = new Handshake(myAddr, name);
+            my_info = new Handshake(myAddr, name, Guid.NewGuid());
             processQueue = processQueue_;
+
+            //var s = new XmlSerializer(typeof(Handshake));
+            //var stm = File.Open("xml_out", FileMode.Create);
+            //s.Serialize(stm, my_info);
+            //new XmlSerializer(typeof(HandshakeXML)).Deserialize(File.Open("xml_in", FileMode.Open));
+            //new BinaryFormatter().Serialize(File.Open("binary_out", FileMode.Create), i);
+            //new BinaryFormatter().Deserialize(File.Open("binary_in", FileMode.Open));
         }
 
         public void StartListening(Socket sckListen)
         {
-            SocketListener sl = new SocketListener(
+            new SocketListener(
                 ConnectionProcessor.ProcessWithHandshake(
                     (info, sck) =>
                         processQueue(() => this.Sync_NewIncomingConnection(info, sck))
                 ), sckListen);        
         }
 
-        public Node NodeByEP(IPEndPoint ep)
+        Node NodeByEP(IPEndPoint ep)
         {
             var res = from nd in nodes
                       where nd.Address.Equals(ep)
                       select nd;
-            int n = res.Count();
 
-            if (n > 1)
-                throw new InvalidOperationException("several nodes with same endpoint " + res.First().Address.ToString());
-            else
-                return res.FirstOrDefault();
+            Debug.Assert(res.Count() <= 1);
+
+            return res.FirstOrDefault();
         }
 
-        public void Broadcast(MessageType mt, object o)
+        public void Broadcast<T>(MessageType mt, T o)
         {
-            foreach (Node n in GetNodes())
+            foreach (Node n in GetReadyNodes())
                 n.SendMessage(mt, o);
         }
 
@@ -74,13 +100,13 @@ namespace ServerClient
         {
             if (mt == MessageType.MESSAGE)
             {
-                string msg = (string)SocketReader.ReadSerializedMessage(stm);
+                string msg = Serializer.Deserialize<string>(stm);
 
                 processQueue(() => this.Sync_NewMessage(this.NodeByEP(their_addr), msg));
             }
             else if (mt == MessageType.NAME)
             {
-                string msg = (string)SocketReader.ReadSerializedMessage(stm);
+                string msg = Serializer.Deserialize<string>(stm);
 
                 processQueue(() => this.Sync_NewName(this.NodeByEP(their_addr), msg));
             }
@@ -90,13 +116,18 @@ namespace ServerClient
             }
             else if (mt == MessageType.TABLE)
             {
-                var table = (IPEndPoint[]) SocketReader.ReadSerializedMessage(stm);
+                var table = Serializer.Deserialize<IPEndPointSer[]>(stm);
                 processQueue(() => this.Sync_OnTable(table));
             }
             else if (mt == MessageType.GENERATE_GAME)
             {
-                var info = (GameInitializer)SocketReader.ReadSerializedMessage(stm);
-                Sync_GenerateGame(info);
+                var info = Serializer.Deserialize<GameInitializer>(stm);
+                processQueue(() => Sync_GenerateGame(info));
+            }
+            else if (mt == MessageType.PLAYER_MOVE)
+            {
+                var move = Serializer.Deserialize<PlayerMoveInfo>(stm);
+                processQueue(() => Sync_UpdatePosition(move.id, move.pos));
             }
             else
             {
@@ -104,39 +135,55 @@ namespace ServerClient
             }
         }
 
+        public void Sync_UpdatePosition(Guid id, Point pos)
+        {
+            lock(this)
+                game.players[id].pos = pos;
+        }
+        
+        public void Sync_UpdateMyPosition()
+        {
+            Guid id = Id;
+            Point pos = game.players[id].pos;
+
+            Broadcast(MessageType.PLAYER_MOVE, new PlayerMoveInfo(id, pos));
+        }
+
         public void Sync_GenerateGame(GameInitializer info)
         {
-            game = Game.GenerateGame(info);
+            DataCollection.log("Sync_GenerateGame");
+            lock (this) 
+                game = new Game(GetReadyNodes(), my_info.id, info);
         }
 
         void Sync_TableRequest(Node n)
         {
             var listOfPeers = from nd in nodes
                               where nd.Ready()
-                              select nd.Address;
+                              select new IPEndPointSer(nd.Address);
 
             n.SendMessage(MessageType.TABLE, listOfPeers.ToArray());
         }
 
-        void Sync_OnTable(IPEndPoint[] table)
+        void Sync_OnTable(IPEndPointSer[] table)
         {
-            new List<IPEndPoint>(table).ForEach((ep) => Sync_TryConnect(ep));
+            new List<IPEndPointSer>(table).ForEach((ep) => Sync_TryConnect(ep.Addr));
         }
             
         void Sync_NewMessage(Node n, string msg)
         {
-            Console.WriteLine("{0} says: {1}", n.Name, msg);
+            DataCollection.LogWriteLine("{0} says: {1}", n.Name, msg);
         }
 
         void Sync_NewName(Node n, string msg)
         {
-            Console.WriteLine("{0} changes name to \"{1}\"", n.Name, msg);
+            DataCollection.LogWriteLine("{0} changes name to \"{1}\"", n.Name, msg);
             n.Name = msg;
         }
 
         void Sync_ProcessDisconnect(IOException ioex, Disconnect ds, Node n)
         {
-            Console.WriteLine("Node {0} disconnected ({1})", n.Name, ds);
+            DataCollection.LogWriteLine("Node {0} disconnected ({1})", n.Name, ds);
         }
 
         void StartConnecting(Node n)
@@ -152,13 +199,15 @@ namespace ServerClient
         {
             Node targetNode;
 
-            targetNode = NodeByEP(theirInfo.addr);
+            targetNode = NodeByEP(theirInfo.Addr);
+            
             if (targetNode == null)
             {
                 targetNode = new Node(theirInfo, processQueue);
                 nodes.Add(targetNode);
             }
-            targetNode.Name = theirInfo.name;
+            else
+                targetNode.UpdateHandshake(theirInfo);
 
             targetNode.AcceptConnection(sck,
                 (ep, stm, mt) => this.ProcessMessage(ep, stm, mt),
@@ -179,7 +228,7 @@ namespace ServerClient
         
         void Sync_ConnectionFinalized(Node n)
         {
-            Console.WriteLine("New connection: {0}", n.Name);
+            DataCollection.LogWriteLine("New connection: {0}", n.Name);
         }
 
         void Sync_Connect(IPEndPoint their_addr)
@@ -188,7 +237,7 @@ namespace ServerClient
 
             if (n == null)
             {
-                n = new Node(new Handshake(their_addr, ""), processQueue);
+                n = new Node(their_addr, processQueue);
                 nodes.Add(n);
             }
 
@@ -202,14 +251,14 @@ namespace ServerClient
 
         public bool Sync_TryConnect(IPEndPoint their_addr)
         {
-            try
-            {
+            //try
+            //{
                 Sync_Connect(their_addr);
-            }
-            catch (InvalidOperationException)
-            {
-                return false;
-            }
+            //}
+            //catch (InvalidOperationException)
+            //{
+                //return false;
+            //}
 
             return true;
         }

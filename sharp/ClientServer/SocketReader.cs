@@ -5,6 +5,7 @@ using System.Net.Sockets;
 using System.Threading;
 using System.Runtime.Serialization.Formatters.Binary;
 using System.Runtime.Serialization;
+using System.Xml.Serialization;
 
 namespace ServerClient
 {
@@ -44,12 +45,6 @@ namespace ServerClient
             {
                 errorResponse(ioe);
             }
-        }
-        
-        public static object ReadSerializedMessage(Stream stm)
-        {
-            IFormatter formatter = new BinaryFormatter();
-            return formatter.Deserialize(stm);
         }
     }
 }

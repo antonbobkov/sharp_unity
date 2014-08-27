@@ -65,7 +65,7 @@ namespace ServerClient
                     int nPort = nStartPort + i;
                     my_addr = new IPEndPoint(ip, nPort);
                     sckListen.Bind(my_addr);
-                    Console.WriteLine("Listening at {0}:{1}", ip, nPort);
+                    DataCollection.LogWriteLine("Listening at {0}:{1}", ip, nPort);
                     break;
                 }
                 catch (SocketException)
