@@ -24,6 +24,11 @@ namespace ServerClient
             new Thread(() => this.ProcessThread()).Start();
         }
 
+        public void TerminateThread()
+        {
+            socketRead.Close();
+        }
+
         void ProcessThread()
         {
             try
@@ -44,6 +49,7 @@ namespace ServerClient
             catch (IOException ioe)
             {
                 errorResponse(ioe);
+                DataCollection.LogWriteLine("SocketReader terminated");
             }
         }
     }

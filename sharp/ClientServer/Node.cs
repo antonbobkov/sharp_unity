@@ -30,7 +30,7 @@ namespace ServerClient
     public class Handshake
     {
         public IPEndPointSer _addr = new IPEndPointSer();
-        
+
         [XmlIgnoreAttribute]
         public IPEndPoint Addr
         {
@@ -202,6 +202,13 @@ namespace ServerClient
                                         processDisonnect(ioex, Disconnect.WRITE);
                                     })
                                );
+        }
+
+        public void TerminateThreads()
+        {
+            if(reader != null)
+                reader.TerminateThread();
+            writer.TerminateThread();
         }
     }
 }

@@ -46,8 +46,8 @@ namespace ServerClient
     public class GameInitializer
     {
         public int numberOfPlayers;
-        public int worldWidth = 20;
-        public int worldHeight = 10;
+        public int worldWidth = 50;
+        public int worldHeight = 50;
         public int seed;
         public double density = .3;
 

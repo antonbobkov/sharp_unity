@@ -18,12 +18,25 @@ namespace ServerClient
             new Thread(() => this.ProcessThread()).Start();
         }
 
+        public void TerminateThread()
+        {
+            sckListen.Close();
+        }
+
         void ProcessThread()
         {
-            while (true)
+            try
             {
-                Socket sck = sckListen.Accept();
-                processConnection(sck);
+                using (sckListen)
+                    while (true)
+                    {
+                        Socket sck = sckListen.Accept();
+                        processConnection(sck);
+                    }
+            }
+            catch (Exception)
+            {
+                DataCollection.LogWriteLine("SocketListener terminated");
             }
         }
     }

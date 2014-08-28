@@ -1,5 +1,7 @@
 ﻿using UnityEngine;
 using System.Collections.Generic;
+using System;
+using System.Net;
 
 using ServerClient;
 
@@ -21,11 +23,18 @@ public class minecraft : MonoBehaviour {
         return vCorner + new Vector3(x, y, 0);
     }
 
+    void MeshConnect()
+    {
+        IPEndPoint ep = new IPEndPoint(NodeHost.GetMyIP(), NodeHost.nStartPort);
+        
+        DataCollection.LogWriteLine("Connecting to {0}:{1}", ep.Address, ep.Port);
+        
+        myHost.dc.Sync_TryConnect(ep);
+        myHost.dc.Sync_AskForTable(ep);
+    }
+    
     void StartGame()
     {
-
-
-
         Game g = myHost.dc.game;
         int szX = g.world.GetLength(0);
         int szY = g.world.GetLength(1);
@@ -49,20 +58,27 @@ public class minecraft : MonoBehaviour {
             Player p = pair.Value;
 
             var avatar = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            avatar.renderer.material.color = new Color(Random.Range(0F,1F),Random.Range(0F,1F),Random.Range(0F,1F));
+
+            //Convert.ToInt32( id.ToByteArray()
+            var r = new ServerClient.Random(BitConverter.ToInt32(id.ToByteArray(), 0));
+
+            avatar.renderer.material.color = new Color(
+                (float) r.NextDouble(),
+                (float) r.NextDouble(),
+                (float) r.NextDouble());
 
             avatar.transform.position = GetPositionAtGrid(p.pos.x, p.pos.y);
             players.Add(id, avatar);
         }
     }
 
-    const float cameraDistance = 50f;
+    const float cameraDistance = 10f;
 
 	// Use this for initialization
 	void Start () {
         DataCollection.log = msg => Debug.Log(msg); 
-        
-        DataCollection.LogWriteLine("{0}", new System.Random(12).Next());
+
+        //DataCollection.LogWriteLine("{0}", new System.Random(12).Next());
 
         //throw new UnityException();
 
@@ -75,12 +91,58 @@ public class minecraft : MonoBehaviour {
 
         camera.isOrthoGraphic = true;
 
-        vCorner = camera.ViewportToWorldPoint(new Vector3(.5f, .5f, cameraDistance));
+        vCorner = camera.ViewportToWorldPoint(new Vector3(.5f, .5f, 0));
+        camera.orthographicSize = 10;
 
-   }
+        Application.runInBackground = true;
+
+        MeshConnect();
+    }
+
+    void OnApplicationQuit () {
+        sync.Add(null);
+        myHost.dc.TerminateThreads();
+    }
+
+    void ProcessMovement()
+    {
+        try{
+            //Game g = myHost.dc.game;
+            //Player me = 
+
+            //int x = myHost.dc.game.players [myHost.dc.Id];
+
+            Point p = new Point();
+
+            if (Input.GetKeyDown(KeyCode.UpArrow))
+                p = new Point(0, 1);
+            if (Input.GetKeyDown(KeyCode.DownArrow))
+                p = new Point(0, -1);
+            if (Input.GetKeyDown(KeyCode.LeftArrow))
+                p = new Point(-1, 0);
+            if (Input.GetKeyDown(KeyCode.RightArrow))
+                p = new Point(1, 0);
+
+            if (p.x != 0 || p.y != 0)
+            {
+                Game g = myHost.dc.game;
+                Player pl = g.players[myHost.dc.Id];
+
+                p = pl.pos + p;
+                if(g.world[p.x, p.y].solid)
+                    return;
+                pl.pos = p;
+                myHost.dc.Sync_UpdateMyPosition();
+            }
+        }
+        catch(IndexOutOfRangeException){
+        }
+    }
 	
 	// Update is called once per frame
 	void Update () {
+
+        ProcessMovement();
         if (!gameStarted)
         {
             lock(myHost.dc)

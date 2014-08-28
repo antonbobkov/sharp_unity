@@ -36,6 +36,11 @@ namespace ServerClient
             bcMessages.Add(stm => Serializer.SendStream(stm, ms));
         }
 
+        public void TerminateThread()
+        {
+            bcMessages.Add(null);
+        }
+
         void ProcessThread()
         {
             try
@@ -43,7 +48,13 @@ namespace ServerClient
                 using (NetworkStream connectionStream = new NetworkStream(socketWrite, true))
                     while (true)
                     {
-                        bcMessages.Take().Invoke(connectionStream);
+                        var act = bcMessages.Take();
+                        if (act == null)
+                        {
+                            DataCollection.LogWriteLine("SocketWriter terminated gracefully");
+                            return;
+                        }
+                        act.Invoke(connectionStream);
                         connectionStream.Flush();
                     }
             }

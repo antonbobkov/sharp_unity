@@ -14,7 +14,12 @@ namespace ServerClient
         void ExecuteThread()
         {
             while (true)
-                msgs.Take().Invoke();
+            {
+                var a = msgs.Take();
+                if (a == null)
+                    return;
+                a.Invoke();
+            }
         }
         
         BlockingCollection<Action> msgs = new BlockingCollection<Action>();

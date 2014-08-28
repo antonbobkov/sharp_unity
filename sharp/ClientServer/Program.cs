@@ -15,10 +15,16 @@ namespace ServerClient
         
         static void PlayerRandomMove(Game g, Player p)
         {
-            Point[] moves = { new Point(-1, 0),
-                              new Point(1, 0),
-                              new Point(0, 1),
-                              new Point(0, -1)};
+            Point[] moves = {
+                                new Point(-1, 0),
+                                new Point(1, 0),
+                                new Point(0, 1),
+                                new Point(0, -1),
+                                new Point(-1, 1),
+                                new Point(1, -1),
+                                new Point(1, 1),
+                                new Point(-1, -1)
+                            };
             Point newPosition = p.pos + moves[rand.Next(0, moves.Length)];
 
             try
@@ -191,6 +197,13 @@ namespace ServerClient
                             myHost.dc.Sync_UpdateMyPosition();
                         })
                     , 1000)).Start();
+                }
+                else if ("exit".StartsWith(sCommand))
+                {
+                    sync.Add(null);
+                    myHost.dc.TerminateThreads();
+                    Console.ReadLine();
+                    return;
                 }
                 else
                     DataCollection.LogWriteLine("Unknown command");

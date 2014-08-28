@@ -15,22 +15,15 @@ namespace ServerClient
 {
     class DataCollection
     {
-        static public Action<string> log = msg => Console.WriteLine(msg);
-
-        static public void LogWriteLine(string msg, params object[] vals)
-        {
-            StringBuilder sb = new StringBuilder();
-            sb.AppendFormat(msg, vals);
-            log(sb.ToString());
-        }
-
         List<Node> nodes = new List<Node>();
         Handshake my_info;
+        public Game game = null;
+        SocketListener sl;
+        
         public Guid Id
         {
             get { return my_info.id; }
         }
-        public Game game = null;
 
         public IEnumerable<Node> GetReadyNodes()
         {
@@ -62,7 +55,7 @@ namespace ServerClient
 
         public void StartListening(Socket sckListen)
         {
-            new SocketListener(
+            sl = new SocketListener(
                 ConnectionProcessor.ProcessWithHandshake(
                     (info, sck) =>
                         processQueue(() => this.Sync_NewIncomingConnection(info, sck))
@@ -78,6 +71,14 @@ namespace ServerClient
             Debug.Assert(res.Count() <= 1);
 
             return res.FirstOrDefault();
+        }
+
+        public void TerminateThreads()
+        {
+            sl.TerminateThread();
+            foreach (var nd in nodes)
+                nd.TerminateThreads();
+
         }
 
         public void Broadcast<T>(MessageType mt, T o)
@@ -261,6 +262,15 @@ namespace ServerClient
             //}
 
             return true;
+        }
+
+        static public Action<string> log = msg => Console.WriteLine(msg);
+
+        static public void LogWriteLine(string msg, params object[] vals)
+        {
+            StringBuilder sb = new StringBuilder();
+            sb.AppendFormat(msg, vals);
+            log(sb.ToString());
         }
     }
 
