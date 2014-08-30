@@ -16,13 +16,13 @@ namespace ServerClient
     class DataCollection
     {
         List<Node> nodes = new List<Node>();
-        Handshake my_info;
+        Handshake myInfo;
         public Game game = null;
         SocketListener sl;
         
         public Guid Id
         {
-            get { return my_info.id; }
+            get { return myInfo.id; }
         }
 
         public IEnumerable<Node> GetReadyNodes()
@@ -34,20 +34,20 @@ namespace ServerClient
 
         public string Name
         {
-            get { return my_info.name; }
-            set { my_info.name = value; }
+            get { return myInfo.name; }
+            set { myInfo.name = value; }
         }
 
         Action<Action> processQueue;
 
         public DataCollection(IPEndPoint myAddr, string name, Action<Action> processQueue_)
         {
-            my_info = new Handshake(myAddr, name, Guid.NewGuid());
+            myInfo = new Handshake(myAddr, name, Guid.NewGuid());
             processQueue = processQueue_;
 
             //var s = new XmlSerializer(typeof(Handshake));
             //var stm = File.Open("xml_out", FileMode.Create);
-            //s.Serialize(stm, my_info);
+            //s.Serialize(stm, myInfo);
             //new XmlSerializer(typeof(HandshakeXML)).Deserialize(File.Open("xml_in", FileMode.Open));
             //new BinaryFormatter().Serialize(File.Open("binary_out", FileMode.Create), i);
             //new BinaryFormatter().Deserialize(File.Open("binary_in", FileMode.Open));
@@ -154,7 +154,7 @@ namespace ServerClient
         {
             DataCollection.log("Sync_GenerateGame");
             lock (this) 
-                game = new Game(GetReadyNodes(), my_info.id, info);
+                game = new Game(GetReadyNodes(), myInfo.id, info);
         }
 
         void Sync_TableRequest(Node n)
@@ -182,16 +182,16 @@ namespace ServerClient
             n.Name = msg;
         }
 
-        void Sync_ProcessDisconnect(IOException ioex, Disconnect ds, Node n)
+        void Sync_ProcessDisconnect(IOException ioex, DisconnectType ds, Node n)
         {
             DataCollection.LogWriteLine("Node {0} disconnected ({1})", n.Name, ds);
         }
 
         void StartConnecting(Node n)
         {
-            n.StartConnecting(
+            n.ConnectAsync(
                 () => this.Sync_OutgoingConnectionReady(n),
-                my_info,
+                myInfo,
                 (ioex, ds) => this.Sync_ProcessDisconnect(ioex, ds, n)
                 );
         }
@@ -210,7 +210,7 @@ namespace ServerClient
             else
                 targetNode.UpdateHandshake(theirInfo);
 
-            targetNode.AcceptConnection(sck,
+            targetNode.AcceptReaderConnection(sck,
                 (ep, stm, mt) => this.ProcessMessage(ep, stm, mt),
                 (ioex, ds) => this.Sync_ProcessDisconnect(ioex, ds, targetNode));
 

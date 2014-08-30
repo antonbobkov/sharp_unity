@@ -29,182 +29,204 @@ namespace ServerClient
     [Serializable]
     public class Handshake
     {
-        public IPEndPointSer _addr = new IPEndPointSer();
-
-        [XmlIgnoreAttribute]
-        public IPEndPoint Addr
-        {
-            get { return _addr.Addr; }
-            set { _addr.Addr = value; }
-        }
-
-        public string name;
-        public Guid id;
+        public IPEndPointSer addr = new IPEndPointSer();
 
         public Handshake() { }
-        public Handshake(IPEndPoint Addr_, string name_, Guid id_)
+        public Handshake(IPEndPointSer addr_)
         {
-            Addr = Addr_;
-            name = name_;
-            id = id_;
+            addr = addr_;
+        }
+
+        public override string ToString()
+        {
+            return addr.ToString();
         }
     }
 
-    enum Disconnect { READ, WRITE };
+    enum DisconnectType { READ, WRITE, WRITE_CONNECT_FAIL, CLOSE_CALL }
+
+    class NodeException : Exception
+    {
+        public NodeException(string s): base(s) {}
+    }
 
     class Node
     {
-        Handshake info;
-
-        public void UpdateHandshake(Handshake info_)
+        public Node(IPEndPointSer addr, Action<Action> actionQueue_, Action<Node, Exception, DisconnectType> processDisonnect_)
         {
-            Debug.Assert(info_.Addr.ToString() == info.Addr.ToString());
-            info = info_;
-        }
-
-        public Guid Id
-        {
-            get { return info.id; }
-        }
-
-        public IPEndPoint Address
-        {
-            get{ return info.Addr; }
-        }
-       
-        public string Name
-        {
-            get
-            {
-                if (info.name == "")
-                    return Address.ToString();
-                return info.name;
-            }
-            set { info.name = value; }
-        }
-
-        bool writerConnectionInProgress = false;
-        SocketWriter writer = new SocketWriter();
-        SocketReader reader;
-
-        Action<Action> actionQueue;
-
-        public bool CanRead() { return reader != null; }
-        public bool CanWrite() { return writer.CanWrite(); }
-        public bool CanConnect() { return !CanWrite() && !writerConnectionInProgress; }
-
-        public bool Ready() { return CanRead() && CanWrite(); }
-
-        public Node(Handshake info_, Action<Action> actionQueue_)
-        {
-            info = info_;
+            info = new Handshake(addr);
             actionQueue = actionQueue_;
+            notifyDisonnect = processDisonnect_;
+
+            writerStatus = WriteStatus.READY;
+            readerStatus = ReadStatus.READY;
         }
 
-        public Node(IPEndPoint addr_, Action<Action> actionQueue_)
-            :this(new Handshake(addr_, "", new Guid()), actionQueue_)
-        {
-        }
-
-        public string Description()
+        public IPEndPointSer Address{ get { return info.addr; } }
+        public bool IsClosed { get; private set; }
+        
+        public string FullDescription()
         {
             var sb = new StringBuilder();
-            sb.AppendFormat("{0} ({1}, {5}) R:{2} W:{3} CW:{4}", Address, Name, CanRead(), CanWrite(), CanConnect(), info.id.ToString("D"));
+            sb.AppendFormat("Address: {0} Read: {1} Write: {2}", Address, readerStatus, writerStatus);
             return sb.ToString();
         }
 
         public void SendMessage(MessageType mt)
         {
-            writer.SendMessage<object>(mt, null);
+            SendMessage<object>(mt, null);
         }
-
         public void SendMessage<T>(MessageType mt, T message)
         {
+            if (IsClosed)
+                throw new NodeException("SendMessage: node is disconnected " + FullDescription());
+
             writer.SendMessage(mt, message);
         }
 
-        public void AcceptConnection(Socket readingSocket,
-            Action<IPEndPoint, Stream, MessageType> messageProcessor,
-            Action<IOException, Disconnect> processDisonnect)
-        {
-            if (CanRead())
-                throw new InvalidOperationException("reader is aready initialized in " + Description());
+        // --- private ---
 
-            reader = new SocketReader((stm, mtp) => messageProcessor(this.Address, stm, mtp),
-                                        (ioex) => actionQueue( () =>
+        internal enum ReadStatus { READY, CONNECTED, DISCONNECTED };
+        internal enum WriteStatus { READY, CONNECTING, CONNECTED, DISCONNECTED };
+
+        SocketWriter writer = new SocketWriter();
+        internal WriteStatus writerStatus { get; private set; }
+
+        SocketReader reader;
+        internal ReadStatus readerStatus { get; private set; }
+
+        Handshake info;
+        Action<Action> actionQueue;
+        Action<Node, Exception, DisconnectType> notifyDisonnect;
+
+        internal bool AreBothConnected() { return writerStatus == WriteStatus.CONNECTED && readerStatus == ReadStatus.CONNECTED; }
+
+        internal void AcceptReaderConnection(Socket readingSocket,
+            Action<IPEndPointSer, Stream, MessageType> messageProcessor)
+        {
+            try
+            {
+                if (IsClosed)
+                    throw new NodeException("AcceptConnection: node is disconnected " + FullDescription());
+
+                if (readerStatus != ReadStatus.READY)
+                    throw new NodeException("AcceptConnection: reader is aready initialized " + FullDescription());
+
+                reader = new SocketReader((stm, mtp) => messageProcessor(this.Address, stm, mtp),
+                                            (ioex) => actionQueue(() =>
                                             {
-                                                this.DisconnectReader();
-                                                processDisonnect(ioex, Disconnect.READ);
+                                                readerStatus = ReadStatus.DISCONNECTED;
+                                                Close(ioex, DisconnectType.READ);
                                             }),
 
-            readingSocket);
+                readingSocket);
+            }
+            catch (Exception)
+            {
+                readingSocket.Dispose();
+                throw;
+            }
         }
 
-        void DisconnectReader()
+        /*internal void Connect(Handshake myInfo)
         {
-            reader = null;
+            Socket sck = GetReadyForNewWritingConnection(myInfo);
+
+            try
+            {
+                sck.Connect(Address.Addr);
+            }
+            catch (Exception e)
+            {
+                sck.Dispose();
+                Close(e, DisconnectType.WRITE_CONNECT_FAIL);
+                throw;
+            }
+
+            AcceptWritingConnection(sck);
+        }
+        */
+        internal void ConnectAsync(Action onSuccess, Handshake myInfo)
+        {
+            Socket sck = GetReadyForNewWritingConnection(myInfo);
+
+            try
+            {
+                new Thread( () => ConnectingThread(sck, onSuccess) ).Start();
+            }
+            catch (Exception)
+            {
+                sck.Dispose();
+                throw;
+            }
         }
 
-        void DisconnectWriter()
+        void Close(Exception ex, DisconnectType dt)
         {
-            writer = new SocketWriter();
+            if (IsClosed)
+                return;
+
+            IsClosed = true;
+
+            TerminateThreads();
+
+            notifyDisonnect(this, ex, dt);
         }
 
-        public void Connect(Handshake my_info, Action<IOException, Disconnect> processDisonnect)
+        void ConnectingThread(Socket sck, Action onSuccess)
         {
-            Socket sck = GetReadyForNewWritingConnection(my_info);
+            try
+            {
+                sck.Connect(Address.Addr);
+            }
+            catch (Exception e)
+            {
+                sck.Dispose();
 
-            sck.Connect(Address);
+                actionQueue(() =>
+                {
+                    Close(e, DisconnectType.WRITE_CONNECT_FAIL);
+                });
 
-            AcceptWritingConnection(sck, processDisonnect);
+                return;
+            }
+
+            actionQueue(() =>
+            {
+                AcceptWritingConnection(sck);
+                onSuccess.Invoke();
+            });
         }
-
-        public void StartConnecting(Action doWhenConnected, Handshake my_info, Action<IOException, Disconnect> processDisonnect)
+        Socket GetReadyForNewWritingConnection(Handshake myInfo)
         {
-            Socket sck = GetReadyForNewWritingConnection(my_info);
+            if (IsClosed)
+                throw new NodeException("GetReadyForNewWritingConnection: node is disconnected " + FullDescription());
 
-            new Thread
-                (() =>
-                    {
-                        sck.Connect(Address);
-                        actionQueue(() =>
-                            {
-                                AcceptWritingConnection(sck, processDisonnect);
-                                doWhenConnected.Invoke();
-                            });
-                    }
-                ).Start();
-        }
+            if (writerStatus != WriteStatus.READY)
+                throw new NodeException("Unexpected connection request in " + FullDescription());
 
-        Socket GetReadyForNewWritingConnection(Handshake my_info)
-        {
-            if (!CanConnect())
-                throw new InvalidOperationException("Unexpected connection request in " + Description());
+            writerStatus = WriteStatus.CONNECTING;
 
-            writerConnectionInProgress = true;
-            SendMessage(MessageType.HANDSHAKE, my_info);
-            //SendMessage(MessageType.HANDSHAKE, my_info);            
+            SendMessage(MessageType.HANDSHAKE, myInfo);
 
             return new Socket(
-                    Address.AddressFamily,
+                    Address.Addr.AddressFamily,
                     SocketType.Stream,
                     ProtocolType.Tcp);
         }
-
-        void AcceptWritingConnection(Socket sck, Action<IOException, Disconnect> processDisonnect)
+        void AcceptWritingConnection(Socket sck)
         {
-            writerConnectionInProgress = false;
+            writerStatus = WriteStatus.CONNECTED;
 
             writer.StartWriting(sck,
                                 (ioex) => actionQueue( () =>
                                     {
-                                        this.DisconnectWriter();
-                                        processDisonnect(ioex, Disconnect.WRITE);
+                                        writerStatus = WriteStatus.DISCONNECTED;
+                                        Close(ioex, DisconnectType.WRITE);
                                     })
                                );
         }
-
-        public void TerminateThreads()
+        void TerminateThreads()
         {
             if(reader != null)
                 reader.TerminateThread();

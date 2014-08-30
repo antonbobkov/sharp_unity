@@ -17,11 +17,19 @@ namespace ServerClient
 
         public SocketReader(Action<Stream, MessageType> messageProcessor_, Action<IOException> errorResponse_, Socket socketRead_)
         {
-            messageProcessor = messageProcessor_;
-            socketRead = socketRead_;
-            errorResponse = errorResponse_;
+            try
+            {
+                messageProcessor = messageProcessor_;
+                socketRead = socketRead_;
+                errorResponse = errorResponse_;
 
-            new Thread(() => this.ProcessThread()).Start();
+                new Thread(() => this.ProcessThread()).Start();
+            }
+            catch (Exception)
+            {
+                socketRead_.Dispose();
+                throw;
+            }
         }
 
         public void TerminateThread()
@@ -49,7 +57,7 @@ namespace ServerClient
             catch (IOException ioe)
             {
                 errorResponse(ioe);
-                DataCollection.LogWriteLine("SocketReader terminated");
+                //DataCollection.LogWriteLine("SocketReader terminated");
             }
         }
     }
