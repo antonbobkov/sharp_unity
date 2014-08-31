@@ -21,7 +21,7 @@ namespace ServerClient
             }
             catch (Exception)
             {
-                sckListen.Dispose();
+                sckListen.Close();
                 throw;
             }
         }
@@ -44,7 +44,7 @@ namespace ServerClient
             }
             catch (SocketException)
             {
-                //DataCollection.LogWriteLine("SocketListener terminated");
+                //Log.LogWriteLine("SocketListener terminated");
             }
         }
     }
@@ -64,7 +64,7 @@ namespace ServerClient
             }
             catch (Exception)
             {
-                sckRead.Dispose();
+                sckRead.Close();
                 throw;
             }
         
@@ -80,7 +80,9 @@ namespace ServerClient
 
                     if (nTp != (int)MessageType.HANDSHAKE)
                     {
-                        DataCollection.LogWriteLine("Invalid incoming connection message (expecting handshake): type {0} {1}", nTp, (MessageType)nTp);
+                        Log.LogWriteLine("Invalid incoming connection message (expecting handshake): type {0} {1}", nTp, (MessageType)nTp);
+
+                        sckRead.Close();
                         return;
                     }
 
@@ -88,10 +90,12 @@ namespace ServerClient
 
                     processConnection(their_info, sckRead);
                 }
-                catch (Exception)
+                catch (Exception e)
                 {
-                    sckRead.Dispose();
-                    throw;
+                    Log.LogWriteLine("Error while processing handshake: {0}", e.Message);
+
+                    sckRead.Close();
+                    return;
                 }
             }
         }

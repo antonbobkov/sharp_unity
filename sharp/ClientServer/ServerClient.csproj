@@ -47,6 +47,7 @@
     <Compile Include="BlockingCollection.cs" />
     <Compile Include="Game.cs" />
     <Compile Include="DataCollection.cs" />
+    <Compile Include="Log.cs" />
     <Compile Include="Message.cs" />
     <Compile Include="Node.cs" />
     <Compile Include="NodeHost.cs" />

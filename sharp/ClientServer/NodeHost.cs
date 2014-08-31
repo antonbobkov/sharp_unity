@@ -13,6 +13,8 @@ namespace ServerClient
 {
     class ActionSyncronizer
     {
+        public object syncLock = new object();
+        
         void ExecuteThread()
         {
             while (true)
@@ -20,7 +22,8 @@ namespace ServerClient
                 var a = msgs.Take();
                 if (a == null)
                     return;
-                a.Invoke();
+                lock(syncLock)
+                    a.Invoke();
             }
         }
         
@@ -49,20 +52,22 @@ namespace ServerClient
     class NodeCollection
     {
         public const int nStartPort = 3000;
-        const int nPortTries = 10;
+        const int nPortTries = 25;
 
-        Dictionary<IPEndPointSer, Node> nodes = new Dictionary<IPEndPointSer, Node>();
+        Dictionary<string, Node> nodes = new Dictionary<string, Node>();
         Handshake myInfo;
         SocketListener sl;
         Action<Action> processQueue;
-        Action<IPEndPointSer, Stream, MessageType> messageProcessor;
+        Action<Node, Stream, MessageType> messageProcessor;
+        Action<Node> onNewConnection;
 
-        public NodeCollection(IPEndPoint myAddr, string name, Action<Action> processQueue_, Action<IPEndPointSer, Stream, MessageType> messageProcessor_)
+        public NodeCollection(Action<Action> processQueue_, Action<Node, Stream, MessageType> messageProcessor_, Action<Node> onNewConnection_)
         {
-            myInfo = new Handshake(new IPEndPointSer(myAddr));
             processQueue = processQueue_;
             messageProcessor = messageProcessor_;
+            onNewConnection = onNewConnection_;
             StartListening();
+            ConnectAsync(myInfo.addr);
         }
 
         void StartListening()
@@ -85,7 +90,7 @@ namespace ServerClient
                         int nPort = nStartPort + i;
                         my_addr = new IPEndPoint(ip, nPort);
                         sckListen.Bind(my_addr);
-                        DataCollection.LogWriteLine("Listening at {0}:{1}", ip, nPort);
+                        Log.LogWriteLine("Listening at {0}:{1}", ip, nPort);
                         break;
                     }
                     catch (SocketException)
@@ -98,6 +103,8 @@ namespace ServerClient
                 }
                 sckListen.Listen(10);
 
+                myInfo = new Handshake(my_addr);
+
                 sl = new SocketListener(
                     ConnectionProcessor.ProcessWithHandshake(
                         (info, sck) =>
@@ -106,7 +113,7 @@ namespace ServerClient
             }
             catch (Exception)
             {
-                sckListen.Dispose();
+                sckListen.Close();
                 throw;
             }
         }
@@ -135,11 +142,11 @@ namespace ServerClient
                 if (targetNode.readerStatus != Node.ReadStatus.READY)
                 {
                     Console.WriteLine("New connection {0} rejected: node already connected", theirInfo.addr);
-                    sck.Dispose();
+                    sck.Close();
                     return;
                 }
 
-                targetNode.AcceptReaderConnection(sck, messageProcessor);
+                targetNode.AcceptReaderConnection(sck, ProcessMessageWrap);
 
                 if (targetNode.writerStatus == Node.WriteStatus.READY)
                     ConnectNodeAsync(targetNode);
@@ -150,11 +157,31 @@ namespace ServerClient
             }
             catch (Exception)
             {
-                sck.Dispose();
+                sck.Close();
                 throw;
             }
         }
 
+        void ProcessMessageWrap(Node n, Stream str, MessageType mt)
+        {
+            try
+            {
+                messageProcessor(n, str, mt);
+            }
+            catch (Exception e)
+            {
+                processQueue.Invoke( () =>
+                {
+                    Console.WriteLine("Error while reading from socket: {0}", e.Message);
+                    Console.WriteLine("Node {0}", n.FullDescription());
+
+                    DisconnectNode(n);
+                });
+
+                throw new IOException("Unhandled error while processing message", e);
+            }
+        }
+        
         void Sync_OutgoingConnectionReady(Node n)
         {
             if (n.AreBothConnected())
@@ -163,9 +190,10 @@ namespace ServerClient
         void OnNewConnectionCompletelyReady(Node n)
         {
             Console.WriteLine("New connection: {0}", n.Address);
+            onNewConnection.Invoke(n);
         }
 
-        public void ConnectAsync(IPEndPointSer their_addr)
+        public Node ConnectAsync(IPEndPoint their_addr)
         {
             Node targetNode = FindNode(their_addr);
 
@@ -184,20 +212,20 @@ namespace ServerClient
             else if (targetNode.writerStatus == Node.WriteStatus.CONNECTING)
                 throw new NodeException("Connection in progress " + their_addr.ToString());
             else
-                ConnectNodeAsync(targetNode);       
+                ConnectNodeAsync(targetNode);
+
+            return targetNode;
         }
-        public bool TryConnectAsync(IPEndPointSer their_addr)
+        public Node TryConnectAsync(IPEndPoint their_addr)
         {
             try
             {
-                ConnectAsync(their_addr);
+                return ConnectAsync(their_addr);
             }
             catch (NodeException)
             {
-                return false;
+                return null;
             }
-
-            return true;
         }
 
         void ConnectNodeAsync(Node n)
@@ -208,77 +236,41 @@ namespace ServerClient
                           );
         }
 
+        void DisconnectNode(Node n)
+        {
+            n.Disconnect();
+            RemoveNode(n);
+        }
+
+        public IEnumerable<Node> GetAllNodes()
+        {
+            return from n in nodes select n.Value;
+        }
+        public void Close()
+        {
+            foreach (var n in GetAllNodes().ToArray())
+                DisconnectNode(n);
+
+            Debug.Assert(!nodes.Any());
+
+            sl.TerminateThread();
+        }
+        public Node FindNode(IPEndPoint addr)
+        {
+            Node n = null;
+            nodes.TryGetValue(addr.ToString(), out n);
+            return n;
+        }
+
         void AddNode(Node n)
         {
-            Debug.Assert( !nodes.ContainsKey(n.Address) );
-            nodes.Add(n.Address, n);
+            Debug.Assert(!nodes.ContainsKey(n.Address.ToString()));
+            nodes.Add(n.Address.ToString(), n);
         }
         void RemoveNode(Node n)
         {
-            Debug.Assert(nodes.ContainsKey(n.Address));
-            nodes.Remove(n.Address);
-        }
-        Node FindNode(IPEndPointSer addr)
-        {
-            Node n = null;
-            nodes.TryGetValue(addr, out n);
-            return n;
-        }
-    }
-
-    class NodeHost
-    {
-        public const int nStartPort = 3000;
-        const int nPortTries = 10;
-
-        public DataCollection dc;
-        Action<Action> syncronizedActions;
-
-        public static IPAddress GetMyIP()
-        {
-            IPHostEntry localDnsEntry = Dns.GetHostEntry(Dns.GetHostName());
-            return localDnsEntry.AddressList.First
-                (ipaddr =>
-                    ipaddr.AddressFamily.ToString() == ProtocolFamily.InterNetwork.ToString());        
-        }
-
-        public NodeHost(Action<Action> syncronizedActions_)
-        {
-            syncronizedActions = syncronizedActions_;
-
-
-            IPAddress ip = GetMyIP();
-
-            Socket sckListen = new Socket(
-                    ip.AddressFamily,
-                    SocketType.Stream,
-                    ProtocolType.Tcp);
-
-            IPEndPoint my_addr = null;
-            int i;
-            for (i = 0; i < nPortTries; ++i)
-            {
-                try
-                {
-                    int nPort = nStartPort + i;
-                    my_addr = new IPEndPoint(ip, nPort);
-                    sckListen.Bind(my_addr);
-                    DataCollection.LogWriteLine("Listening at {0}:{1}", ip, nPort);
-                    break;
-                }
-                catch (SocketException)
-                { }
-            }
-
-            if (i == nPortTries)
-            {
-                throw new Exception("Unsucessful binding to ports");
-            }
-            sckListen.Listen(10);
-
-            dc = new DataCollection(my_addr, "", syncronizedActions);
-
-            dc.StartListening(sckListen);
+            Debug.Assert(nodes.ContainsKey(n.Address.ToString()));
+            nodes.Remove(n.Address.ToString());
         }
     }
 }

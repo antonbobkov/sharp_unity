@@ -13,6 +13,7 @@ using System.Xml.Serialization;
 
 namespace ServerClient
 {
+    /*
     class DataCollection
     {
         List<Node> nodes = new List<Node>();
@@ -117,7 +118,7 @@ namespace ServerClient
             }
             else if (mt == MessageType.TABLE)
             {
-                var table = Serializer.Deserialize<IPEndPointSer[]>(stm);
+                var table = Serializer.Deserialize<IPEndPoint[]>(stm);
                 processQueue(() => this.Sync_OnTable(table));
             }
             else if (mt == MessageType.GENERATE_GAME)
@@ -161,30 +162,30 @@ namespace ServerClient
         {
             var listOfPeers = from nd in nodes
                               where nd.Ready()
-                              select new IPEndPointSer(nd.Address);
+                              select new IPEndPoint(nd.Address);
 
             n.SendMessage(MessageType.TABLE, listOfPeers.ToArray());
         }
 
-        void Sync_OnTable(IPEndPointSer[] table)
+        void Sync_OnTable(IPEndPoint[] table)
         {
-            new List<IPEndPointSer>(table).ForEach((ep) => Sync_TryConnect(ep.Addr));
+            new List<IPEndPoint>(table).ForEach((ep) => Sync_TryConnect(ep.Addr));
         }
             
         void Sync_NewMessage(Node n, string msg)
         {
-            DataCollection.LogWriteLine("{0} says: {1}", n.Name, msg);
+            Log.LogWriteLine("{0} says: {1}", n.Name, msg);
         }
 
         void Sync_NewName(Node n, string msg)
         {
-            DataCollection.LogWriteLine("{0} changes name to \"{1}\"", n.Name, msg);
+            Log.LogWriteLine("{0} changes name to \"{1}\"", n.Name, msg);
             n.Name = msg;
         }
 
         void Sync_ProcessDisconnect(IOException ioex, DisconnectType ds, Node n)
         {
-            DataCollection.LogWriteLine("Node {0} disconnected ({1})", n.Name, ds);
+            Log.LogWriteLine("Node {0} disconnected ({1})", n.Name, ds);
         }
 
         void StartConnecting(Node n)
@@ -229,7 +230,7 @@ namespace ServerClient
         
         void Sync_ConnectionFinalized(Node n)
         {
-            DataCollection.LogWriteLine("New connection: {0}", n.Name);
+            Log.LogWriteLine("New connection: {0}", n.Name);
         }
 
         void Sync_Connect(IPEndPoint their_addr)
@@ -272,6 +273,7 @@ namespace ServerClient
             sb.AppendFormat(msg, vals);
             log(sb.ToString());
         }
-    }
+    }*/
+     
 
 }

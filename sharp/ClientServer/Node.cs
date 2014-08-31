@@ -29,10 +29,17 @@ namespace ServerClient
     [Serializable]
     public class Handshake
     {
-        public IPEndPointSer addr = new IPEndPointSer();
+        [XmlIgnoreAttribute]
+        public IPEndPoint addr;
+
+        public IPEndPointSer AddrSer
+        {
+            get { return new IPEndPointSer(addr); }
+            set { addr = value.Addr; }
+        }
 
         public Handshake() { }
-        public Handshake(IPEndPointSer addr_)
+        public Handshake(IPEndPoint addr_)
         {
             addr = addr_;
         }
@@ -52,7 +59,7 @@ namespace ServerClient
 
     class Node
     {
-        public Node(IPEndPointSer addr, Action<Action> actionQueue_, Action<Node, Exception, DisconnectType> processDisonnect_)
+        public Node(IPEndPoint addr, Action<Action> actionQueue_, Action<Node, Exception, DisconnectType> processDisonnect_)
         {
             info = new Handshake(addr);
             actionQueue = actionQueue_;
@@ -62,7 +69,7 @@ namespace ServerClient
             readerStatus = ReadStatus.READY;
         }
 
-        public IPEndPointSer Address{ get { return info.addr; } }
+        public IPEndPoint Address{ get { return info.addr; } }
         public bool IsClosed { get; private set; }
         
         public string FullDescription()
@@ -102,7 +109,7 @@ namespace ServerClient
         internal bool AreBothConnected() { return writerStatus == WriteStatus.CONNECTED && readerStatus == ReadStatus.CONNECTED; }
 
         internal void AcceptReaderConnection(Socket readingSocket,
-            Action<IPEndPointSer, Stream, MessageType> messageProcessor)
+            Action<Node, Stream, MessageType> messageProcessor)
         {
             try
             {
@@ -112,7 +119,7 @@ namespace ServerClient
                 if (readerStatus != ReadStatus.READY)
                     throw new NodeException("AcceptConnection: reader is aready initialized " + FullDescription());
 
-                reader = new SocketReader((stm, mtp) => messageProcessor(this.Address, stm, mtp),
+                reader = new SocketReader((stm, mtp) => messageProcessor(this, stm, mtp),
                                             (ioex) => actionQueue(() =>
                                             {
                                                 readerStatus = ReadStatus.DISCONNECTED;
@@ -120,10 +127,12 @@ namespace ServerClient
                                             }),
 
                 readingSocket);
+
+                readerStatus = ReadStatus.CONNECTED;
             }
             catch (Exception)
             {
-                readingSocket.Dispose();
+                readingSocket.Close();
                 throw;
             }
         }
@@ -138,7 +147,7 @@ namespace ServerClient
             }
             catch (Exception e)
             {
-                sck.Dispose();
+                sck.Close();
                 Close(e, DisconnectType.WRITE_CONNECT_FAIL);
                 throw;
             }
@@ -156,11 +165,15 @@ namespace ServerClient
             }
             catch (Exception)
             {
-                sck.Dispose();
+                sck.Close();
                 throw;
             }
         }
 
+        internal void Disconnect()
+        {
+            Close(new Exception("no error"), DisconnectType.CLOSE_CALL);
+        }
         void Close(Exception ex, DisconnectType dt)
         {
             if (IsClosed)
@@ -177,11 +190,11 @@ namespace ServerClient
         {
             try
             {
-                sck.Connect(Address.Addr);
+                sck.Connect(Address);
             }
             catch (Exception e)
             {
-                sck.Dispose();
+                sck.Close();
 
                 actionQueue(() =>
                 {
@@ -210,7 +223,7 @@ namespace ServerClient
             SendMessage(MessageType.HANDSHAKE, myInfo);
 
             return new Socket(
-                    Address.Addr.AddressFamily,
+                    Address.AddressFamily,
                     SocketType.Stream,
                     ProtocolType.Tcp);
         }

@@ -27,7 +27,7 @@ namespace ServerClient
             }
             catch (Exception)
             {
-                socketRead_.Dispose();
+                socketRead_.Close();
                 throw;
             }
         }
@@ -57,7 +57,7 @@ namespace ServerClient
             catch (IOException ioe)
             {
                 errorResponse(ioe);
-                //DataCollection.LogWriteLine("SocketReader terminated");
+                //Log.LogWriteLine("SocketReader terminated");
             }
         }
     }

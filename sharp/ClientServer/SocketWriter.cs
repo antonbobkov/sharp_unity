@@ -30,7 +30,7 @@ namespace ServerClient
             }
             catch (Exception)
             {
-                socketWrite_.Dispose();
+                socketWrite_.Close();
                 throw;
             }
         }
@@ -59,7 +59,7 @@ namespace ServerClient
                         var act = bcMessages.Take();
                         if (act == null)
                         {
-                            //DataCollection.LogWriteLine("SocketWriter terminated gracefully");
+                            //Log.LogWriteLine("SocketWriter terminated gracefully");
                             return;
                         }
                         act.Invoke(connectionStream);

@@ -7,8 +7,7 @@ using ServerClient;
 
 public class minecraft : MonoBehaviour {
 
-    ActionSyncronizer sync;
-    NodeHost myHost;
+    Aggregate all;
 
     Vector3 vCorner;
 
@@ -17,25 +16,14 @@ public class minecraft : MonoBehaviour {
 	GameObject[,] go;
     Dictionary<System.Guid, GameObject> players = new Dictionary<System.Guid, GameObject>();
 
-
     Vector3 GetPositionAtGrid(int x, int y)
     {
         return vCorner + new Vector3(x, y, 0);
     }
 
-    void MeshConnect()
-    {
-        IPEndPoint ep = new IPEndPoint(NodeHost.GetMyIP(), NodeHost.nStartPort);
-        
-        DataCollection.LogWriteLine("Connecting to {0}:{1}", ep.Address, ep.Port);
-        
-        myHost.dc.Sync_TryConnect(ep);
-        myHost.dc.Sync_AskForTable(ep);
-    }
-    
     void StartGame()
     {
-        Game g = myHost.dc.game;
+        Game g = all.game;
         int szX = g.world.GetLength(0);
         int szY = g.world.GetLength(1);
         go = new GameObject[szX, szY];
@@ -76,14 +64,15 @@ public class minecraft : MonoBehaviour {
 
 	// Use this for initialization
 	void Start () {
-        DataCollection.log = msg => Debug.Log(msg); 
+        Log.log = msg => Debug.Log(msg); 
 
-        //DataCollection.LogWriteLine("{0}", new System.Random(12).Next());
+        all = new Aggregate();
 
-        //throw new UnityException();
+        all.myRole.player = Guid.NewGuid();
+        Log.LogWriteLine("Player {0}", all.myRole.player);
 
-        sync = new ActionSyncronizer();
-        myHost = new NodeHost(sync.GetAsDelegate());
+        // mesh connect
+        Program.MeshConnect(all);
 
         var light = gameObject.AddComponent<Light>();
         light.type = LightType.Point;
@@ -95,44 +84,38 @@ public class minecraft : MonoBehaviour {
         camera.orthographicSize = 10;
 
         Application.runInBackground = true;
-
-        MeshConnect();
     }
 
     void OnApplicationQuit () {
-        sync.Add(null);
-        myHost.dc.TerminateThreads();
+        all.sync.Add(null);
+        all.peers.Close();
     }
 
     void ProcessMovement()
     {
         try{
-            //Game g = myHost.dc.game;
-            //Player me = 
-
-            //int x = myHost.dc.game.players [myHost.dc.Id];
-
             Point p = new Point();
 
             if (Input.GetKeyDown(KeyCode.UpArrow))
-                p = new Point(0, 1);
+                p = p + new Point(0, 1);
             if (Input.GetKeyDown(KeyCode.DownArrow))
-                p = new Point(0, -1);
+                p = p + new Point(0, -1);
             if (Input.GetKeyDown(KeyCode.LeftArrow))
-                p = new Point(-1, 0);
+                p = p + new Point(-1, 0);
             if (Input.GetKeyDown(KeyCode.RightArrow))
-                p = new Point(1, 0);
+                p = p + new Point(1, 0);
 
             if (p.x != 0 || p.y != 0)
             {
-                Game g = myHost.dc.game;
-                Player pl = g.players[myHost.dc.Id];
+                Game g = all.game;
+                Player pl = g.players[all.myRole.player];
 
-                p = pl.pos + p;
-                if(g.world[p.x, p.y].solid)
-                    return;
-                pl.pos = p;
-                myHost.dc.Sync_UpdateMyPosition();
+                PlayerMoveInfo mv = new PlayerMoveInfo(pl.id, pl.pos + p);
+                //if (g.CheckValidMove(mv) == MoveValidity.VALID)
+                {
+                    //Log.LogWriteLine("Move from {0} to {1}", pl.pos, mv.pos);
+                    all.Move(mv);
+                }
             }
         }
         catch(IndexOutOfRangeException){
@@ -142,12 +125,11 @@ public class minecraft : MonoBehaviour {
 	// Update is called once per frame
 	void Update () {
 
-        ProcessMovement();
         if (!gameStarted)
         {
-            lock(myHost.dc)
+            lock(all.sync.syncLock)
             {
-                if(myHost.dc.game == null)
+                if(all.game == null)
                     return;
                 gameStarted = true;
                 StartGame();
@@ -155,9 +137,11 @@ public class minecraft : MonoBehaviour {
             }
         }
 
-        lock (myHost.dc)
+        lock (all.sync.syncLock)
         {
-            foreach (var pair in myHost.dc.game.players)
+            ProcessMovement();
+
+            foreach (var pair in all.game.players)
             {
                 System.Guid id = pair.Key;
                 Player p = pair.Value;
@@ -165,7 +149,7 @@ public class minecraft : MonoBehaviour {
                 players[id].transform.position = GetPositionAtGrid(p.pos.x, p.pos.y);
             }
 
-            camera.transform.position = players[myHost.dc.Id].transform.position;
+            camera.transform.position = players[all.myRole.player].transform.position;
             camera.transform.position += new Vector3(0f, 0f, -cameraDistance);
             //camera.transform.rotation *= Quaternion.AngleAxis(Time.deltaTime * 1, Vector3.forward);
         }
