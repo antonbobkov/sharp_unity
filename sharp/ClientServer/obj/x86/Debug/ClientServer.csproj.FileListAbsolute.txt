@@ -1,4 +1,0 @@
-D:\programs\Unity 4.3.0\projects\Assets\sharp\ClientServer\bin\Debug\ClientServer.exe
-D:\programs\Unity 4.3.0\projects\Assets\sharp\ClientServer\bin\Debug\ClientServer.pdb
-D:\programs\Unity 4.3.0\projects\Assets\sharp\ClientServer\obj\x86\Debug\ClientServer.exe
-D:\programs\Unity 4.3.0\projects\Assets\sharp\ClientServer\obj\x86\Debug\ClientServer.pdb
