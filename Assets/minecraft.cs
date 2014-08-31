@@ -93,32 +93,39 @@ public class minecraft : MonoBehaviour {
 
     void ProcessMovement()
     {
-        try{
-            Point p = new Point();
+        Point p = new Point();
 
-            if (Input.GetKeyDown(KeyCode.UpArrow))
-                p = p + new Point(0, 1);
-            if (Input.GetKeyDown(KeyCode.DownArrow))
-                p = p + new Point(0, -1);
-            if (Input.GetKeyDown(KeyCode.LeftArrow))
-                p = p + new Point(-1, 0);
-            if (Input.GetKeyDown(KeyCode.RightArrow))
-                p = p + new Point(1, 0);
+        if (Input.GetKeyDown(KeyCode.UpArrow))
+            p = p + new Point(0, 1);
+        if (Input.GetKeyDown(KeyCode.DownArrow))
+            p = p + new Point(0, -1);
+        if (Input.GetKeyDown(KeyCode.LeftArrow))
+            p = p + new Point(-1, 0);
+        if (Input.GetKeyDown(KeyCode.RightArrow))
+            p = p + new Point(1, 0);
 
-            if (p.x != 0 || p.y != 0)
-            {
-                Game g = all.game;
-                Player pl = g.players[all.myRole.player];
-
-                PlayerMoveInfo mv = new PlayerMoveInfo(pl.id, pl.pos + p);
-                //if (g.CheckValidMove(mv) == MoveValidity.VALID)
-                {
-                    //Log.LogWriteLine("Move from {0} to {1}", pl.pos, mv.pos);
-                    all.Move(mv);
-                }
-            }
+        if (Input.GetKeyDown(KeyCode.Space))
+        {
+            p = p + new Point(1,1);
         }
-        catch(IndexOutOfRangeException){
+
+        if (p.x != 0 || p.y != 0)
+        {
+            Game g = all.game;
+            Player pl = g.players[all.myRole.player];
+
+            PlayerMoveInfo mv = new PlayerMoveInfo(pl.id, pl.pos + p);
+            if (g.CheckValidMove(mv) == MoveValidity.VALID)
+            {
+                //Log.LogWriteLine("Move from {0} to {1}", pl.pos, mv.pos);
+                all.Move(mv);
+            }
+
+            if (Input.GetKeyDown(KeyCode.Space))
+            {
+                for(int i = 0; i < 10000; ++i)
+                    all.Move(mv);
+            }
         }
     }
 	
@@ -129,6 +136,8 @@ public class minecraft : MonoBehaviour {
         {
             lock(all.sync.syncLock)
             {
+                if (Input.GetKeyDown(KeyCode.G))
+                    all.GenerateGame();
                 if(all.game == null)
                     return;
                 gameStarted = true;

@@ -42,10 +42,31 @@ namespace ServerClient
     {
         public static IPAddress GetMyIP()
         {
-            IPHostEntry localDnsEntry = Dns.GetHostEntry(Dns.GetHostName());
-            return localDnsEntry.AddressList.First
-                (ipaddr =>
-                    ipaddr.AddressFamily.ToString() == ProtocolFamily.InterNetwork.ToString());
+            try
+            {
+                IPHostEntry localDnsEntry = Dns.GetHostEntry(Dns.GetHostName());
+                return localDnsEntry.AddressList.First
+                    (ipaddr =>
+                        ipaddr.AddressFamily.ToString() == ProtocolFamily.InterNetwork.ToString());
+            }
+            catch (Exception e)
+            {
+                Log.LogWriteLine("GetMyIP Error: {0}\nWill try to read ip from file \"myip\"", e.Message);
+            }
+
+            try
+            {
+                var f = new System.IO.StreamReader(File.Open("myip", FileMode.Open));
+                string line;
+                line = f.ReadLine();
+                return IPAddress.Parse(line);
+            }
+            catch (Exception e)
+            {
+                Log.LogWriteLine("GetMyIP Error: {0}\nDefault to 127.0.0.1", e.Message);
+            }
+
+            return IPAddress.Parse("127.0.0.1");
         }
     }
 
@@ -120,7 +141,7 @@ namespace ServerClient
 
         void Sync_ProcessDisconnect(Node n, Exception ioex, DisconnectType ds)
         {
-            Console.WriteLine("{0} disconnected on {1} ({2})", n.Address, ds, (ioex == null) ? "" : ioex.Message);
+            Log.LogWriteLine("{0} disconnected on {1} ({2})", n.Address, ds, (ioex == null) ? "" : ioex.Message);
             RemoveNode(n);
         }
         void Sync_NewIncomingConnection(Handshake theirInfo, Socket sck)
@@ -141,7 +162,7 @@ namespace ServerClient
 
                 if (targetNode.readerStatus != Node.ReadStatus.READY)
                 {
-                    Console.WriteLine("New connection {0} rejected: node already connected", theirInfo.addr);
+                    Log.LogWriteLine("New connection {0} rejected: node already connected", theirInfo.addr);
                     sck.Close();
                     return;
                 }
@@ -172,9 +193,7 @@ namespace ServerClient
             {
                 processQueue.Invoke( () =>
                 {
-                    Console.WriteLine("Error while reading from socket: {0}", e.Message);
-                    Console.WriteLine("Node {0}", n.FullDescription());
-
+                    Log.LogWriteLine("Error while reading from socket: {0}\nNode {1}\nLast read:{2}", e.ToString(), n.FullDescription(), Serializer.lastRead);
                     DisconnectNode(n);
                 });
 
@@ -189,7 +208,7 @@ namespace ServerClient
         }
         void OnNewConnectionCompletelyReady(Node n)
         {
-            Console.WriteLine("New connection: {0}", n.Address);
+            Log.LogWriteLine("New connection: {0}", n.Address);
             onNewConnection.Invoke(n);
         }
 

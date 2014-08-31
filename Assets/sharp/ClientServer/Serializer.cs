@@ -12,6 +12,7 @@ namespace ServerClient
 {
     class Serializer
     {
+        public static string lastRead = "";
         public static void Serialize<T>(Stream output, T obj)
         {
             //IFormatter formatter = new BinaryFormatter();
@@ -22,7 +23,7 @@ namespace ServerClient
             XmlSerializer ser = new XmlSerializer(typeof(T));
             ser.Serialize(ms, obj);
 
-            //Console.WriteLine("Send XML of size {1}:\n{0}", System.Text.Encoding.Default.GetString(ms.ToArray()), ms.Length);
+            //Log.LogWriteLine("Send XML of size {1}:\n{0}", System.Text.Encoding.Default.GetString(ms.ToArray()), ms.Length);
 
             WriteSize(output, (int)ms.Length);
 
@@ -49,7 +50,8 @@ namespace ServerClient
 
             Debug.Assert(c == size);
 
-            //Console.WriteLine("Received XML:\n{0}", System.Text.Encoding.Default.GetString(data));
+            lastRead = System.Text.Encoding.Default.GetString(data);
+            //Log.LogWriteLine("Received XML:\n{0}", System.Text.Encoding.Default.GetString(data));
 
             MemoryStream ms = new MemoryStream(data);
 

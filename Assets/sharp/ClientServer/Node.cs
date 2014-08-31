@@ -50,7 +50,7 @@ namespace ServerClient
         }
     }
 
-    enum DisconnectType { READ, WRITE, WRITE_CONNECT_FAIL, CLOSE_CALL }
+    enum DisconnectType { READ, WRITE, WRITE_CONNECT_FAIL, CLOSED }
 
     class NodeException : Exception
     {
@@ -172,7 +172,7 @@ namespace ServerClient
 
         internal void Disconnect()
         {
-            Close(new Exception("no error"), DisconnectType.CLOSE_CALL);
+            Close(new Exception("no error"), DisconnectType.CLOSED);
         }
         void Close(Exception ex, DisconnectType dt)
         {

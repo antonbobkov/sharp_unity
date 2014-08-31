@@ -21,6 +21,7 @@ namespace ServerClient
         public Role myRole = new Role();
         public NodeRoles roles = new NodeRoles();
         public Game game = null;
+        public Game validatorGame = null;
 
         public Aggregate()
         {
@@ -124,7 +125,10 @@ namespace ServerClient
         void OnGenerate(GameInitializer init)
         {
             game = new Game(init, roles);
-            Console.WriteLine("Game generated, controlled by {0}", game.worldValidator == myRole.validator ? "me!" : game.worldValidator.ToString());
+            Log.LogWriteLine("Game generated, controlled by {0}", game.worldValidator == myRole.validator ? "me!" : game.worldValidator.ToString());
+            if (game.worldValidator == myRole.validator)
+                validatorGame = new Game(init, roles);
+            
             game.ConsoleOut();
         }
         void OnValidateMove(Node n, PlayerMoveInfo mv)
@@ -133,12 +137,15 @@ namespace ServerClient
             Debug.Assert(roles.players.ContainsKey(mv.id));
             Debug.Assert(roles.players[mv.id] == n);
 
-            MoveValidity v = game.CheckValidMove(mv);
+            MoveValidity v = validatorGame.CheckValidMove(mv);
+            //Log.LogWriteLine("Validator: Move {0} from {1} to {2} by {3}", v, game.players[mv.id].pos, mv.pos, mv.id);
             if (v != MoveValidity.VALID)
             {
-                Console.WriteLine("Validator: Invalid move {0} from {1} to {2} by {3}", v, game.players[mv.id].pos, mv.pos, mv.id);
+                Log.LogWriteLine("Validator: Invalid move {0} from {1} to {2} by {3}", v, game.players[mv.id].pos, mv.pos, mv.id);
                 return;
             }
+
+            validatorGame.Move(mv);
 
             Broadcast(MessageType.MOVE, mv);
         }
@@ -147,7 +154,12 @@ namespace ServerClient
             Debug.Assert(roles.players.ContainsKey(mv.id));
             Debug.Assert(game.CheckValidMove(mv) == MoveValidity.VALID);
             Debug.Assert(roles.validators[game.worldValidator] == n);
-            Debug.Assert(game.CheckValidMove(mv) == MoveValidity.VALID);
+
+            //if (game.CheckValidMove(mv) != MoveValidity.VALID)
+            {
+                //Log.LogWriteLine("Player: Move {0} from {1} to {2} by {3}", game.CheckValidMove(mv), game.players[mv.id].pos, mv.pos, mv.id);
+            }
+
 
             game.Move(mv);
         }
@@ -160,6 +172,12 @@ namespace ServerClient
         }
         public void GenerateGame()
         {
+            if (game != null)
+            {
+                Log.LogWriteLine("GenerateGame: game already generated!");
+                return;
+            }
+            
             GameInitializer init = new GameInitializer(System.DateTime.Now.Millisecond, roles);
             Broadcast(MessageType.GENERATE, init);
         }
@@ -248,9 +266,9 @@ namespace ServerClient
                     all.sync.Add(() => all.Connect(ls, true));
                 }
             }
-            catch (Exception e)
+            catch (Exception)
             {
-                Log.LogWriteLine("Error: {0}", e.Message);
+                //Log.LogWriteLine("Error: {0}", e.Message);
             }
         }
         

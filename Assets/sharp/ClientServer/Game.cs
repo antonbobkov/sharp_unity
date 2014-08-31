@@ -228,6 +228,10 @@ namespace ServerClient
 
         public void Move(PlayerMoveInfo mv)
         {
+            //Debug.Assert(CheckValidMove(mv) == MoveValidity.VALID);
+            if(CheckValidMove(mv) == MoveValidity.VALID)
+                Log.LogWriteLine("Game.Move Warning: Invalid move {0} from {1} to {2} by {3}", CheckValidMove(mv), players[mv.id].pos, mv.pos, mv.id);
+
             Debug.Assert(players.ContainsKey(mv.id));
             Player p = players[mv.id];
             world[p.pos.x, p.pos.y].p = null;
