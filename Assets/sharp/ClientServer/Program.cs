@@ -35,17 +35,17 @@ namespace ServerClient
 
             foreach (var s in param)
             {
-                IPAddress parseIp;
-                if (IPAddress.TryParse(s, out parseIp))
-                {
-                    ip = parseIp;
-                    continue;
-                }
-
                 int parsePort;
                 if (int.TryParse(s, out parsePort))
                 {
                     port = parsePort;
+                    continue;
+                }
+
+                IPAddress parseIp;
+                if (IPAddress.TryParse(s, out parseIp))
+                {
+                    ip = parseIp;
                     continue;
                 }
             }
@@ -240,12 +240,18 @@ namespace ServerClient
 
             try
             {
-                var f = new System.IO.StreamReader("ips");
+                var f = new System.IO.StreamReader(File.Open("ips", FileMode.Open));
                 string line;
                 while ((line = f.ReadLine()) != null)
-                    all.sync.Add(() => all.Connect(new List<string>(line.Split(' ')), true));
+                {
+                    List<string> ls = new List<string>(line.Split(' '));
+                    all.sync.Add(() => all.Connect(ls, true));
+                }
             }
-            catch (Exception) { }
+            catch (Exception e)
+            {
+                Log.LogWriteLine("Error: {0}", e.Message);
+            }
         }
         
         static void Main(string[] args)
