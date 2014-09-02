@@ -38,37 +38,7 @@ namespace ServerClient
         }
     }
 
-    class NetTools
-    {
-        public static IPAddress GetMyIP()
-        {
-            try
-            {
-                IPHostEntry localDnsEntry = Dns.GetHostEntry(Dns.GetHostName());
-                return localDnsEntry.AddressList.First
-                    (ipaddr =>
-                        ipaddr.AddressFamily.ToString() == ProtocolFamily.InterNetwork.ToString());
-            }
-            catch (Exception e)
-            {
-                Log.LogWriteLine("GetMyIP Error: {0}\nWill try to read ip from file \"myip\"", e.Message);
-            }
-
-            try
-            {
-                var f = new System.IO.StreamReader(File.Open("myip", FileMode.Open));
-                string line;
-                line = f.ReadLine();
-                return IPAddress.Parse(line);
-            }
-            catch (Exception e)
-            {
-                Log.LogWriteLine("GetMyIP Error: {0}\nDefault to 127.0.0.1", e.Message);
-            }
-
-            return IPAddress.Parse("127.0.0.1");
-        }
-    }
+    
 
     class NodeCollection
     {
@@ -81,6 +51,8 @@ namespace ServerClient
         Action<Action> processQueue;
         Action<Node, Stream, MessageType> messageProcessor;
         Action<Node> onNewConnection;
+
+        public IPEndPoint MyAddress { get { return myInfo.addr; } }
 
         public NodeCollection(Action<Action> processQueue_, Action<Node, Stream, MessageType> messageProcessor_, Action<Node> onNewConnection_)
         {

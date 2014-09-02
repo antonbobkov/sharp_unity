@@ -5,7 +5,7 @@ using System.Text;
 
 namespace ServerClient
 {
-    class Random
+    class MyRandom
     {
         //m_w = <choose-initializer>;    // must not be zero, nor 0x464fffff
         //m_z = <choose-initializer>;    // must not be zero, nor 0x9068ffff
@@ -13,10 +13,10 @@ namespace ServerClient
         UInt32 m_w;
         UInt32 m_z;
 
-        public Random():this(System.DateTime.Now.Millisecond)
+        public MyRandom():this(System.DateTime.Now.Millisecond)
         {}
         
-        public Random(Int32 seed_)
+        public MyRandom(Int32 seed_)
         {
             UInt32 seed = (UInt32)seed_;
             

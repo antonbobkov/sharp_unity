@@ -63,7 +63,7 @@ namespace ServerClient
                             return;
                         }
                         act.Invoke(connectionStream);
-                        connectionStream.Flush();
+                        //connectionStream.Flush();
                     }
             }
             catch (IOException ioe)
