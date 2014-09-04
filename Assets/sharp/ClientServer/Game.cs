@@ -311,12 +311,14 @@ namespace ServerClient
         public MoveValidity CheckValidMove(PlayerMoveInfo mv)
         {
             Debug.Assert(players.ContainsKey(mv.id));
-            Player pl = players[mv.id];
+
+            Point oldPos = players[mv.id].pos;
+            Point newPos = mv.pos;
 
             Tile t;
             try
             {
-                t = world[mv.pos.x, mv.pos.y];
+                t = world[newPos.x, newPos.y];
             }
             catch (IndexOutOfRangeException)
             {
@@ -333,7 +335,7 @@ namespace ServerClient
                 throw new InvalidOperationException("CheckValidMove: unexpected tile status");
             }
 
-            Point diff = pl.pos - mv.pos;
+            Point diff = newPos - oldPos;
             if (Math.Abs(diff.x) > 1)
                 return MoveValidity.TELEPORT;
             if (Math.Abs(diff.y) > 1)

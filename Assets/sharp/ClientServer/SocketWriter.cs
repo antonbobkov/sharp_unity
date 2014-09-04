@@ -34,11 +34,16 @@ namespace ServerClient
                 throw;
             }
         }
-
-        public void SendMessage<T>(MessageType mt, T message)
+        
+        public void SendMessage(MessageType mt, params Object[] messages)
         {
             MemoryStream ms = new MemoryStream();
-            StreamSerializedMessage(ms, mt, message);
+
+            ms.WriteByte((byte)mt);
+
+            foreach(Object m in messages)
+                Serializer.Serialize(ms, m);
+
             ms.Position = 0;
 
             bcMessages.Add(stm => Serializer.SendStream(stm, ms));
@@ -70,14 +75,6 @@ namespace ServerClient
             {
                 errorResponse(ioe);
             }
-        }
-
-        static void StreamSerializedMessage<T>(Stream stm, MessageType mt, T message)
-        {
-            stm.WriteByte((byte)mt);
-
-            if (message != null)
-                Serializer.Serialize(stm, message);
         }
     }
 }

@@ -13,14 +13,14 @@ namespace ServerClient
     class Serializer
     {
         public static string lastRead = "";
-        public static void Serialize<T>(Stream output, T obj)
+        public static void Serialize(Stream output, Object obj)
         {
             //IFormatter formatter = new BinaryFormatter();
             //formatter.Serialize(stm, obj);
 
             MemoryStream ms = new MemoryStream();
-            
-            XmlSerializer ser = new XmlSerializer(typeof(T));
+
+            XmlSerializer ser = new XmlSerializer(obj.GetType());
             ser.Serialize(ms, obj);
 
             //Log.LogWriteLine("Send XML of size {1}:\n{0}", System.Text.Encoding.Default.GetString(ms.ToArray()), ms.Length);
