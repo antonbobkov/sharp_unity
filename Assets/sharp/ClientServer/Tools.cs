@@ -87,5 +87,12 @@ namespace ServerClient
         {
             return list[nextRandomInt(list.Count)];
         }
+
+        public static V GetValue<K, V>(this Dictionary<K, V> dict, K key)
+        {
+            if (dict.ContainsKey(key))
+                return dict[key];
+            throw new Exception("Key not found " + key.ToString());
+        }
     }
 }

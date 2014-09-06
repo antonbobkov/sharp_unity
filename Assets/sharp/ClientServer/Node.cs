@@ -79,16 +79,12 @@ namespace ServerClient
             return sb.ToString();
         }
 
-        public void SendMessage(MessageType mt)
-        {
-            SendMessage<object>(mt, null);
-        }
-        public void SendMessage<T>(MessageType mt, T message)
+        public void SendMessage(MessageType mt, params Object[] messages)
         {
             if (IsClosed)
                 throw new NodeException("SendMessage: node is disconnected " + FullDescription());
 
-            writer.SendMessage(mt, message);
+            writer.SendMessage(mt, messages);
         }
 
         // --- private ---

@@ -308,15 +308,14 @@ namespace ServerClient
             }
         }
 
-        public MoveValidity CheckValidMove(PlayerMoveInfo mv)
+        public MoveValidity CheckValidMove(Player p, Point newPos)
         {
-            Debug.Assert(players.ContainsKey(mv.id));
-            Player pl = players[mv.id];
+            Point oldPos = players.GetValue(p.id).pos;
 
             Tile t;
             try
             {
-                t = world[mv.pos.x, mv.pos.y];
+                t = world[newPos.x, newPos.y];
             }
             catch (IndexOutOfRangeException)
             {
@@ -333,7 +332,7 @@ namespace ServerClient
                 throw new InvalidOperationException("CheckValidMove: unexpected tile status");
             }
 
-            Point diff = pl.pos - mv.pos;
+            Point diff = newPos - oldPos;
             if (Math.Abs(diff.x) > 1)
                 return MoveValidity.TELEPORT;
             if (Math.Abs(diff.y) > 1)
@@ -342,20 +341,18 @@ namespace ServerClient
             return MoveValidity.VALID;
         }
 
-        public void Move(PlayerMoveInfo mv)
+        public void Move(Player p, Point newPos, MoveValidity mv = MoveValidity.VALID)
         {
-            //Debug.Assert(CheckValidMove(mv) == MoveValidity.VALID);
-            if(CheckValidMove(mv) != MoveValidity.VALID)
-                Log.LogWriteLine("Game.Move Warning: Invalid move {0} from {1} to {2} by {3}", CheckValidMove(mv), players[mv.id].pos, mv.pos, players[mv.id].FullName);
+            if (CheckValidMove(p, newPos) != mv)
+                Log.LogWriteLine("Game.Move Warning: Invalid move {0} from {1} to {2} by {3}", CheckValidMove(p, newPos), p.pos, newPos, p.FullName);
 
-            Debug.Assert(players.ContainsKey(mv.id));
-            Player p = players[mv.id];
+            Debug.Assert(world[p.pos.x, p.pos.y].p == p);
             world[p.pos.x, p.pos.y].p = null;
 
-            Tile t = world[mv.pos.x, mv.pos.y];
+            Tile t = world[newPos.x, newPos.y];
             Debug.Assert(t.IsEmpty());
 
-            p.pos = mv.pos;
+            p.pos = newPos;
             t.p = p;
             t.loot = false;
         }
