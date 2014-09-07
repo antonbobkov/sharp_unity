@@ -53,6 +53,7 @@ namespace ServerClient
         }
     }
 
+    /*
     [Serializable]
     public class PlayerMoveInfo
     {
@@ -66,6 +67,7 @@ namespace ServerClient
             pos = pos_;
         }
     }
+     * */
 
     class Tile
     {
@@ -89,11 +91,11 @@ namespace ServerClient
         public double density = .2;
 
         public GameInitializer() { }
-        internal GameInitializer(int seed_, NodeRoles roles)
+        internal GameInitializer(int seed_, Role roles)
         { 
             seed = seed_;
-            numberOfPlayers = roles.players.Count();
-            numberOfValidators = roles.validators.Count();
+            numberOfPlayers = roles.player.Count();
+            numberOfValidators = roles.validator.Count();
         }
     }
 
@@ -128,6 +130,7 @@ namespace ServerClient
         }
     }
 
+    /*
     class NodeRoles
     {
         public Dictionary<Guid, Node> players = new Dictionary<Guid,Node>();
@@ -145,17 +148,18 @@ namespace ServerClient
             Add(validators, r.validator, n);
         }
     }
+     * */
 
     class Game
     {
         public GameInitializer info;
-        public NodeRoles roles;
+        public Role roles;
 
         public Tile[,] world;
         public Dictionary<Guid, Player> players = new Dictionary<Guid, Player>();
         public Guid worldValidator;
 
-        public Game(GameInitializer info_, NodeRoles roles_)
+        public Game(GameInitializer info_, Role roles_)
         {
             info = info_;
             roles = roles_;
@@ -169,7 +173,7 @@ namespace ServerClient
             'A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W','X','Y','Z',
             'a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z'};
 
-            Debug.Assert(value >= 0);
+            MyAssert.Assert(value >= 0);
             
             string result = string.Empty;
             int targetBase = baseChars.Length;
@@ -188,22 +192,22 @@ namespace ServerClient
         {
             ServerClient.MyRandom seededRandom = new ServerClient.MyRandom(info.seed);
 
-            Debug.Assert(info.numberOfPlayers == roles.players.Count());
-            Debug.Assert(info.numberOfValidators == roles.validators.Count());
-            Debug.Assert(info.numberOfValidators != 0);
+            MyAssert.Assert(info.numberOfPlayers == roles.player.Count());
+            MyAssert.Assert(info.numberOfValidators == roles.validator.Count());
+            MyAssert.Assert(info.numberOfValidators != 0);
 
             int szX = info.worldWidth;
             int szY = info.worldHeight;
 
-            Debug.Assert(szX >= 3);
-            Debug.Assert(szY >= 3);
+            MyAssert.Assert(szX >= 3);
+            MyAssert.Assert(szY >= 3);
 
             // validators
-            var validators = (from kv in roles.validators
-                                 orderby kv.Key.ToString()
-                                 select kv.Key).ToList();
+            var validators = (from kv in roles.validator
+                              orderby kv.ToString()
+                              select kv).ToList();
 
-            Debug.Assert(info.numberOfValidators == validators.Count);
+            MyAssert.Assert(info.numberOfValidators == validators.Count);
             worldValidator = validators.Random(n => seededRandom.Next(n));
 
             // random terrain
@@ -251,19 +255,19 @@ namespace ServerClient
             {
                 kv.Value.solid = false;
                 kv.Value.loot = false;
-                Debug.Assert(kv.Value.IsEmpty());
+                MyAssert.Assert(kv.Value.IsEmpty());
             }
 
             // deterministic shuffle
             spawnLst.Shuffle((n) => seededRandom.Next(n));
 
 
-            var playersInOrder = (from pair in roles.players
-                                  orderby pair.Key.ToString()
-                                  select pair.Key).ToList();
+            var playersInOrder = (from pair in roles.player
+                                  orderby pair.ToString()
+                                  select pair).ToList();
 
-            Debug.Assert(playersInOrder.Count() == info.numberOfPlayers);
-            Debug.Assert(spawnLst.Count() > info.numberOfPlayers);
+            MyAssert.Assert(playersInOrder.Count() == info.numberOfPlayers);
+            MyAssert.Assert(spawnLst.Count() > info.numberOfPlayers);
 
             // spawn players
             for (int i = 0; i < playersInOrder.Count(); ++i)
@@ -275,7 +279,7 @@ namespace ServerClient
 
                 Player newPlayer = new Player(position, id, PlayerNameMap(i), validator);
                 
-                Debug.Assert(tile.IsEmpty());
+                MyAssert.Assert(tile.IsEmpty());
                 tile.p = newPlayer;
 
                 players.Add(id, newPlayer);
@@ -346,11 +350,11 @@ namespace ServerClient
             if (CheckValidMove(p, newPos) != mv)
                 Log.LogWriteLine("Game.Move Warning: Invalid move {0} from {1} to {2} by {3}", CheckValidMove(p, newPos), p.pos, newPos, p.FullName);
 
-            Debug.Assert(world[p.pos.x, p.pos.y].p == p);
+            MyAssert.Assert(world[p.pos.x, p.pos.y].p == p);
             world[p.pos.x, p.pos.y].p = null;
 
             Tile t = world[newPos.x, newPos.y];
-            Debug.Assert(t.IsEmpty());
+            MyAssert.Assert(t.IsEmpty());
 
             p.pos = newPos;
             t.p = p;

@@ -17,7 +17,9 @@ namespace ServerClient
             {
                 processConnection = processConnection_;
                 sckListen = sckListen_;
-                new Thread(() => this.ProcessThread()).Start();
+                ThreadManager.NewThread(() => ProcessThread(),
+                    () => TerminateThread(), "SocketListener " + NetTools.GetLocalIP(sckListen).ToString());
+                //new Thread(() => this.ProcessThread()).Start();
             }
             catch (Exception)
             {
@@ -60,7 +62,9 @@ namespace ServerClient
         {
             try
             {
-                new Thread(() => ConnectionHandshake(sckRead, processConnection)).Start();
+                ThreadManager.NewThread(() => ConnectionHandshake(sckRead, processConnection),
+                    () => sckRead.Close(), "Incoming connection " + NetTools.GetRemoteIP(sckRead).ToString());
+                //new Thread(() => ConnectionHandshake(sckRead, processConnection)).Start();
             }
             catch (Exception)
             {

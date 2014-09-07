@@ -34,7 +34,11 @@ namespace ServerClient
 
         public ActionSyncronizer()
         {
-            new Thread(() => this.ExecuteThread()).Start();
+            ThreadManager.NewThread(() => this.ExecuteThread(),
+                //() => msgs.Add(null),
+                () => { },
+                "global syncronizer");
+            //new Thread(() => this.ExecuteThread()).Start();
         }
     }
 
@@ -128,9 +132,9 @@ namespace ServerClient
                     AddNode(targetNode);
                 }
 
-                Debug.Assert(targetNode.readerStatus != Node.ReadStatus.DISCONNECTED);
-                Debug.Assert(targetNode.writerStatus != Node.WriteStatus.DISCONNECTED);
-                Debug.Assert(!targetNode.IsClosed);
+                MyAssert.Assert(targetNode.readerStatus != Node.ReadStatus.DISCONNECTED);
+                MyAssert.Assert(targetNode.writerStatus != Node.WriteStatus.DISCONNECTED);
+                MyAssert.Assert(!targetNode.IsClosed);
 
                 if (targetNode.readerStatus != Node.ReadStatus.READY)
                 {
@@ -157,10 +161,11 @@ namespace ServerClient
 
         void ProcessMessageWrap(Node n, Stream str, MessageType mt)
         {
-            try
-            {
+            //try
+            //{
                 messageProcessor(n, str, mt);
-            }
+            //}
+            /*
             catch (Exception e)
             {
                 processQueue.Invoke( () =>
@@ -171,6 +176,7 @@ namespace ServerClient
 
                 throw new IOException("Unhandled error while processing message", e);
             }
+             * */
         }
         
         void Sync_OutgoingConnectionReady(Node n)
@@ -194,9 +200,9 @@ namespace ServerClient
                 AddNode(targetNode);
             }
 
-            Debug.Assert(targetNode.readerStatus != Node.ReadStatus.DISCONNECTED);
-            Debug.Assert(targetNode.writerStatus != Node.WriteStatus.DISCONNECTED);
-            Debug.Assert(!targetNode.IsClosed);
+            MyAssert.Assert(targetNode.readerStatus != Node.ReadStatus.DISCONNECTED);
+            MyAssert.Assert(targetNode.writerStatus != Node.WriteStatus.DISCONNECTED);
+            MyAssert.Assert(!targetNode.IsClosed);
 
             if (targetNode.writerStatus == Node.WriteStatus.CONNECTED)
                 throw new NodeException("Already connected to " + their_addr.ToString());
@@ -230,7 +236,8 @@ namespace ServerClient
         void DisconnectNode(Node n)
         {
             n.Disconnect();
-            RemoveNode(n);
+            // done automatically
+            //RemoveNode(n);
         }
 
         public IEnumerable<Node> GetAllNodes()
@@ -242,7 +249,7 @@ namespace ServerClient
             foreach (var n in GetAllNodes().ToArray())
                 DisconnectNode(n);
 
-            Debug.Assert(!nodes.Any());
+            MyAssert.Assert(!nodes.Any());
 
             sl.TerminateThread();
         }
@@ -255,12 +262,12 @@ namespace ServerClient
 
         void AddNode(Node n)
         {
-            Debug.Assert(!nodes.ContainsKey(n.Address.ToString()));
+            MyAssert.Assert(!nodes.ContainsKey(n.Address.ToString()));
             nodes.Add(n.Address.ToString(), n);
         }
         void RemoveNode(Node n)
         {
-            Debug.Assert(nodes.ContainsKey(n.Address.ToString()));
+            MyAssert.Assert(nodes.ContainsKey(n.Address.ToString()));
             nodes.Remove(n.Address.ToString());
         }
     }

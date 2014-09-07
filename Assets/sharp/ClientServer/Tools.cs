@@ -55,6 +55,14 @@ namespace ServerClient
 
             return IPAddress.Parse("127.0.0.1");
         }
+        public static IPEndPoint GetRemoteIP(Socket sck)
+        {
+            return sck.RemoteEndPoint as IPEndPoint;
+        }
+        public static IPEndPoint GetLocalIP(Socket sck)
+        {
+            return sck.LocalEndPoint as IPEndPoint;
+        }
     }
 
     public static class ThreadSafeRandom
@@ -65,6 +73,69 @@ namespace ServerClient
         public static System.Random ThisThreadsRandom
         {
             get { return Local ?? (Local = new System.Random(unchecked(Environment.TickCount * 31 + Thread.CurrentThread.ManagedThreadId))); }
+        }
+    }
+
+    class ThreadInfo
+    {
+        public Thread thread;
+        public Action terminate;
+        public string name;
+    }
+
+    class ThreadManager
+    {
+        static List<ThreadInfo> threads = new List<ThreadInfo>();
+
+        static public void NewThread(ThreadStart threadFunction, Action terminate, string name)
+        {
+            ThreadInfo ti = new ThreadInfo() { thread = new Thread(threadFunction), terminate = terminate, name = name };
+            //Log.LogWriteLine("Thread: {0}", name);
+            ti.thread.Start();
+
+            lock (threads)
+                threads.Add(ti);
+        }
+
+        static public string Status()
+        {
+            lock (threads)
+            {
+                StringBuilder sb = new StringBuilder();
+
+                foreach (ThreadInfo ti in threads)
+                {
+                    if ( (ti.thread.ThreadState & System.Threading.ThreadState.Stopped) != 0)
+                        continue;
+                    sb.AppendFormat("Thread \"{0}\": status {1}\n", ti.name, ti.thread.ThreadState);
+                }
+
+                return sb.ToString();
+            }
+        }
+
+        static public void Terminate()
+        {
+            lock (threads)
+            {
+                foreach (ThreadInfo ti in threads)
+                {
+                    if ((ti.thread.ThreadState & System.Threading.ThreadState.Stopped) != 0)
+                        continue;
+                    Log.LogWriteLine("Terminating {0}", ti.name);
+                    ti.terminate.Invoke();
+                }
+            }       
+        }
+    };
+
+    class MyAssert
+    {
+        static public void Assert(bool b)
+        {
+            Debug.Assert(b);
+            if (!b)
+                throw new Exception("Assert failed");
         }
     }
 

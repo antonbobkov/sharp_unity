@@ -19,13 +19,19 @@ namespace ServerClient
         public ActionSyncronizer sync;
         public NodeCollection peers;
 
-        MessageTypeManager manager;
-        AssignmentInfo gameAssignments;
+        MessageTypeManager manager = new MessageTypeManager();
+        public AssignmentInfo gameAssignments = new AssignmentInfo();
+
+        MessageProcessor messager;
+
+        public Game game;
 
         public Aggregate()
         {
             sync = new ActionSyncronizer();
             peers = new NodeCollection(sync.GetAsDelegate(), ProcessMessage, OnNewConnection);
+
+            messager = new MessageProcessor(manager, gameAssignments, sync);
         }
 
         public static IPEndPoint ParseParamForIP(List<string> param)
@@ -61,7 +67,10 @@ namespace ServerClient
 
 
             if (mesh)
+            {
+                SendIpTable(n);
                 n.SendMessage(MessageType.TABLE_REQUEST);
+            }
 
             return true;
         }
@@ -72,8 +81,7 @@ namespace ServerClient
             if (!Connect(ep, mesh))
                 Log.LogWriteLine("Already connected/connecting");
         }
-
-
+        
         void ProcessMessage(Node n, Stream stm, MessageType mt)
         {
             if (mt == MessageType.TABLE_REQUEST)
@@ -95,60 +103,9 @@ namespace ServerClient
                 var init = Serializer.Deserialize<GameInitializer>(stm);
                 sync.Add(() => OnGenerate(init));
             }
-            else if (mt == MessageType.VALIDATE_MOVE)
+            else if (manager.messages.ContainsKey(mt))
             {
-                var mv = Serializer.Deserialize<PlayerMoveInfo>(stm);
-                sync.Add(() => OnValidateMove(n, mv));
-            }
-            else if (mt == MessageType.MOVE)
-            {
-                var mv = Serializer.Deserialize<PlayerMoveInfo>(stm);
-                sync.Add(() => OnMove(n, mv));
-            }
-            else if (mt == MessageType.LOOT_PICKUP)
-            {
-                var id = Serializer.Deserialize<Guid>(stm);
-                sync.Add(() => OnLoot(n, id));
-            }
-            else if (mt == MessageType.LOOT_PICKUP_BROADCAST)
-            {
-                var id = Serializer.Deserialize<Guid>(stm);
-                sync.Add(() => OnLootBroadcast(n, id));
-            }
-            else if (mt == MessageType.VALIDATE_TELEPORT)
-            {
-                var mv = Serializer.Deserialize<PlayerMoveInfo>(stm);
-                sync.Add(() => OnValidateTeleport(n, mv));
-            }
-            else if (mt == MessageType.FREEZE_ITEM)
-            {
-                var mv = Serializer.Deserialize<PlayerMoveInfo>(stm);
-                sync.Add(() => OnFreezeItem(n, mv));
-            }
-            else if (mt == MessageType.FREEZING_SUCCESS)
-            {
-                var mv = Serializer.Deserialize<PlayerMoveInfo>(stm);
-                sync.Add(() => OnFreezeSuccess(n, mv));
-            }
-            else if (mt == MessageType.UNFREEZE_ITEM)
-            {
-                var mv = Serializer.Deserialize<PlayerMoveInfo>(stm);
-                sync.Add(() => OnUnfreeze(n, mv));
-            }
-            else if (mt == MessageType.CONSUME_FROZEN_ITEM)
-            {
-                var mv = Serializer.Deserialize<PlayerMoveInfo>(stm);
-                sync.Add(() => OnConsumeFrozen(n, mv));
-            }
-            else if (mt == MessageType.TELEPORT)
-            {
-                var mv = Serializer.Deserialize<PlayerMoveInfo>(stm);
-                sync.Add(() => OnTeleport(n, mv));
-            }
-            else if (mt == MessageType.LOOT_CONSUMED)
-            {
-                var mv = Serializer.Deserialize<PlayerMoveInfo>(stm);
-                sync.Add(() => OnLootConsumed(n, mv));
+                messager.ProcessMessage(n, mt, stm);
             }
             else
             {
@@ -160,7 +117,7 @@ namespace ServerClient
         {
             var a = from nd in peers.GetAllNodes()
                     select new IPEndPointSer(nd.Address);
-            n.SendMessage(MessageType.TABLE, a.ToArray());
+            n.SendMessage(MessageType.TABLE, (object)a.ToArray());
         }
         void OnIpTable(IPEndPointSer[] table)
         {
@@ -169,20 +126,42 @@ namespace ServerClient
         }
         void OnRole(Node n, Role r)
         {
-            roles.Add(r, n);
+            foreach (Guid id in r.player.Concat(r.validator))
+                gameAssignments.nodes[id] = n;
+
+            gameAssignments.AddRole(r);
         }
         void OnNewConnection(Node n)
         {
-            n.SendMessage(MessageType.ROLE, myRole);
+            n.SendMessage(MessageType.ROLE, gameAssignments.GetMyRole());
         }
         void OnGenerate(GameInitializer init)
         {
-            game = new Game(init, roles);
+            if (game != null)
+            {
+                Log.LogWriteLine("GenerateGame: game already generated!");
+                return;
+            }
+
+            game = new Game(init, gameAssignments.GetAllRoles());
+
+            foreach (Player pl in game.players.Values)
+            {
+                gameAssignments.validators.Add(pl.id, pl.validator);
+                gameAssignments.roles.Add(pl.validator, NodeRole.PLAYER_VALIDATOR);
+            }
+
+            gameAssignments.validators.Add(game.worldValidator, game.worldValidator);
+            gameAssignments.roles.Add(game.worldValidator, NodeRole.WORLD_VALIDATOR);
+
+            manager.playerMessageReciever.pa = new PlayerActor(game, gameAssignments);
 
             Log.LogWriteLine("Game generated, controlled by {0}",
-                myRole.validator.Contains(game.worldValidator) ?
-                    "me!" : game.roles.validators[game.worldValidator].Address.ToString());
+                gameAssignments.IsMyRole(game.worldValidator) ?
+                    "me!" : gameAssignments.NodeById(game.worldValidator).Address.ToString());
 
+            Role myRole = gameAssignments.GetMyRole();
+            
             if (myRole.player.Any())
             {
                 StringBuilder sb = new StringBuilder("My player #'s: ");
@@ -191,7 +170,7 @@ namespace ServerClient
             }
 
             var validatedPlayers = (from pl in game.players.Values
-                                    where myRole.validator.Contains(pl.validator)
+                                    where gameAssignments.IsMyRole(pl.validator)
                                     select pl).ToArray();
 
             if (validatedPlayers.Any())
@@ -201,19 +180,30 @@ namespace ServerClient
                 Log.LogWriteLine("{0}", sb.ToString());
             }
 
+
+            Action<MessageType, object[]> broadcaster = (mt, arr) => Broadcast(mt, arr);            
             foreach (Player p in validatedPlayers)
-            {
-                validatedInventories[p.id] = new Inventory();
-            }
+                manager.playerValidatorMessageReciever.validators.Add(p.id,
+                    new PlayerValidator(p.id, gameAssignments, broadcaster, p.FullName));
 
-
-            if (myRole.validator.Contains(game.worldValidator))
-                validatorGame = new Game(init, roles);
+            if(gameAssignments.IsMyRole(game.worldValidator))
+                manager.playerWorldVerifierMessageReciever.validators.Add(game.worldValidator,
+                    new WorldValidator(game.worldValidator, gameAssignments, broadcaster, init));
 
             game.ConsoleOut();
         }
+
+        public void AddMyRole(Role r)
+        {
+            foreach (Guid id in r.player.Concat(r.validator))
+                gameAssignments.controlledByMe.Add(id);
+            
+            gameAssignments.AddRole(r);
+
+            Broadcast(MessageType.ROLE, r);
+        }
  
-        public void Broadcast(MessageType mt, params Object[] messages)
+        public void Broadcast(MessageType mt, params object[] messages)
         {
             foreach (var n in peers.GetAllNodes())
                 n.SendMessage(mt, messages);
@@ -226,19 +216,28 @@ namespace ServerClient
                 return;
             }
 
-            GameInitializer init = new GameInitializer(System.DateTime.Now.Millisecond, roles);
+            GameInitializer init = new GameInitializer(System.DateTime.Now.Millisecond, gameAssignments.GetAllRoles());
             Broadcast(MessageType.GENERATE, init);
         }
-        public void Move(PlayerMoveInfo mv)
+        public void Move(Player p, Point newPos)
         {
-            roles.validators[game.worldValidator].SendMessage(MessageType.VALIDATE_MOVE, mv);
+            gameAssignments.NodeById(game.worldValidator).SendMessage(MessageType.VALIDATE_MOVE, p.id, game.worldValidator, newPos);
         }
+
+        public void SetMoveHook(Action<Player, Point> hook) { manager.playerMessageReciever.pa.onMoveHook = hook; }
     }
 
     class Validator
     {
         protected Guid myId;
         protected AssignmentInfo gameInfo;
+
+        public Validator(Guid myId_, AssignmentInfo gameInfo_, Action<MessageType, object[]> broadcaster_)
+        {
+            myId = myId_;
+            gameInfo = gameInfo_;
+            broadcaster = broadcaster_;
+        }
 
         Action<MessageType, object[]> broadcaster;
         protected void Broadcast(MessageType mt, params object[] objs) { broadcaster.Invoke(mt, objs); }
@@ -273,6 +272,13 @@ namespace ServerClient
     {
         internal Game validatorGame;
 
+        public WorldValidator(Guid myId_, AssignmentInfo gameInfo_, Action<MessageType, object[]> broadcaster_,
+            GameInitializer init)
+            : base(myId_, gameInfo_, broadcaster_)
+        {
+            validatorGame = new Game(init, gameInfo.GetAllRoles());
+        }
+
         internal void OnValidateMove(Player p, Point newPos)
         {
             MoveValidity v = validatorGame.CheckValidMove(p, newPos);
@@ -284,7 +290,7 @@ namespace ServerClient
 
             Tile t = validatorGame.world[newPos.x, newPos.y];
             if (t.loot)
-                gameInfo.NodeById(p.id).SendMessage(MessageType.LOOT_PICKUP_BROADCAST, myId, p.id);
+                gameInfo.NodeById(p.validator).SendMessage(MessageType.LOOT_PICKUP_BROADCAST, myId, p.id);
 
             validatorGame.Move(p, newPos, MoveValidity.VALID);
 
@@ -301,7 +307,7 @@ namespace ServerClient
 
             Log.LogWriteLine("Validator: Freezing request for teleport from {1} to {2} by {3}", v, p.pos, newPos, p.FullName);
 
-            gameInfo.NodeById(p.id).SendMessage(MessageType.FREEZE_ITEM, myId, p.id, newPos);
+            gameInfo.NodeById(p.validator).SendMessage(MessageType.FREEZE_ITEM, myId, p.id, newPos);
         }
         internal void OnFreezeSuccess(Player p, Point newPos)
         {
@@ -311,13 +317,13 @@ namespace ServerClient
             if (v != MoveValidity.TELEPORT)
             {
                 Log.LogWriteLine("Validator: Invalid (step 2) teleport {0} from {1} to {2} by {3}", v, p.pos, newPos, p.FullName);
-                gameInfo.NodeById(p.id).SendMessage(MessageType.UNFREEZE_ITEM, myId, p.validator);
+                gameInfo.NodeById(p.validator).SendMessage(MessageType.UNFREEZE_ITEM, myId, p.id);
                 return;
             }
 
             validatorGame.Move(p, newPos, MoveValidity.TELEPORT);
 
-            gameInfo.NodeById(p.id).SendMessage(MessageType.CONSUME_FROZEN_ITEM, myId, p.validator);
+            gameInfo.NodeById(p.validator).SendMessage(MessageType.CONSUME_FROZEN_ITEM, myId, p.id);
             Broadcast(MessageType.TELEPORT, myId, p.id, newPos);
         }
     }
@@ -353,7 +359,14 @@ namespace ServerClient
 
     class PlayerValidator : Validator
     {
-        Inventory validatorInventory;
+        Inventory validatorInventory = new Inventory();
+        string name;
+
+        public PlayerValidator(Guid myId_, AssignmentInfo gameInfo_, Action<MessageType, object[]> broadcaster_,
+            string name_) : base(myId_, gameInfo_, broadcaster_)
+        {
+            name = name_;
+        }
 
         internal void OnLootBroadcast()
         {
@@ -378,7 +391,7 @@ namespace ServerClient
         }
         internal void OnUnfreeze()
         {
-            Debug.Assert(validatorInventory.frozenTeleport > 0);
+            MyAssert.Assert(validatorInventory.frozenTeleport > 0);
             validatorInventory.teleport++;
             validatorInventory.frozenTeleport--;
 
@@ -386,7 +399,7 @@ namespace ServerClient
         }
         internal void OnConsumeFrozen()
         {
-            Debug.Assert(validatorInventory.frozenTeleport > 0);
+            MyAssert.Assert(validatorInventory.frozenTeleport > 0);
             validatorInventory.frozenTeleport--;
 
             Log.LogWriteLine("{0} consume teleport, now has {1} (validator)", name, validatorInventory.teleport);
@@ -396,7 +409,7 @@ namespace ServerClient
 
     class PlayerActorProcessor : MessageReceiver
     {
-        PlayerActor pa = null;
+        public PlayerActor pa = null;
 
         public override void ProcessMessage(MessageType mt, Guid sender, Guid receiver, Stream stm, Action<Action> syncronizer)
         {
@@ -441,7 +454,13 @@ namespace ServerClient
 
         AssignmentInfo gameInfo;
 
-        Action<Player, Point> onMoveHook;
+        public Action<Player, Point> onMoveHook = (pl, pos) => { };
+
+        public PlayerActor(Game game_, AssignmentInfo gameInfo_)
+        {
+            game = game_;
+            gameInfo = gameInfo_;
+        }
 
         internal void OnMove(Player p, Point newPos)
         {
@@ -464,7 +483,7 @@ namespace ServerClient
         }
         internal void OnLootConsumed(Player p)
         {
-            Debug.Assert(p.inv.teleport > 0);
+            MyAssert.Assert(p.inv.teleport > 0);
             p.inv.teleport--;
 
             if (gameInfo.IsMyRole(p.id))

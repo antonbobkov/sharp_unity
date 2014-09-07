@@ -23,7 +23,9 @@ namespace ServerClient
                 socketRead = socketRead_;
                 errorResponse = errorResponse_;
 
-                new Thread(() => this.ProcessThread()).Start();
+                ThreadManager.NewThread(() => this.ProcessThread(),
+                    () => TerminateThread(), "SocketReader " + NetTools.GetRemoteIP(socketRead).ToString());
+                //new Thread(() => this.ProcessThread()).Start();
             }
             catch (Exception)
             {
@@ -49,6 +51,8 @@ namespace ServerClient
 
                         if (bt == -1)
                             throw new IOException("End of stream");
+
+                        //Console.WriteLine("Message received: {0}", (MessageType)bt);
 
                         messageProcessor(readStream, (MessageType)bt);
                     }

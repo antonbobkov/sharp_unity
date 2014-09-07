@@ -26,7 +26,9 @@ namespace ServerClient
 
                 socketWrite = socketWrite_;
                 errorResponse = errorResponse_;
-                new Thread(() => this.ProcessThread()).Start();
+                ThreadManager.NewThread(() => ProcessThread(),
+                    () => TerminateThread(), "SocketWriter " + NetTools.GetRemoteIP(socketWrite).ToString());
+                //new Thread(() => this.ProcessThread()).Start();
             }
             catch (Exception)
             {
@@ -35,13 +37,15 @@ namespace ServerClient
             }
         }
         
-        public void SendMessage(MessageType mt, params Object[] messages)
+        public void SendMessage(MessageType mt, params object[] messages)
         {
             MemoryStream ms = new MemoryStream();
 
+            //Console.WriteLine("Message sent: {0}", mt);
+            
             ms.WriteByte((byte)mt);
 
-            foreach(Object m in messages)
+            foreach(object m in messages)
                 Serializer.Serialize(ms, m);
 
             ms.Position = 0;

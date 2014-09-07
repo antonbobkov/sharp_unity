@@ -53,6 +53,7 @@
      <Compile Include="Assets\sharp\ClientServer\DataCollection.cs" />
      <Compile Include="Assets\sharp\ClientServer\Game.cs" />
      <Compile Include="Assets\sharp\ClientServer\Message.cs" />
+     <Compile Include="Assets\sharp\ClientServer\MultiValueDictionary.cs" />
      <Compile Include="Assets\sharp\ClientServer\Node.cs" />
      <Compile Include="Assets\sharp\ClientServer\NodeHost.cs" />
      <Compile Include="Assets\sharp\ClientServer\Program.cs" />

@@ -45,11 +45,12 @@ public class minecraft : MonoBehaviour {
 
         all.sync.Add(() =>
         {
-            all.onMoveHook = (mv) => bufferedActions.Enqueue(() => onMove(mv));
-
             me = Guid.NewGuid();
-            all.myRole.player.Add(me);
-            all.myRole.validator.Add(Guid.NewGuid());
+
+			Role r = new Role();
+			r.player.Add(me);
+			all.AddMyRole(r);
+            //all.myRole.validator.Add(Guid.NewGuid());
             Log.LogWriteLine("Player {0}", me);
 
             // mesh connect
@@ -69,19 +70,21 @@ public class minecraft : MonoBehaviour {
         Application.runInBackground = true;
     }
 
-    void onMove(PlayerMoveInfo mv)
+    void onMove(Point pos)
     {
-        GameObject obj = go [mv.pos.x, mv.pos.y];
+        GameObject obj = go [pos.x, pos.y];
         if (obj != null)
         {
             Destroy(obj);
-            go [mv.pos.x, mv.pos.y] = null;
+            go [pos.x, pos.y] = null;
         }
     }
 
     void StartGame()
     {
-        Game g = all.game;
+		all.SetMoveHook( (players, pos) => bufferedActions.Enqueue(() => onMove(pos)));
+		
+		Game g = all.game;
         int szX = g.world.GetLength(0);
         int szY = g.world.GetLength(1);
         go = new GameObject[szX, szY];
@@ -138,11 +141,16 @@ public class minecraft : MonoBehaviour {
     }
 
     void OnApplicationQuit () {
-        all.sync.Add(null);
-        all.peers.Close();
-    }
-
-    void ProcessMovement()
+		Log.LogWriteLine ("Terminating");
+		all.peers.Close();
+		System.Threading.Thread.Sleep (100);
+		Log.LogWriteLine (ThreadManager.Status ());
+		ThreadManager.Terminate();
+		//System.Threading.Thread.Sleep (100);
+		//all.sync.Add(null);
+	}
+	
+	void ProcessMovement()
     {
         Point p = new Point();
 
@@ -164,18 +172,18 @@ public class minecraft : MonoBehaviour {
         {
             Game g = all.game;
             Player pl = g.players[me];
+			Point newPos = pl.pos + p;
 
-            PlayerMoveInfo mv = new PlayerMoveInfo(pl.id, pl.pos + p);
-            if (g.CheckValidMove(mv) == MoveValidity.VALID)
+            if (g.CheckValidMove(pl, newPos) == MoveValidity.VALID)
             {
                 //Log.LogWriteLine("Move from {0} to {1}", pl.pos, mv.pos);
-                all.Move(mv);
+				all.Move(pl, newPos);
             }
 
             if (Input.GetKeyDown(KeyCode.Space))
             {
                 for(int i = 0; i < 10000; ++i)
-                    all.Move(mv);
+					all.Move(pl, newPos);
             }
         }
 
@@ -189,7 +197,8 @@ public class minecraft : MonoBehaviour {
             Point pos = new Point(Convert.ToInt32(tile.x), Convert.ToInt32(tile.y));
             Log.LogWriteLine("Teleporting to {0}", pos);
             Player pl = all.game.players[me];
-            all.roles.validators[all.game.worldValidator].SendMessage(MessageType.VALIDATE_TELEPORT, new PlayerMoveInfo(pl.id, pos));
+            all.gameAssignments.NodeById(all.game.worldValidator)
+				.SendMessage(MessageType.VALIDATE_TELEPORT, pl.id, all.game.worldValidator, pos);
         }
     }
 	
@@ -201,7 +210,21 @@ public class minecraft : MonoBehaviour {
             lock(all.sync.syncLock)
             {
                 if (Input.GetKeyDown(KeyCode.G))
-                    all.GenerateGame();
+				{
+
+					if(! all.gameAssignments.GetAllRoles().validator.Any ())
+					{
+						Guid valId = Guid.NewGuid();
+
+						Role r = new Role();
+						r.validator.Add(valId);
+						all.AddMyRole(r);
+
+						Log.LogWriteLine("Validator {0}", valId);
+					}
+
+					all.GenerateGame();
+				}
                 if(all.game == null)
                     return;
                 gameStarted = true;

@@ -79,7 +79,7 @@ namespace ServerClient
             return sb.ToString();
         }
 
-        public void SendMessage(MessageType mt, params Object[] messages)
+        public void SendMessage(MessageType mt, params object[] messages)
         {
             if (IsClosed)
                 throw new NodeException("SendMessage: node is disconnected " + FullDescription());
@@ -157,7 +157,9 @@ namespace ServerClient
 
             try
             {
-                new Thread( () => ConnectingThread(sck, onSuccess) ).Start();
+                ThreadManager.NewThread(() => ConnectingThread(sck, onSuccess),
+                    () => sck.Close(), "connect to " + Address.ToString());
+                //new Thread( () => ConnectingThread(sck, onSuccess) ).Start();
             }
             catch (Exception)
             {

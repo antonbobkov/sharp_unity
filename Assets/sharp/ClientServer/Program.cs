@@ -34,10 +34,9 @@ namespace ServerClient
                             };
             Point newPosition = p.pos + moves[rand.Next(0, moves.Length)];
             
-            PlayerMoveInfo mv = new PlayerMoveInfo(p.id, newPosition);
-            if (g.CheckValidMove(mv) == MoveValidity.VALID)
-                if (!a.roles.validators[g.worldValidator].IsClosed)
-                    a.Move(mv);
+            if (g.CheckValidMove(p, newPosition) == MoveValidity.VALID)
+                if (!a.gameAssignments.NodeById(a.game.worldValidator).IsClosed)
+                    a.Move(p, newPosition);
         }
 
         static void RepeatedAction(Action<Action> queue, Action a, int period)
@@ -110,10 +109,12 @@ namespace ServerClient
         }
         static public void Ai(Aggregate all)
         {
-            foreach (var id in all.myRole.player)
+            foreach (var id in all.gameAssignments.GetMyRoles(NodeRole.PLAYER))
             {
                 Guid idCopy = id;
-                new Thread(() => RepeatedAction(all.sync.GetAsDelegate(), () => PlayerRandomMove(all, idCopy), rand.Next(300, 700))).Start();
+                ThreadManager.NewThread(() => RepeatedAction(all.sync.GetAsDelegate(), () => PlayerRandomMove(all, idCopy), rand.Next(300, 700)),
+                    () => { }, "ai for " + id.ToString());
+                //new Thread(() => RepeatedAction(all.sync.GetAsDelegate(), () => PlayerRandomMove(all, idCopy), rand.Next(300, 700))).Start();
             }
         }
         
@@ -122,17 +123,22 @@ namespace ServerClient
             Aggregate all = new Aggregate();
             all.sync.Add(() =>
             {
+                Role myRole = new Role();
+
                 //if (all.peers.MyAddress.Port == NodeCollection.nStartPort)
-                    all.myRole.validator.Add(Guid.NewGuid());
+                    myRole.validator.Add(Guid.NewGuid());
                 //else
                 {
                     for (int i = 0; i < 2; ++i)
-                        all.myRole.player.Add(Guid.NewGuid());
-                    Ai(all);
+                        myRole.player.Add(Guid.NewGuid());
                 }
 
+                all.AddMyRole(myRole);
+
+                Ai(all);
+
                 Console.WriteLine();
-                Console.Write(all.myRole.PrintRoles());
+                Console.Write(myRole.PrintRoles());
                 Console.WriteLine();
 
                 //mesh connect
@@ -150,11 +156,12 @@ namespace ServerClient
                 foreach (var s in from n in all.peers.GetAllNodes() orderby n.Address.ToString() select n.Address.ToString())
                     Console.WriteLine("\t{0}", s);
                 Console.WriteLine("Players:");
-                foreach (var kv in from n in all.roles.players orderby n.Key.ToString() select n)
-                    Console.WriteLine("\t{0}\t{1}", kv.Key, kv.Value.Address);
+                Role allRoles = all.gameAssignments.GetAllRoles();
+                foreach (var kv in from n in allRoles.player orderby n.ToString() select n)
+                    Console.WriteLine("\t{0}\t{1}", kv, all.gameAssignments.NodeById(kv).Address);
                 Console.WriteLine("Validators:");
-                foreach (var kv in from n in all.roles.validators orderby n.Key.ToString() select n)
-                    Console.WriteLine("\t{0}\t{1}", kv.Key, kv.Value.Address);
+                foreach (var kv in from n in allRoles.validator orderby n.ToString() select n)
+                    Console.WriteLine("\t{0}\t{1}", kv, all.gameAssignments.NodeById(kv).Address);
             });
 
             inputProc.commands.Add("generate", (param) =>
@@ -169,9 +176,30 @@ namespace ServerClient
 
             inputProc.commands.Add("draw", (param) =>
             {
-                new Thread(() => RepeatedAction(all.sync.GetAsDelegate(), () => all.game.ConsoleOut(), 500)).Start();
+                all.game.ConsoleOut();
+            });
+            
+            inputProc.commands.Add("update", (param) =>
+            {
+                ThreadManager.NewThread(() => RepeatedAction(all.sync.GetAsDelegate(), () => all.game.ConsoleOut(), 500),
+                    () => { }, "console drawer");
+                //new Thread(() => RepeatedAction(all.sync.GetAsDelegate(), () => all.game.ConsoleOut(), 500)).Start();
             });
 
+            inputProc.commands.Add("status", (param) =>
+            {
+                Console.WriteLine(ThreadManager.Status());
+            });
+
+            inputProc.commands.Add("ping", (param) =>
+            {
+                Console.WriteLine("ping");
+            });
+
+            inputProc.commands.Add("exit", (param) =>
+            {
+                ThreadManager.Terminate();
+            });
 
             while (true)
             {
@@ -183,147 +211,6 @@ namespace ServerClient
                 param.RemoveRange(0, 1);
                 inputProc.Process(sCommand, param);
             }
-
-
-            /*
-            while (true)
-            {
-                string sInput = Console.ReadLine();
-                var param = new List<string>(sInput.Split(' '));
-                string sCommand = param.FirstOrDefault();
-
-                if ("message".StartsWith(sCommand))
-                {
-                    sync.Add(() =>
-                    {
-                        if (param.Count < 3)
-                            return;
-                        string name = param[1];
-
-                        param.RemoveRange(0, 2);
-
-                        string message = String.Join(" ", param.ToArray());
-
-                        Node n = myHost.dc.GetReadyNodes().FirstOrDefault(nd => nd.Name == name);
-                        if (n == null)
-                        {
-                            Log.LogWriteLine("Invalid name");
-                            return;
-                        }
-
-                        n.SendMessage(MessageType.MESSAGE, message);
-                    });
-                }
-                else if ("name".StartsWith(sCommand))
-                {
-                    sync.Add(() =>
-                    {
-                        if (param.Count != 2)
-                            return;
-                        string name = param[1];
-
-                        Log.LogWriteLine("Name set to \"{0}\"", name);
-                        myHost.dc.Name = name;
-
-                        foreach (Node n in myHost.dc.GetReadyNodes())
-                            n.SendMessage(MessageType.NAME, name);
-                    });
-                }
-                else if ("list".StartsWith(sCommand))
-                {
-                    sync.Add(() =>
-                    {
-                        StringBuilder sb = new StringBuilder();
-
-                        foreach (Node n in myHost.dc.GetReadyNodes())
-                        {
-                            sb.Append(n.Address.ToString());
-                            if (n.Name != n.Address.ToString())
-                                sb.Append("\t" + n.Name);
-                            sb.Append("\t" + n.Id.ToString("B"));
-                            sb.Append("\n");
-                        }
-
-                        Console.Write(sb.ToString());
-                    });
-                }
-                else if ("connect".StartsWith(sCommand) || "mconnect".StartsWith(sCommand))
-                {
-                    sync.Add(() =>
-                    {
-                        string sIpAddr = NodeHost.GetMyIP().ToString();
-                        string sPort = NodeHost.nStartPort.ToString();
-                        bool askForTable = "mconnect".StartsWith(sCommand);
-
-                        if (param.Count >= 2)
-                            sIpAddr = param[1];
-
-                        if (param.Count >= 3)
-                            sPort = param[2];
-
-                        IPEndPoint ep = new IPEndPoint(IPAddress.Parse(sIpAddr), Convert.ToUInt16(sPort));
-
-                        Log.LogWriteLine("Connecting to {0}:{1}", ep.Address, ep.Port);
-
-                        if (!myHost.dc.Sync_TryConnect(ep))
-                            Log.LogWriteLine("Already connected/connecting");
-                        else
-                            Log.LogWriteLine("Connection started");
-
-                        if (askForTable)
-                            myHost.dc.Sync_AskForTable(ep);
-                    });
-                }
-                else if ("draw".StartsWith(sCommand))
-                {
-                    sync.Add(() =>
-                    {
-                        if (myHost.dc.game == null)
-                            return;
-
-                        myHost.dc.game.ConsoleOut();
-                    });
-                }
-                else if ("drawing".StartsWith(sCommand))
-                {
-                    new Thread(() => RepeatedAction(() =>
-                        sync.Add(() =>
-                        {
-                            if (myHost.dc.game == null)
-                                return;
-
-                            Console.WriteLine();
-                            myHost.dc.game.ConsoleOut();
-                        })
-                    , 500)).Start();
-                }
-                else if ("generate".StartsWith(sCommand))
-                {
-                    GameInitializer init = new GameInitializer(System.DateTime.Now.Millisecond, myHost.dc.GetReadyNodes().Count() + 1);
-                    myHost.dc.Broadcast(MessageType.GENERATE_GAME, init);
-                    myHost.dc.Sync_GenerateGame(init);
-                }
-                else if ("ai".StartsWith(sCommand))
-                {
-                    new Thread(() => RepeatedAction(() =>
-                        sync.Add(() =>
-                        {
-                            PlayerRandomMove(myHost.dc.game, myHost.dc.game.players[myHost.dc.Id]);
-                            myHost.dc.Sync_UpdateMyPosition();
-                        })
-                    , 1000)).Start();
-                }
-                else if ("exit".StartsWith(sCommand))
-                {
-                    sync.Add(null);
-                    myHost.dc.TerminateThreads();
-                    Console.ReadLine();
-                    return;
-                }
-                else
-                    Log.LogWriteLine("Unknown command");
-            }
-             * */
         }
     }
 }

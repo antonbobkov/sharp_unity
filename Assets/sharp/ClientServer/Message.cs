@@ -20,9 +20,9 @@ namespace ServerClient
 
     public enum MoveValidity { VALID, BOUNDARY, OCCUPIED_PLAYER, OCCUPIED_WALL, TELEPORT };
 
-    public enum NodeRole { PLAYER, WORLD, PLAYER_VALIDATOR, WORLD_VALIDATOR };
+    public enum NodeRole { PLAYER, WORLD, POTENTIAL_VALIDATOR, PLAYER_VALIDATOR, WORLD_VALIDATOR };
 
-    class MessageReceiver
+    abstract class MessageReceiver
     {
         public abstract void ProcessMessage(MessageType mt, Guid sender, Guid receiver, Stream stm, Action<Action> syncronizer);
     }
@@ -48,13 +48,13 @@ namespace ServerClient
         
         readonly public Dictionary<MessageType, MessageInfo> messages = new Dictionary<MessageType,MessageInfo>();
 
-        readonly public HashSet<NodeRole> validators;
+        readonly public HashSet<NodeRole> validators = new HashSet<NodeRole>();
 
         public PlayerActorProcessor playerMessageReciever = new PlayerActorProcessor();
         public PlayerValidatorProcessor playerValidatorMessageReciever = new PlayerValidatorProcessor();
         public WorldValidatorProcessor playerWorldVerifierMessageReciever = new WorldValidatorProcessor();
 
-        MessageTypeManager()
+        public MessageTypeManager()
         {
             uncontorlledMessages.Add(MessageType.HANDSHAKE);
             uncontorlledMessages.Add(MessageType.TABLE_REQUEST);
@@ -118,10 +118,10 @@ namespace ServerClient
 
     class AssignmentInfo
     {
-        public Dictionary<Guid, Guid> validators;
-        public MultiValueDictionary<Guid, NodeRole> roles;
-        public Dictionary<Guid, Node> nodes;
-        public HashSet<Guid> controlledByMe;
+        public Dictionary<Guid, Guid> validators = new Dictionary<Guid,Guid>();
+        public MultiValueDictionary<Guid, NodeRole> roles = new MultiValueDictionary<Guid,NodeRole>();
+        public Dictionary<Guid, Node> nodes = new Dictionary<Guid,Node>();
+        public HashSet<Guid> controlledByMe = new HashSet<Guid>();
 
         public Node NodeById(Guid id)
         {
@@ -139,6 +139,40 @@ namespace ServerClient
         {
             return roles.ContainsValue(id, role);
         }
+
+        public void AddRole(Role r)
+        {
+            foreach (Guid id in r.player)
+                roles.Add(id, NodeRole.PLAYER);
+            foreach (Guid id in r.validator)
+                roles.Add(id, NodeRole.POTENTIAL_VALIDATOR);
+        }
+
+        public IEnumerable<Guid> GetMyRoles(NodeRole nr)
+        {
+            return from id in controlledByMe
+                   where roles.ContainsValue(id, nr)
+                   select id;
+        }
+
+        public Role GetMyRole()
+        {
+            Role role = new Role();
+            role.player = new HashSet<Guid>(GetMyRoles(NodeRole.PLAYER));
+            role.validator = new HashSet<Guid>(GetMyRoles(NodeRole.POTENTIAL_VALIDATOR));
+            return role;
+        }
+        public Role GetAllRoles()
+        {
+            Role role = new Role();
+            role.player = new HashSet<Guid>(from id in roles.Keys
+                                            where roles.ContainsValue(id, NodeRole.PLAYER)
+                                            select id);
+            role.validator = new HashSet<Guid>(from id in roles.Keys
+                                               where roles.ContainsValue(id, NodeRole.POTENTIAL_VALIDATOR)
+                                               select id);
+            return role;
+        }
     }
 
     class MessageProcessor
@@ -148,6 +182,13 @@ namespace ServerClient
         AssignmentInfo gameInfo;
 
         ActionSyncronizer globalSync;
+
+        public MessageProcessor(MessageTypeManager mtm_, AssignmentInfo gameInfo_, ActionSyncronizer globalSync_)
+        {
+            mtm = mtm_;
+            gameInfo = gameInfo_;
+            globalSync = globalSync_;
+        }
 
         void Verify(Node nd, MessageType mt, Guid sender, Guid receiver)
         {
@@ -160,15 +201,17 @@ namespace ServerClient
                 receiver = gameInfo.GetValidtor(receiver);
             
             // check valid sender/receiver id
-            Debug.Assert(gameInfo.NodeById(sender) == nd);
-            Debug.Assert(gameInfo.IsMyRole(receiver));
+            MyAssert.Assert(gameInfo.NodeById(sender) == nd);
+            if (info.receiverRole != NodeRole.PLAYER)
+                MyAssert.Assert(gameInfo.IsMyRole(receiver));
 
             // check compatibility with the message type
-            Debug.Assert(gameInfo.HasRole(sender, info.senderRole));
-            Debug.Assert(gameInfo.HasRole(receiver, info.receiverRole);
+            MyAssert.Assert(gameInfo.HasRole(sender, info.senderRole));
+            if (info.receiverRole != NodeRole.PLAYER)
+                MyAssert.Assert(gameInfo.HasRole(receiver, info.receiverRole));
         }
 
-        void ProcessMessage(Node nd, MessageType mt, Stream stm)
+        public void ProcessMessage(Node nd, MessageType mt, Stream stm)
         {
             MessageInfo info = mtm.messages.GetValue(mt);
 

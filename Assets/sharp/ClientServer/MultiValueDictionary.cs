@@ -47,7 +47,7 @@ namespace ServerClient
     {
         static public void CantBeNull<T>(T t, string s)
         {
-            Debug.Assert(t != null);
+            MyAssert.Assert(t != null);
         }
     }
     

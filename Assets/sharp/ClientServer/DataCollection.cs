@@ -69,7 +69,7 @@ namespace ServerClient
                       where nd.Address.Equals(ep)
                       select nd;
 
-            Debug.Assert(res.Count() <= 1);
+            MyAssert.Assert(res.Count() <= 1);
 
             return res.FirstOrDefault();
         }
