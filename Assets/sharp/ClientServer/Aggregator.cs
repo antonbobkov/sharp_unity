@@ -249,7 +249,9 @@ namespace ServerClient
 
         public override void ProcessMessage(MessageType mt, Guid sender, Guid receiver, Stream stm, Action<Action> syncronizer)
         {
-            Point newPos = Serializer.Deserialize<Point>(stm);
+            Point newPos = new Point();
+            if(mt == MessageType.VALIDATE_MOVE || mt == MessageType.VALIDATE_TELEPORT)
+                newPos = Serializer.Deserialize<Point>(stm);
 
             syncronizer.Invoke(() =>
             {
@@ -261,7 +263,9 @@ namespace ServerClient
                 else if (mt == MessageType.VALIDATE_TELEPORT)
                     wv.OnValidateTeleport(p, newPos);
                 else if (mt == MessageType.FREEZING_SUCCESS)
-                    wv.OnFreezeSuccess(p, newPos);
+                    wv.OnFreezeSuccess(p);
+                else if (mt == MessageType.FREEZING_FAIL)
+                    wv.OnFreezeFail(p);
                 else
                     throw new Exception("WorldValidatorProcessor: Unsupported message " + mt.ToString());
             });
@@ -271,6 +275,7 @@ namespace ServerClient
     class WorldValidator : Validator
     {
         internal Game validatorGame;
+        Dictionary<Guid, Point> movementLocks = new Dictionary<Guid,Point>();
 
         public WorldValidator(Guid myId_, AssignmentInfo gameInfo_, Action<MessageType, object[]> broadcaster_,
             GameInitializer init)
@@ -281,6 +286,12 @@ namespace ServerClient
 
         internal void OnValidateMove(Player p, Point newPos)
         {
+            if (movementLocks.ContainsKey(p.id))
+            {
+                Log.LogWriteLine("Validator: {0} can't move, locked", p.FullName);
+                return;
+            }
+            
             MoveValidity v = validatorGame.CheckValidMove(p, newPos);
             if (v != MoveValidity.VALID)
             {
@@ -298,19 +309,32 @@ namespace ServerClient
         }
         internal void OnValidateTeleport(Player p, Point newPos)
         {
+            if (movementLocks.ContainsKey(p.id))
+            {
+                Log.LogWriteLine("Validator: {0} can't teleport, locked", p.FullName);
+                return;
+            }
+
             MoveValidity v = validatorGame.CheckValidMove(p, newPos);
-            if (false && v != MoveValidity.TELEPORT)
+            /*
+            if (v != MoveValidity.TELEPORT)
             {
                 Log.LogWriteLine("Validator: Invalid (step 1) teleport {0} from {1} to {2} by {3}", v, p.pos, newPos, p.FullName);
                 return;
             }
+             * */
 
             Log.LogWriteLine("Validator: Freezing request for teleport from {1} to {2} by {3}", v, p.pos, newPos, p.FullName);
 
-            gameInfo.NodeById(p.validator).SendMessage(MessageType.FREEZE_ITEM, myId, p.id, newPos);
+            movementLocks.Add(p.id, newPos);
+            gameInfo.NodeById(p.validator).SendMessage(MessageType.FREEZE_ITEM, myId, p.id);
         }
-        internal void OnFreezeSuccess(Player p, Point newPos)
+        internal void OnFreezeSuccess(Player p)
         {
+            MyAssert.Assert(movementLocks.ContainsKey(p.id));
+            Point newPos = movementLocks.GetValue(p.id);
+            movementLocks.Remove(p.id);
+
             Log.LogWriteLine("Validator: Freeze sucessful. Trying to teleport from {0} to {1} by {2}.", p.pos, newPos, p.FullName);
 
             MoveValidity v = validatorGame.CheckValidMove(p, newPos);
@@ -326,6 +350,14 @@ namespace ServerClient
             gameInfo.NodeById(p.validator).SendMessage(MessageType.CONSUME_FROZEN_ITEM, myId, p.id);
             Broadcast(MessageType.TELEPORT, myId, p.id, newPos);
         }
+        internal void OnFreezeFail(Player p)
+        {
+            MyAssert.Assert(movementLocks.ContainsKey(p.id));
+            Point newPos = movementLocks.GetValue(p.id);
+            movementLocks.Remove(p.id);
+            
+            Log.LogWriteLine("Validator: Freeze failed. Was trying to teleport from {0} to {1} by {2}.", p.pos, newPos, p.FullName);
+        }
     }
 
     class PlayerValidatorProcessor : MessageReceiver
@@ -334,26 +366,20 @@ namespace ServerClient
 
         public override void ProcessMessage(MessageType mt, Guid sender, Guid receiver, Stream stm, Action<Action> syncronizer)
         {
-            if (mt == MessageType.FREEZE_ITEM)
-            {
-                Point newPos = Serializer.Deserialize<Point>(stm);
-                syncronizer.Invoke(() => validators.GetValue(receiver).OnFreezeItem(sender, newPos));
-            }
-            else
-            {
-                syncronizer.Invoke(() =>
-                    {
-                        PlayerValidator pv = validators.GetValue(receiver);
-                        if (mt == MessageType.LOOT_PICKUP_BROADCAST)
-                            pv.OnLootBroadcast();
-                        else if (mt == MessageType.UNFREEZE_ITEM)
-                            pv.OnUnfreeze();
-                        else if (mt == MessageType.CONSUME_FROZEN_ITEM)
-                            pv.OnConsumeFrozen();
-                        else
-                            throw new Exception("PlayerValidatorProcessor: Unsupported message " + mt.ToString());
-                    });
-            }
+            syncronizer.Invoke(() =>
+                {
+                    PlayerValidator pv = validators.GetValue(receiver);
+                    if (mt == MessageType.LOOT_PICKUP_BROADCAST)
+                        pv.OnLootBroadcast();
+                    else if (mt == MessageType.FREEZE_ITEM)
+                        pv.OnFreezeItem(sender);
+                    else if (mt == MessageType.UNFREEZE_ITEM)
+                        pv.OnUnfreeze();
+                    else if (mt == MessageType.CONSUME_FROZEN_ITEM)
+                        pv.OnConsumeFrozen();
+                    else
+                        throw new Exception("PlayerValidatorProcessor: Unsupported message " + mt.ToString());
+                });
         }
     }
 
@@ -375,19 +401,23 @@ namespace ServerClient
 
             Broadcast(MessageType.LOOT_PICKUP, myId, myId);
         }
-        internal void OnFreezeItem(Guid worldId, Point newPos)
+        internal void OnFreezeItem(Guid worldId)
         {
             if (validatorInventory.teleport > 0)
             {
                 validatorInventory.teleport--;
                 validatorInventory.frozenTeleport++;
 
-                gameInfo.NodeById(worldId).SendMessage(MessageType.FREEZING_SUCCESS, myId, worldId, newPos);
+                gameInfo.NodeById(worldId).SendMessage(MessageType.FREEZING_SUCCESS, myId, worldId);
 
                 Log.LogWriteLine("{0} freezes one teleport (validator)", name);
             }
             else
+            {
+                gameInfo.NodeById(worldId).SendMessage(MessageType.FREEZING_FAIL, myId, worldId);
+
                 Log.LogWriteLine("{0} freeze failed (validator)", name);
+            }
         }
         internal void OnUnfreeze()
         {

@@ -15,7 +15,8 @@ namespace ServerClient
     public enum MessageType : byte { HANDSHAKE, TABLE_REQUEST, TABLE, ROLE, GENERATE,
         VALIDATE_MOVE, MOVE,
         LOOT_PICKUP, LOOT_PICKUP_BROADCAST,
-        VALIDATE_TELEPORT, FREEZE_ITEM, FREEZING_SUCCESS, UNFREEZE_ITEM, CONSUME_FROZEN_ITEM, TELEPORT, LOOT_CONSUMED
+        VALIDATE_TELEPORT, FREEZE_ITEM, FREEZING_SUCCESS, FREEZING_FAIL,
+        UNFREEZE_ITEM, CONSUME_FROZEN_ITEM, TELEPORT, LOOT_CONSUMED
     };
 
     public enum MoveValidity { VALID, BOUNDARY, OCCUPIED_PLAYER, OCCUPIED_WALL, TELEPORT };
@@ -77,6 +78,7 @@ namespace ServerClient
             messages.Add(MessageType.CONSUME_FROZEN_ITEM, new MessageInfo(NodeRole.WORLD_VALIDATOR, NodeRole.PLAYER_VALIDATOR));
 
             messages.Add(MessageType.FREEZING_SUCCESS, new MessageInfo(NodeRole.PLAYER_VALIDATOR, NodeRole.WORLD_VALIDATOR));
+            messages.Add(MessageType.FREEZING_FAIL, new MessageInfo(NodeRole.PLAYER_VALIDATOR, NodeRole.WORLD_VALIDATOR));
 
             validators.Add(NodeRole.WORLD_VALIDATOR);
             validators.Add(NodeRole.PLAYER_VALIDATOR);
