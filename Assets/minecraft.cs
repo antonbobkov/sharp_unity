@@ -14,26 +14,95 @@ public class RotateSlowly : MonoBehaviour {
     }
 }
 
+class WorldDraw
+{
+    static public bool continuousBackground = true;
+
+    public readonly Point sz;
+
+	public GameObject background;
+	public Plane<GameObject> walls;
+	public Plane<GameObject> loots;
+
+	public void MessBackground()
+    {
+        //background.transform.rotation = Quaternion.AngleAxis(2f, UnityEngine.Random.onUnitSphere);
+        background.transform.localScale *= .99f;
+    }
+    public WorldDraw(World w)
+	{
+		sz = w.map.Size;
+
+		walls = new Plane<GameObject>(sz);
+		loots = new Plane<GameObject>(sz);
+		
+		foreach(Point pos in Point.Range(sz))
+		{
+			Tile t = w.map[pos];
+			if (t.solid)
+			{
+				GameObject wall = GameObject.CreatePrimitive(PrimitiveType.Cube);
+				walls [pos] = wall;
+				
+				wall.transform.position = minecraft.GetPositionAtGrid(w, pos);
+				wall.renderer.material.color = new Color(.3f, .3f, .3f);
+			}
+			else if(t.loot)
+			{
+				GameObject loot = GameObject.CreatePrimitive(PrimitiveType.Quad);
+				loots [pos] = loot;
+				
+				loot.transform.localScale = new Vector3(.5f, .5f, 1);
+				loot.renderer.material.color = Color.blue;
+				loot.transform.position = minecraft.GetPositionAtGrid(w, pos);
+				loot.transform.rotation = Quaternion.AngleAxis(15f, UnityEngine.Random.onUnitSphere);
+				loot.AddComponent<RotateSlowly>();
+			}
+		}
+
+		background = GameObject.CreatePrimitive(PrimitiveType.Quad);
+		background.transform.localScale = new Vector3(sz.x, sz.y, 1);
+		background.transform.position = minecraft.GetPositionAtGrid(w, new Point(0,0)) + new Vector3(sz.x-1, sz.y-1, 1)/2;
+		background.renderer.material.color = new Color(.7f, .7f, .7f);
+
+        if (!continuousBackground)
+            MessBackground();
+	}
+	public void Purge()
+	{
+		foreach(Point pos in Point.Range(sz))
+		{
+			UnityEngine.Object.Destroy (walls[pos]);
+			UnityEngine.Object.Destroy (loots[pos]);
+		}
+
+		UnityEngine.Object.Destroy(background);
+	}
+}
+
 public class minecraft : MonoBehaviour {
 
     Aggregate all;
 
-    Vector3 vCorner;
-
     bool gameStarted = false;
 
-	GameObject[,] go;
-    Dictionary<System.Guid, GameObject> players = new Dictionary<System.Guid, GameObject>();
+    Dictionary<Guid, GameObject> players = new Dictionary<Guid, GameObject>();
+	Dictionary<Point, WorldDraw> worlds = new Dictionary<Point, WorldDraw>();
 
-    Guid me;
+	Guid me;
 
     Queue<Action> bufferedActions = new Queue<Action>();
 
-    Vector3 GetPositionAtGrid(int x, int y)
+    static internal Vector3 GetPositionAtGrid(World w, Point pos)
     {
-        return vCorner + new Vector3(x, y, 0);
+		Point worldPos = new Point(w.worldPosition.x * w.map.Size.x, w.worldPosition.y * w.map.Size.y);
+		return new Vector3(worldPos.x + pos.x, worldPos.y + pos.y, 0);
     }
-
+	static internal Point GetPositionAtMap(World w, Point pos)
+	{
+		Point worldPos = new Point(w.worldPosition.x * w.map.Size.x, w.worldPosition.y * w.map.Size.y);
+		return pos - worldPos;
+	}
 
     const float cameraDistance = 20f;
 
@@ -63,82 +132,29 @@ public class minecraft : MonoBehaviour {
         light.intensity = 5;
 
         //camera.isOrthoGraphic = true;
-        camera.orthographicSize = 10;
-
-        vCorner = new Vector3(0, 0, 0);//camera.ViewportToWorldPoint(new Vector3(.5f, .5f, 0));
+        //camera.orthographicSize = 10;
 
         Application.runInBackground = true;
     }
 
-    void onMove(Point pos)
-    {
-        GameObject obj = go [pos.x, pos.y];
-        if (obj != null)
-        {
-            Destroy(obj);
-            go [pos.x, pos.y] = null;
-        }
-    }
-
     void StartGame()
     {
-		all.SetMoveHook( (players, pos) => bufferedActions.Enqueue(() => onMove(pos)));
+		all.SetMoveHook( (w, p, mt) => bufferedActions.Enqueue(() => onMove(w, p, mt)));
+
+        UpdateWorlds(all.game.GetWorld(new Point(0, 0)));
+
+		foreach (Player pl in all.game.players.Values)
+		{
+			World w = all.game.GetPlayerWorld(pl.id);
+            if (!worlds.ContainsKey(w.worldPosition))
+                continue;
+
+            AddPlayer(w, pl);
+
+            onMove(w, pl, MoveType.MOVE);
+        }
 		
-		Game g = all.game;
-        int szX = g.world.GetLength(0);
-        int szY = g.world.GetLength(1);
-        go = new GameObject[szX, szY];
-        
-        GameObject bck = GameObject.CreatePrimitive(PrimitiveType.Quad);
-        bck.transform.localScale = new Vector3(szX, szY, 1);
-        bck.transform.position = vCorner + new Vector3(szX-1, szY-1, 1)/2;
-        bck.renderer.material.color = new Color(.7f, .7f, .7f);
-        
-        for (int i = 0; i < szX; ++i)
-        {
-            for (int j = 0; j < szY; ++j)
-            {
-                if (g.world[i, j].solid)
-                {
-                    GameObject wall = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                    go [i, j] = wall;
-
-                    wall.transform.position = GetPositionAtGrid(i, j);
-                    wall.renderer.material.color = new Color(.3f, .3f, .3f);
-                }
-                else if(g.world[i,j].loot)
-                {
-                    GameObject loot = GameObject.CreatePrimitive(PrimitiveType.Quad);
-                    go [i, j] = loot;
-
-                    loot.transform.localScale = new Vector3(.5f, .5f, 1);
-                    loot.renderer.material.color = Color.blue;
-                    loot.transform.position = GetPositionAtGrid(i, j);
-                    loot.transform.rotation = Quaternion.AngleAxis(15f, UnityEngine.Random.onUnitSphere);
-                    loot.AddComponent<RotateSlowly>();
-                }
-            }
-        }
-        
-        foreach (var pair in g.players)
-        {
-            System.Guid id = pair.Key;
-            Player p = pair.Value;
-            
-            var avatar = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            
-            //Convert.ToInt32( id.ToByteArray()
-            var r = new ServerClient.MyRandom(BitConverter.ToInt32(id.ToByteArray(), 0));
-            
-            avatar.renderer.material.color = new Color(
-                (float) r.NextDouble(),
-                (float) r.NextDouble(),
-                (float) r.NextDouble());
-            
-            avatar.transform.position = GetPositionAtGrid(p.pos.x, p.pos.y);
-            players.Add(id, avatar);
-        }
-    }
+	}
 
     void OnApplicationQuit () {
 		Log.LogWriteLine ("Terminating");
@@ -149,7 +165,92 @@ public class minecraft : MonoBehaviour {
 		//System.Threading.Thread.Sleep (100);
 		//all.sync.Add(null);
 	}
-	
+
+    void AddPlayer(World w, Player pl)
+    {
+        MyAssert.Assert(!players.ContainsKey(pl.id));
+        Point pos = w.playerPositions.GetValue(pl.id);
+
+        var avatar = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+
+        var r = new ServerClient.MyRandom(BitConverter.ToInt32(pl.id.ToByteArray(), 0));
+
+        avatar.renderer.material.color = new Color(
+            (float)r.NextDouble(),
+            (float)r.NextDouble(),
+            (float)r.NextDouble());
+
+        avatar.transform.position = GetPositionAtGrid(w, pos);
+        players.Add(pl.id, avatar);
+    }
+    void UpdateWorlds(World w)
+    {
+        Point worldPos = w.worldPosition;
+        Dictionary<Point, WorldDraw> newWorlds = new Dictionary<Point, WorldDraw>();
+        foreach (Point delta in Point.SymmetricRange(new Point(1, 1)))
+        {
+            World worldCandidate = all.game.TryGetWorld(worldPos + delta);
+            if (worldCandidate == null)
+                continue;
+            if (worlds.ContainsKey(worldCandidate.worldPosition))
+            {
+                newWorlds[worldCandidate.worldPosition] = worlds[worldCandidate.worldPosition];
+                worlds.Remove(worldCandidate.worldPosition);
+            }
+            else
+                newWorlds[worldCandidate.worldPosition] = new WorldDraw(worldCandidate);
+        }
+
+        foreach (WorldDraw wdt in worlds.Values)
+            wdt.Purge();
+        worlds = newWorlds;
+    
+    }
+
+	void onMove(World w, Player p, MoveType mv)
+	{
+        if (mv == MoveType.LEAVE)
+            return;
+
+		Point pos = w.playerPositions.GetValue(p.id);
+
+        if (mv == MoveType.JOIN && p.id == me)
+            UpdateWorlds(w);
+
+
+        if (!worlds.ContainsKey(w.worldPosition))
+        {
+            if (players.ContainsKey(p.id))
+            {
+                Destroy(players[p.id]);
+                players.Remove(p.id);
+            }
+            return;
+        }
+
+		if(!players.ContainsKey(p.id))
+			AddPlayer(w, p);
+
+        WorldDraw wd = worlds.GetValue(w.worldPosition);
+		
+
+		GameObject obj = wd.loots[pos];
+		if (obj != null)
+		{
+			Destroy(obj);
+			wd.loots[pos] = null;
+		}
+		
+		GameObject movedPlayer = players.GetValue(p.id);
+		movedPlayer.transform.position = GetPositionAtGrid(w, pos);
+		
+		if(p.id == me)
+		{
+			camera.transform.position = movedPlayer.transform.position;
+			camera.transform.position += new Vector3(0f, 0f, -cameraDistance);
+		}
+	}
+
 	void ProcessMovement()
     {
         Point p = new Point();
@@ -172,33 +273,39 @@ public class minecraft : MonoBehaviour {
         {
             Game g = all.game;
             Player pl = g.players[me];
-			Point newPos = pl.pos + p;
+			World w = g.GetPlayerWorld(pl.id);
+			Point oldPos = w.playerPositions.GetValue(pl.id);
+			Point newPos = oldPos + p;
 
-            if (g.CheckValidMove(pl, newPos) == MoveValidity.VALID)
-            {
-                //Log.LogWriteLine("Move from {0} to {1}", pl.pos, mv.pos);
-				all.Move(pl, newPos);
-            }
+			if (w.CheckValidMove(pl.id, newPos) == MoveValidity.VALID)
+				all.Move(pl, newPos, MessageType.VALIDATE_MOVE);
+			else if((w.CheckValidMove(pl.id, newPos) & ~MoveValidity.BOUNDARY) == MoveValidity.VALID)
+				all.Move(pl, newPos, MessageType.VALIDATE_REALM_MOVE);
+
+
 
             if (Input.GetKeyDown(KeyCode.Space))
             {
                 for(int i = 0; i < 10000; ++i)
-					all.Move(pl, newPos);
+					all.Move(pl, newPos, MessageType.VALIDATE_MOVE);
             }
         }
 
         if (Input.GetMouseButtonDown(0))
         {
-            Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
+			Game g = all.game;
+			Player pl = g.players[me];
+			World w = g.GetPlayerWorld(pl.id);
+
+			Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
             Plane xy = new Plane(Vector3.forward, new Vector3(0, 0, .5f));
             float distance;
             xy.Raycast(ray, out distance);
             var tile = ray.GetPoint(distance) + new Vector3(0, 0, 0);
             Point pos = new Point(Convert.ToInt32(tile.x), Convert.ToInt32(tile.y));
+			pos = GetPositionAtMap(w, pos);
             Log.LogWriteLine("Teleporting to {0}", pos);
-            Player pl = all.game.players[me];
-            all.gameAssignments.NodeById(all.game.worldValidator)
-				.SendMessage(MessageType.VALIDATE_TELEPORT, pl.id, all.game.worldValidator, pos);
+			all.Move(pl, pos, MessageType.VALIDATE_TELEPORT);
         }
     }
 	
@@ -240,16 +347,16 @@ public class minecraft : MonoBehaviour {
             while(bufferedActions.Any())
                 bufferedActions.Dequeue().Invoke();
 
-            foreach (var pair in all.game.players)
+            if(Input.GetKeyDown(KeyCode.Alpha1))
             {
-                System.Guid id = pair.Key;
-                Player p = pair.Value;
-                
-                players[id].transform.position = GetPositionAtGrid(p.pos.x, p.pos.y);
+                if (WorldDraw.continuousBackground == true)
+                {
+                    WorldDraw.continuousBackground = false;
+                    foreach (var w in worlds)
+                        w.Value.MessBackground();
+                }
             }
 
-            camera.transform.position = players[me].transform.position;
-            camera.transform.position += new Vector3(0f, 0f, -cameraDistance);
             //camera.transform.rotation *= Quaternion.AngleAxis(Time.deltaTime * 1, Vector3.forward);
         }
 	}

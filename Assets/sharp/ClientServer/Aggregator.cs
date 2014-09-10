@@ -151,21 +151,20 @@ namespace ServerClient
                 gameAssignments.roles.Add(pl.validator, NodeRole.PLAYER_VALIDATOR);
             }
 
-            gameAssignments.validators.Add(game.worldValidator, game.worldValidator);
-            gameAssignments.roles.Add(game.worldValidator, NodeRole.WORLD_VALIDATOR);
+            foreach (World w in game.AllWorlds())
+            {
+                gameAssignments.validators.Add(w.id, w.validator);
+                gameAssignments.roles.Add(w.validator, NodeRole.WORLD_VALIDATOR);
+            }
 
             manager.playerMessageReciever.pa = new PlayerActor(game, gameAssignments);
-
-            Log.LogWriteLine("Game generated, controlled by {0}",
-                gameAssignments.IsMyRole(game.worldValidator) ?
-                    "me!" : gameAssignments.NodeById(game.worldValidator).Address.ToString());
 
             Role myRole = gameAssignments.GetMyRole();
             
             if (myRole.player.Any())
             {
                 StringBuilder sb = new StringBuilder("My player #'s: ");
-                sb.Append(String.Join(" ", (from id in myRole.player select game.players[id].sName).ToArray()));
+                sb.Append(String.Join(" ", (from id in myRole.player select game.players[id].ShortName).ToArray()));
                 Log.LogWriteLine("{0}", sb.ToString());
             }
 
@@ -175,20 +174,36 @@ namespace ServerClient
 
             if (validatedPlayers.Any())
             {
-                StringBuilder sb = new StringBuilder("validating for: ");
-                sb.Append(String.Join(" ", (from pl in validatedPlayers select pl.sName).ToArray()));
+                StringBuilder sb = new StringBuilder("validating for players: ");
+                sb.Append(String.Join(" ", (from pl in validatedPlayers select pl.ShortName).ToArray()));
                 Log.LogWriteLine("{0}", sb.ToString());
             }
 
+            var validatedWorlds = (from w in game.AllWorlds()
+                                    where gameAssignments.IsMyRole(w.validator)
+                                    select w).ToArray();
 
-            Action<MessageType, object[]> broadcaster = (mt, arr) => Broadcast(mt, arr);            
+            if (validatedWorlds.Any())
+            {
+                StringBuilder sb = new StringBuilder("validating for worlds: ");
+                sb.Append(String.Join(" ", (from w in validatedWorlds select w.worldPosition.ToString()).ToArray()));
+                Log.LogWriteLine("{0}", sb.ToString());
+            }
+
+            Action<MessageType, object[]> broadcaster = (mt, arr) => Broadcast(mt, arr);
+          
             foreach (Player p in validatedPlayers)
                 manager.playerValidatorMessageReciever.validators.Add(p.id,
                     new PlayerValidator(p.id, gameAssignments, broadcaster, p.FullName));
 
-            if(gameAssignments.IsMyRole(game.worldValidator))
-                manager.playerWorldVerifierMessageReciever.validators.Add(game.worldValidator,
-                    new WorldValidator(game.worldValidator, gameAssignments, broadcaster, init));
+            Dictionary<Point, Guid> worldsByPoint = new Dictionary<Point, Guid>();
+
+            foreach (World w in game.AllWorlds())
+                worldsByPoint.Add(w.worldPosition, w.id);
+            
+            foreach (World w in validatedWorlds)
+                manager.playerWorldVerifierMessageReciever.validators.Add(w.id,
+                    new WorldValidator(w.id, gameAssignments, broadcaster, init, worldsByPoint));
 
             game.ConsoleOut();
         }
@@ -219,12 +234,14 @@ namespace ServerClient
             GameInitializer init = new GameInitializer(System.DateTime.Now.Millisecond, gameAssignments.GetAllRoles());
             Broadcast(MessageType.GENERATE, init);
         }
-        public void Move(Player p, Point newPos)
+        public void Move(Player p, Point newPos, MessageType mt)
         {
-            gameAssignments.NodeById(game.worldValidator).SendMessage(MessageType.VALIDATE_MOVE, p.id, game.worldValidator, newPos);
+            World w = game.GetPlayerWorld(p.id);
+            gameAssignments.SendValidatorMessage(mt, p.id, w.id, newPos);
         }
 
-        public void SetMoveHook(Action<Player, Point> hook) { manager.playerMessageReciever.pa.onMoveHook = hook; }
+        public void SetMoveHook(Action<World, Player, MoveType> hook)
+        { manager.playerMessageReciever.pa.onMoveHook = hook; }
     }
 
     class Validator
@@ -250,64 +267,126 @@ namespace ServerClient
         public override void ProcessMessage(MessageType mt, Guid sender, Guid receiver, Stream stm, Action<Action> syncronizer)
         {
             Point newPos = new Point();
-            if(mt == MessageType.VALIDATE_MOVE || mt == MessageType.VALIDATE_TELEPORT)
+            if(mt == MessageType.VALIDATE_MOVE || mt == MessageType.VALIDATE_TELEPORT || mt == MessageType.VALIDATE_REALM_MOVE)
                 newPos = Serializer.Deserialize<Point>(stm);
+
+
+            Guid player = Guid.Empty;
+            if(mt == MessageType.REALM_MOVE)
+            {
+                player = Serializer.Deserialize<Guid>(stm);
+                newPos = Serializer.Deserialize<Point>(stm);
+            }
+
+            if(mt == MessageType.REALM_MOVE_FAIL || mt == MessageType.REALM_MOVE_SUCESS)
+                player = Serializer.Deserialize<Guid>(stm);
+
+            MoveValidity mv = MoveValidity.VALID;
+            if(mt == MessageType.REALM_MOVE_FAIL)
+                mv = Serializer.Deserialize<MoveValidity>(stm);
 
             syncronizer.Invoke(() =>
             {
                 WorldValidator wv = validators.GetValue(receiver);
-                Player p = wv.validatorGame.players.GetValue(sender);
+
+                if (mt == MessageType.REALM_MOVE)
+                {
+                    wv.OnRealmMove(sender, player, newPos);
+                    return;
+                }
+                
+                Player p;
+                if (mt == MessageType.REALM_MOVE_FAIL || mt == MessageType.REALM_MOVE_SUCESS)
+                    p = wv.validatorWorld.players.GetValue(player);
+                else
+                    p = wv.validatorWorld.players.GetValue(sender);
+
+                Point currPos = wv.validatorWorld.playerPositions.GetValue(p.id);
 
                 if (mt == MessageType.VALIDATE_MOVE)
-                    wv.OnValidateMove(p, newPos);
+                    wv.OnValidateMove(p, currPos, newPos);
                 else if (mt == MessageType.VALIDATE_TELEPORT)
-                    wv.OnValidateTeleport(p, newPos);
+                    wv.OnValidateTeleport(p, currPos, newPos);
+                else if (mt == MessageType.VALIDATE_REALM_MOVE)
+                    wv.OnValidateRealmMove(p, currPos, newPos, false);
                 else if (mt == MessageType.FREEZING_SUCCESS)
-                    wv.OnFreezeSuccess(p);
+                    wv.OnFreezeSuccess(p, currPos);
                 else if (mt == MessageType.FREEZING_FAIL)
-                    wv.OnFreezeFail(p);
+                    wv.OnFreezeFail(p, currPos);
+                else if (mt == MessageType.REALM_MOVE_FAIL)
+                    wv.OnRealmMoveFail(p, mv);
+                else if (mt == MessageType.REALM_MOVE_SUCESS)
+                    wv.OnRealmMoveSuccess(p);
                 else
                     throw new Exception("WorldValidatorProcessor: Unsupported message " + mt.ToString());
             });
         }
     }
+
+    class MoveLock
+    {
+        public Point newPos;
+        public bool teleport;
+
+        public MoveLock(Point newPos_, bool teleport_ = false)
+        {
+            newPos = newPos_;
+            teleport = teleport_;
+        }
+    }
     
     class WorldValidator : Validator
     {
-        internal Game validatorGame;
-        Dictionary<Guid, Point> movementLocks = new Dictionary<Guid,Point>();
+        Dictionary<Point, Guid> worldByPoint;
+        internal World validatorWorld;
+        Dictionary<Guid, MoveLock> movementLocks = new Dictionary<Guid,MoveLock>();
 
-        public WorldValidator(Guid myId_, AssignmentInfo gameInfo_, Action<MessageType, object[]> broadcaster_,
-            GameInitializer init)
+        public WorldValidator(Guid myId_, AssignmentInfo gameInfo_,
+            Action<MessageType, object[]> broadcaster_, GameInitializer init,
+            Dictionary<Point, Guid> worldByPoint_)
             : base(myId_, gameInfo_, broadcaster_)
         {
-            validatorGame = new Game(init, gameInfo.GetAllRoles());
+            worldByPoint = worldByPoint_;
+
+            Game tempGame = new Game(init, gameInfo.GetAllRoles());
+            validatorWorld = tempGame.GetWorld(myId_);
+
+            validatorWorld.onLootHook = OnLootPickup;
         }
 
-        internal void OnValidateMove(Player p, Point newPos)
+        void OnLootPickup(Player p)
+        {
+            gameInfo.SendValidatorMessage(MessageType.LOOT_PICKUP_BROADCAST, myId, p.id);
+        }
+        void TeleportCleanup(bool success, Guid player)
+        {
+            if(success)
+                gameInfo.SendValidatorMessage(MessageType.CONSUME_FROZEN_ITEM, myId, player);
+            else
+                gameInfo.SendValidatorMessage(MessageType.UNFREEZE_ITEM, myId, player);
+        }
+
+        public void OnValidateMove(Player p, Point currPos, Point newPos)
         {
             if (movementLocks.ContainsKey(p.id))
             {
                 Log.LogWriteLine("Validator: {0} can't move, locked", p.FullName);
                 return;
             }
-            
-            MoveValidity v = validatorGame.CheckValidMove(p, newPos);
+
+            MoveValidity v = validatorWorld.CheckValidMove(p.id, newPos);
             if (v != MoveValidity.VALID)
             {
-                Log.LogWriteLine("Validator: Invalid move {0} from {1} to {2} by {3}", v, p.pos, newPos, p.FullName);
+                Log.LogWriteLine("Validator: Invalid move {0} from {1} to {2} by {3}", v,
+                    currPos, newPos, p.FullName);
                 return;
             }
 
-            Tile t = validatorGame.world[newPos.x, newPos.y];
-            if (t.loot)
-                gameInfo.NodeById(p.validator).SendMessage(MessageType.LOOT_PICKUP_BROADCAST, myId, p.id);
-
-            validatorGame.Move(p, newPos, MoveValidity.VALID);
+            validatorWorld.Move(p.id, newPos, MoveValidity.VALID);
 
             Broadcast(MessageType.MOVE, myId, p.id, newPos);
         }
-        internal void OnValidateTeleport(Player p, Point newPos)
+        public void OnValidateTeleport(Player p, Point currPos, Point newPos)
         {
             if (movementLocks.ContainsKey(p.id))
             {
@@ -315,48 +394,159 @@ namespace ServerClient
                 return;
             }
 
-            MoveValidity v = validatorGame.CheckValidMove(p, newPos);
-            /*
-            if (v != MoveValidity.TELEPORT)
-            {
-                Log.LogWriteLine("Validator: Invalid (step 1) teleport {0} from {1} to {2} by {3}", v, p.pos, newPos, p.FullName);
-                return;
-            }
-             * */
-
-            Log.LogWriteLine("Validator: Freezing request for teleport from {1} to {2} by {3}", v, p.pos, newPos, p.FullName);
-
-            movementLocks.Add(p.id, newPos);
-            gameInfo.NodeById(p.validator).SendMessage(MessageType.FREEZE_ITEM, myId, p.id);
-        }
-        internal void OnFreezeSuccess(Player p)
-        {
-            MyAssert.Assert(movementLocks.ContainsKey(p.id));
-            Point newPos = movementLocks.GetValue(p.id);
-            movementLocks.Remove(p.id);
-
-            Log.LogWriteLine("Validator: Freeze sucessful. Trying to teleport from {0} to {1} by {2}.", p.pos, newPos, p.FullName);
-
-            MoveValidity v = validatorGame.CheckValidMove(p, newPos);
-            if (v != MoveValidity.TELEPORT)
-            {
-                Log.LogWriteLine("Validator: Invalid (step 2) teleport {0} from {1} to {2} by {3}", v, p.pos, newPos, p.FullName);
-                gameInfo.NodeById(p.validator).SendMessage(MessageType.UNFREEZE_ITEM, myId, p.id);
-                return;
-            }
-
-            validatorGame.Move(p, newPos, MoveValidity.TELEPORT);
-
-            gameInfo.NodeById(p.validator).SendMessage(MessageType.CONSUME_FROZEN_ITEM, myId, p.id);
-            Broadcast(MessageType.TELEPORT, myId, p.id, newPos);
-        }
-        internal void OnFreezeFail(Player p)
-        {
-            MyAssert.Assert(movementLocks.ContainsKey(p.id));
-            Point newPos = movementLocks.GetValue(p.id);
-            movementLocks.Remove(p.id);
+            MoveValidity v = validatorWorld.CheckValidMove(p.id, newPos) & ~(MoveValidity.TELEPORT | MoveValidity.BOUNDARY);
             
-            Log.LogWriteLine("Validator: Freeze failed. Was trying to teleport from {0} to {1} by {2}.", p.pos, newPos, p.FullName);
+            if (v != MoveValidity.VALID)
+            {
+                Log.LogWriteLine("Validator: Invalid (step 1) teleport {0} from {1} to {2} by {3}", v, currPos, newPos, p.FullName);
+                return;
+            }
+            
+
+            Log.LogWriteLine("Validator: Freezing request for teleport from {1} to {2} by {3}", v, currPos, newPos, p.FullName);
+
+            movementLocks.Add(p.id, new MoveLock(newPos));
+            gameInfo.SendValidatorMessage(MessageType.FREEZE_ITEM, myId, p.id);
+        }
+        public bool OnValidateRealmMove(Player p, Point currPos, Point newPos, bool teleporting)
+        {
+            if (movementLocks.ContainsKey(p.id))
+            {
+                Log.LogWriteLine("Validator: {0} can't realm move, locked", p.FullName);
+                return false;
+            }
+
+            MoveValidity v = validatorWorld.CheckValidMove(p.id, newPos);
+
+            if (teleporting)
+                v &= ~MoveValidity.TELEPORT;
+            
+            if (v != MoveValidity.BOUNDARY)
+            {
+                Log.LogWriteLine("Validator: Invalid realm move {0} from {1} to {2} by {3}", v, currPos, newPos, p.FullName);
+                return false;
+            }
+
+            Point currentRealm = validatorWorld.worldPosition;
+            Point targetRealm = validatorWorld.BoundaryMove(ref newPos);
+
+            MyAssert.Assert(!currentRealm.Equals(targetRealm));
+            if (!worldByPoint.ContainsKey(targetRealm))
+            {
+                Log.LogWriteLine("Validator: No realm for realm move from {0} to {1},{2} by {3}",
+                    currentRealm, targetRealm, newPos, p.FullName);
+                return false;
+            }
+
+
+            Log.LogWriteLine("Validator: Request for realm move from {0} to {1},{2} by {3}",
+                currentRealm, targetRealm, newPos, p.FullName);
+
+            movementLocks.Add(p.id, new MoveLock(newPos, teleporting));
+
+            gameInfo.SendValidatorMessage(MessageType.REALM_MOVE, myId, worldByPoint[targetRealm], p.id, newPos);
+
+            return true;
+        }
+
+        public void OnRealmMove(Guid world, Guid player, Point newPos)
+        {
+            Tile t = validatorWorld.map[newPos];
+
+            if (!t.IsEmpty())
+            {
+                MoveValidity mv = MoveValidity.VALID;
+
+                if (t.player != Guid.Empty)
+                    mv = MoveValidity.OCCUPIED_PLAYER;
+                else if (t.solid)
+                    mv = MoveValidity.OCCUPIED_WALL;
+                else
+                    MyAssert.Assert(false);
+
+                gameInfo.SendValidatorMessage(MessageType.REALM_MOVE_FAIL, myId, world, player, mv);
+
+                return;
+            }
+
+            gameInfo.SendValidatorMessage(MessageType.REALM_MOVE_SUCESS, myId, world, player);
+
+            validatorWorld.AddPlayer(player, newPos);
+            Broadcast(MessageType.ADD_PLAYER, myId, player, newPos);
+        }
+        public void OnRealmMoveSuccess(Player p)
+        {
+            MyAssert.Assert(movementLocks.ContainsKey(p.id));
+            
+            if (movementLocks[p.id].teleport)
+                TeleportCleanup(true, p.id);
+            
+            movementLocks.Remove(p.id);
+
+            Log.LogWriteLine("Validator: Realm move success for {0}", p.FullName);
+
+            validatorWorld.RemovePlayer(p.id);
+            Broadcast(MessageType.REMOVE_PLAYER, myId, p.id);
+        }
+        public void OnRealmMoveFail(Player p, MoveValidity mv)
+        {
+            MyAssert.Assert(movementLocks.ContainsKey(p.id));
+
+            if (movementLocks[p.id].teleport)
+                TeleportCleanup(false, p.id);
+
+            movementLocks.Remove(p.id);
+
+            Log.LogWriteLine("Validator: Realm move failed {0} for {1}", mv, p.FullName);
+        }
+
+        public void OnFreezeSuccess(Player p, Point currPos)
+        {
+            MyAssert.Assert(movementLocks.ContainsKey(p.id));
+            Point newPos = movementLocks[p.id].newPos;
+            movementLocks.Remove(p.id);
+
+            Log.LogWriteLine("Validator: Freeze sucessful. Trying to teleport from {0} to {1} by {2}.", currPos, newPos, p.FullName);
+
+            MoveValidity v = validatorWorld.CheckValidMove(p.id, newPos) & ~MoveValidity.TELEPORT;
+
+            if (v != MoveValidity.VALID)
+            {
+                if (v == MoveValidity.BOUNDARY)
+                {
+                    Log.LogWriteLine("Validator: requesting realm teleport");
+                    // requesting intra-realm teleport
+                    bool realmMoveRequestSuccess = OnValidateRealmMove(p, currPos, newPos, true);
+                    if (!realmMoveRequestSuccess)
+                    {
+                        // request denied
+                        Log.LogWriteLine("Validator: Invalid teleport {0} from {1} to {2} by {3}; realm move request failed", v, currPos, newPos, p.FullName);
+                        TeleportCleanup(false, p.id);
+                    }
+                }
+                else
+                {
+                    // teleporting fail
+                    Log.LogWriteLine("Validator: Invalid (step 2) teleport {0} from {1} to {2} by {3}", v, currPos, newPos, p.FullName);
+                    TeleportCleanup(false, p.id);
+                }
+            }
+            else // teleporting success
+            {
+                validatorWorld.Move(p.id, newPos, MoveValidity.TELEPORT);
+
+                TeleportCleanup(true, p.id);
+
+                Broadcast(MessageType.TELEPORT, myId, p.id, newPos);
+            }
+        }
+        public void OnFreezeFail(Player p, Point currPos)
+        {
+            MyAssert.Assert(movementLocks.ContainsKey(p.id));
+            Point newPos = movementLocks[p.id].newPos;
+            movementLocks.Remove(p.id);
+
+            Log.LogWriteLine("Validator: Freeze failed. Was trying to teleport from {0} to {1} by {2}.", currPos, newPos, p.FullName);
         }
     }
 
@@ -394,32 +584,32 @@ namespace ServerClient
             name = name_;
         }
 
-        internal void OnLootBroadcast()
+        public void OnLootBroadcast()
         {
             validatorInventory.teleport++;
-            Log.LogWriteLine("{0} pick up teleport, now has {1} (validator)", name, validatorInventory.teleport);
+            //Log.LogWriteLine("{0} pick up teleport, now has {1} (validator)", name, validatorInventory.teleport);
 
             Broadcast(MessageType.LOOT_PICKUP, myId, myId);
         }
-        internal void OnFreezeItem(Guid worldId)
+        public void OnFreezeItem(Guid worldId)
         {
             if (validatorInventory.teleport > 0)
             {
                 validatorInventory.teleport--;
                 validatorInventory.frozenTeleport++;
 
-                gameInfo.NodeById(worldId).SendMessage(MessageType.FREEZING_SUCCESS, myId, worldId);
+                gameInfo.SendValidatorMessage(MessageType.FREEZING_SUCCESS, myId, worldId);
 
                 Log.LogWriteLine("{0} freezes one teleport (validator)", name);
             }
             else
             {
-                gameInfo.NodeById(worldId).SendMessage(MessageType.FREEZING_FAIL, myId, worldId);
+                gameInfo.SendValidatorMessage(MessageType.FREEZING_FAIL, myId, worldId);
 
                 Log.LogWriteLine("{0} freeze failed (validator)", name);
             }
         }
-        internal void OnUnfreeze()
+        public void OnUnfreeze()
         {
             MyAssert.Assert(validatorInventory.frozenTeleport > 0);
             validatorInventory.teleport++;
@@ -427,7 +617,7 @@ namespace ServerClient
 
             Log.LogWriteLine("{0} unfreezes one teleport (validator)", name);
         }
-        internal void OnConsumeFrozen()
+        public void OnConsumeFrozen()
         {
             MyAssert.Assert(validatorInventory.frozenTeleport > 0);
             validatorInventory.frozenTeleport--;
@@ -443,19 +633,26 @@ namespace ServerClient
 
         public override void ProcessMessage(MessageType mt, Guid sender, Guid receiver, Stream stm, Action<Action> syncronizer)
         {
-            
-            if (mt == MessageType.MOVE || mt == MessageType.TELEPORT)
+            if (mt == MessageType.MOVE || mt == MessageType.TELEPORT ||
+                mt == MessageType.ADD_PLAYER || mt == MessageType.REMOVE_PLAYER)
             {
-                Point newPos = Serializer.Deserialize<Point>(stm);
+                Point newPos = new Point();
+                if(mt != MessageType.REMOVE_PLAYER)
+                    newPos = Serializer.Deserialize<Point>(stm);
 
                 syncronizer.Invoke(() =>
                 {
                     Player p = pa.game.players.GetValue(receiver);
+                    World w = pa.game.GetWorld(sender);
 
                     if (mt == MessageType.MOVE)
-                        pa.OnMove(p, newPos);
+                        pa.OnMove(w, p, newPos);
                     else if (mt == MessageType.TELEPORT)
-                        pa.OnTeleport(p, newPos);
+                        pa.OnTeleport(w, p, newPos);
+                    else if(mt == MessageType.ADD_PLAYER)
+                        pa.OnAddPlayer(w, p, newPos);
+                    else if (mt == MessageType.REMOVE_PLAYER)
+                        pa.OnRemovePlayer(w, p);
                     else
                         throw new Exception("PlayerActorProcessor: Unsupported message " + mt.ToString());
                 });
@@ -465,11 +662,12 @@ namespace ServerClient
                 syncronizer.Invoke(() =>
                 {
                     Player p = pa.game.players.GetValue(receiver);
+                    Inventory inv = pa.game.playerInventory.GetValue(receiver);
 
                     if (mt == MessageType.LOOT_PICKUP)
-                        pa.OnLootPickup(p);
+                        pa.OnLootPickup(inv, p);
                     else if (mt == MessageType.LOOT_CONSUMED)
-                        pa.OnLootConsumed(p);
+                        pa.OnLootConsumed(inv, p);
                     else
                         throw new Exception("PlayerActorProcessor: Unsupported message " + mt.ToString());
                 });
@@ -484,7 +682,7 @@ namespace ServerClient
 
         AssignmentInfo gameInfo;
 
-        public Action<Player, Point> onMoveHook = (pl, pos) => { };
+        public Action<World, Player, MoveType> onMoveHook = (w, pl, mv) => { };
 
         public PlayerActor(Game game_, AssignmentInfo gameInfo_)
         {
@@ -492,34 +690,51 @@ namespace ServerClient
             gameInfo = gameInfo_;
         }
 
-        internal void OnMove(Player p, Point newPos)
+        public void OnMove(World w, Player p, Point newPos)
         {
-            game.Move(p, newPos, MoveValidity.VALID);
-            onMoveHook(p, newPos);
+            w.Move(p.id, newPos, MoveValidity.VALID);
+            onMoveHook(w, p, MoveType.MOVE);
         }
-        internal void OnTeleport(Player p, Point newPos)
+        public void OnTeleport(World w, Player p, Point newPos)
         {
-            game.Move(p, newPos, MoveValidity.TELEPORT);
-            onMoveHook(p, newPos);
+            w.Move(p.id, newPos, MoveValidity.TELEPORT);
+            onMoveHook(w, p, MoveType.MOVE);
         }
-        internal void OnLootPickup(Player p)
+        public void OnLootPickup(Inventory inv, Player p)
         {
-            p.inv.teleport++;
+            inv.teleport++;
 
             if (gameInfo.IsMyRole(p.id))
             {
-                Log.LogWriteLine("{0} pick up teleport, now has {1}", p.FullName, p.inv.teleport);
+                Log.LogWriteLine("{0} pick up teleport, now has {1}", p.FullName, inv.teleport);
             }
         }
-        internal void OnLootConsumed(Player p)
+        public void OnLootConsumed(Inventory inv, Player p)
         {
-            MyAssert.Assert(p.inv.teleport > 0);
-            p.inv.teleport--;
+            MyAssert.Assert(inv.teleport > 0);
+            inv.teleport--;
 
             if (gameInfo.IsMyRole(p.id))
             {
-                Log.LogWriteLine("{0} consumed teleport, now has {1}", p.FullName, p.inv.teleport);
+                Log.LogWriteLine("{0} consumed teleport, now has {1}", p.FullName, inv.teleport);
             }
+        }
+
+        public void OnRemovePlayer(World w, Player p)
+        {
+            w.RemovePlayer(p.id);
+
+            Log.LogWriteLine("Player {0} removed from world {1}", p.FullName, w.worldPosition.ToString());
+            onMoveHook(w, p, MoveType.LEAVE);
+        }
+        public void OnAddPlayer(World w, Player p, Point newPos)
+        {
+            MyAssert.Assert(!game.playerWorld.GetValue(p.id).Equals(w.worldPosition));
+            game.playerWorld[p.id] = w.worldPosition;
+            w.AddPlayer(p.id, newPos);
+
+            Log.LogWriteLine("Player {0} added to world {1} at {2}", p.FullName, w.worldPosition, newPos);
+            onMoveHook(w, p, MoveType.JOIN);
         }
     }
 }

@@ -20,7 +20,30 @@ namespace ServerClient
             Game g = a.game;
             if (g == null)
                 return;
-            Player p = g.players[player];
+
+            
+            Player p = g.players.GetValue(player);
+            World w = g.GetPlayerWorld(player);
+            Point oldPos = w.playerPositions.GetValue(player);
+            Inventory inv = a.game.playerInventory.GetValue(player);
+
+            if (a.gameAssignments.NodeById(w.validator).IsClosed)
+                return;
+            if (a.gameAssignments.NodeById(p.validator).IsClosed)
+                return;
+
+            if (inv.teleport > 0 && rand.NextDouble() < .01)
+            {
+                var teleportPos =   (from t in w.map.GetEnum()
+                                     where t.Value.IsEmpty()
+                                     select t.Key).ToList();
+                if (!teleportPos.Any())
+                    return;
+
+                Point newPos = teleportPos[rand.Next(0, teleportPos.Count)];
+                a.Move(p, newPos, MessageType.VALIDATE_TELEPORT);
+                return;
+            }
 
             Point[] moves = {
                                 new Point(-1, 0),
@@ -32,11 +55,13 @@ namespace ServerClient
                                 new Point(1, 1),
                                 new Point(-1, -1)
                             };
-            Point newPosition = p.pos + moves[rand.Next(0, moves.Length)];
-            
-            if (g.CheckValidMove(p, newPosition) == MoveValidity.VALID)
-                if (!a.gameAssignments.NodeById(a.game.worldValidator).IsClosed)
-                    a.Move(p, newPosition);
+            Point newPosition = oldPos + moves[rand.Next(0, moves.Length)];
+
+            MoveValidity mv = w.CheckValidMove(p.id, newPosition);
+            if (mv == MoveValidity.VALID)
+                a.Move(p, newPosition, MessageType.VALIDATE_MOVE);
+            else if(mv == MoveValidity.BOUNDARY)
+                a.Move(p, newPosition, MessageType.VALIDATE_REALM_MOVE);
         }
 
         static void RepeatedAction(Action<Action> queue, Action a, int period)
@@ -125,11 +150,11 @@ namespace ServerClient
             {
                 Role myRole = new Role();
 
-                //if (all.peers.MyAddress.Port == NodeCollection.nStartPort)
+                if (all.peers.MyAddress.Port == NodeCollection.nStartPort)
                     myRole.validator.Add(Guid.NewGuid());
-                //else
+                else
                 {
-                    for (int i = 0; i < 2; ++i)
+                    for (int i = 0; i < 5; ++i)
                         myRole.player.Add(Guid.NewGuid());
                 }
 

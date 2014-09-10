@@ -13,7 +13,7 @@ using System.Xml.Serialization;
 
 namespace ServerClient
 {
-    class Log
+    static class Log
     {
         static public Action<string> log = msg => Console.WriteLine(msg);
 
@@ -25,7 +25,7 @@ namespace ServerClient
         }
     }
 
-    class NetTools
+    static class NetTools
     {
         public static IPAddress GetMyIP()
         {
@@ -83,7 +83,7 @@ namespace ServerClient
         public string name;
     }
 
-    class ThreadManager
+    static class ThreadManager
     {
         static List<ThreadInfo> threads = new List<ThreadInfo>();
 
@@ -129,7 +129,7 @@ namespace ServerClient
         }
     };
 
-    class MyAssert
+    static class MyAssert
     {
         static public void Assert(bool b)
         {

@@ -25,6 +25,54 @@ namespace ServerClient
 
         public static Point operator -(Point p1, Point p2) { return p1 + -p2; }
         //public static bool operator !=(Point p1, Point p2) { return !(p1 == p2); }
+
+        public static IEnumerable<Point> Range(Point size)
+        {
+            Point p = new Point();
+            for (p.y = 0; p.y < size.y; ++p.y)
+                for (p.x = 0; p.x < size.x; ++p.x)
+                    yield return p;
+        }
+        public static IEnumerable<Point> SymmetricRange(Point size)
+        {
+            Point p = new Point();
+            for (p.y = -size.y; p.y <= size.y; ++p.y)
+                for (p.x = -size.x; p.x <= size.x; ++p.x)
+                    yield return p;
+        }
+    }
+
+    class Plane<T>
+    {
+        T[,] plane;
+
+        public Plane(Point size) { plane = new T[size.x, size.y]; Size = size; }
+
+        public Point Size { get; private set; }
+
+        public T this[Point pos]
+        {
+            get { return this[pos.x, pos.y]; }
+            set { this[pos.x, pos.y] = value; }
+        }
+
+        public T this[int x, int y]
+        {
+            get { return plane[x, y]; }
+            set { plane[x, y] = value; }
+        }
+
+        public IEnumerable<T> GetTiles()
+        {
+            foreach (Point p in Point.Range(Size))
+                yield return plane[p.x, p.y];
+        }
+
+        public IEnumerable<KeyValuePair<Point, T>> GetEnum()
+        {
+            foreach(Point p in Point.Range(Size))
+                    yield return new KeyValuePair<Point, T>(p, plane[p.x, p.y]);
+        }
     }
 
     class Inventory
@@ -36,20 +84,18 @@ namespace ServerClient
     class Player
     {
         public readonly Guid id;
-        public readonly string sName;
         public readonly Guid validator;
 
-        public Point pos;
-        public Inventory inv = new Inventory();
+        readonly string sName;
 
-        public string FullName { get { return "Player " + sName; }  }
+        public string ShortName { get { return sName; } }
+        public string FullName { get { return "Player " + sName; } }
 
-        public Player(Point pos_, Guid id_, string sName_, Guid verifier_)
+        public Player(Guid id_, Guid verifier_, string sName_)
         {
-            pos = pos_;
             id = id_;
-            sName = sName_;
             validator = verifier_;
+            sName = sName_;
         }
     }
 
@@ -72,12 +118,12 @@ namespace ServerClient
     class Tile
     {
         public bool solid = false;
-        public Player p = null;
+        public Guid player = Guid.Empty;
         public bool loot = false;
 
-        public bool IsEmpty() { return (p == null) && !solid; }
+        public bool IsEmpty() { return (player == Guid.Empty) && !solid; }
 
-        public Tile(){solid = false;}
+        public Tile(){}
     }
 
     [Serializable]
@@ -85,10 +131,11 @@ namespace ServerClient
     {
         public int numberOfPlayers;
         public int numberOfValidators;
-        public int worldWidth = 20;
-        public int worldHeight = 10;
+        public Point worldSize = new Point(20, 10);
+        public Point worlds = new Point(2, 2);
         public int seed;
-        public double density = .2;
+        public double wallDensity = .5;
+        public double lootDensity = .05;
 
         public GameInitializer() { }
         internal GameInitializer(int seed_, Role roles)
@@ -130,34 +177,198 @@ namespace ServerClient
         }
     }
 
-    /*
-    class NodeRoles
+    class World
     {
-        public Dictionary<Guid, Node> players = new Dictionary<Guid,Node>();
-        public Dictionary<Guid, Node> validators = new Dictionary<Guid,Node>();
+        public readonly Guid id;
+        public readonly Guid validator;
 
-        static void Add(Dictionary<Guid, Node> d, IEnumerable<Guid> l, Node n)
+        public readonly Point worldPosition;
+        public Plane<Tile> map;
+
+        public Dictionary<Guid, Point> playerPositions = new Dictionary<Guid,Point>();
+        public Dictionary<Guid, Player> players;
+
+        public Action<Player> onLootHook = (id) => { };
+
+        public World(Guid id_, Guid validator_, Point worldPosition_, Point worldSize, Dictionary<Guid, Player> players_)
         {
-            foreach (var id in l)
-                d[id] = n;
+            id = id_;
+            validator = validator_;
+            worldPosition = worldPosition_;
+            players = players_;
+
+            map = new Plane<Tile>(worldSize);
+
+            foreach (Point p in Point.Range(map.Size))
+                map[p] = new Tile();
         }
 
-        public void Add(Role r, Node n)
+        public IEnumerable<Point> GetBoundary()
         {
-            Add(players, r.player, n);
-            Add(validators, r.validator, n);
+            HashSet<Point> bnd = new HashSet<Point>();
+
+            for (int x = 0; x < map.Size.x; ++x)
+            {
+                bnd.Add(new Point(x, 0));
+                bnd.Add(new Point(x, map.Size.y - 1));
+            }
+
+            for (int y = 0; y < map.Size.y; ++y)
+            {
+                bnd.Add(new Point(0, y));
+                bnd.Add(new Point(map.Size.x - 1, y));
+            }
+
+            return from p in bnd
+                   orderby p.ToString()
+                   select p;
+        }
+        public IEnumerable<KeyValuePair<Point, Tile>> GetSpawn()
+        {
+            foreach (Point p in Point.Range(map.Size))
+            {
+                Tile t = map[p];
+                if (t.IsEmpty() && t.loot == false)
+                    yield return new KeyValuePair<Point, Tile>(p, t);
+            }
+        }
+
+        public void AddPlayer(Guid player, Point pos)
+        {
+            MyAssert.Assert(!playerPositions.ContainsKey(player));
+            Move(player, pos, MoveValidity.NEW);
+        }
+        public void RemovePlayer(Guid player)
+        {
+            Point pos = playerPositions.GetValue(player);
+            MyAssert.Assert(map[pos].player == player);
+            map[pos].player = Guid.Empty;
+
+            playerPositions.Remove(player);
+        }
+
+        public MoveValidity CheckValidMove(Guid player, Point newPos)
+        {
+            MoveValidity mv = MoveValidity.VALID;
+            
+            Point curPos = playerPositions.GetValue(player);
+
+            Point diff = newPos - curPos;
+            if (Math.Abs(diff.x) > 1)
+                mv |= MoveValidity.TELEPORT;
+            if (Math.Abs(diff.y) > 1)
+                mv |= MoveValidity.TELEPORT; 
+            
+            Tile tile;
+            try
+            {
+                tile = map[newPos];
+            }
+            catch (IndexOutOfRangeException)
+            {
+                mv |= MoveValidity.BOUNDARY;
+                return mv;
+            }
+
+            if (!tile.IsEmpty())
+            {
+                if (tile.player != Guid.Empty)
+                    mv |= MoveValidity.OCCUPIED_PLAYER;
+                if (tile.solid)
+                    mv |= MoveValidity.OCCUPIED_WALL;
+            }
+
+            return mv;
+        }
+        public void Move(Guid player, Point newPos, MoveValidity mv = MoveValidity.VALID)
+        {
+            Player p = players.GetValue(player);
+
+            if (mv != MoveValidity.NEW)
+            {
+                Point curPos = playerPositions.GetValue(player);
+
+                MoveValidity v = CheckValidMove(player, newPos) & ~mv;
+                if (v != MoveValidity.VALID)
+                    Log.LogWriteLine("Game.Move Warning: Invalid move {0} from {1} to {2} by {3}",
+                        v, curPos, newPos, p.FullName);
+
+                MyAssert.Assert(map[curPos].player == player);
+                map[curPos].player = Guid.Empty;
+            }
+
+            Tile tile = map[newPos];
+            MyAssert.Assert(tile.IsEmpty());
+
+            if (tile.loot == true)
+                onLootHook(p);
+            
+            playerPositions[player] = newPos;
+            tile.player = player;
+            tile.loot = false;
+        }
+
+        int BoundaryMove(ref int p, int sz)
+        {
+            int ret = 0;
+
+            while (p < 0)
+            {
+                p += sz;
+                ret--;
+            }
+            
+            while(p >= sz)
+            {
+                p -= sz;
+                ret++;
+            }
+
+            return ret;
+        }
+        public Point BoundaryMove(ref Point p)
+        {
+            int px = p.x;
+            int py = p.y;
+
+            Point ret = new Point(BoundaryMove(ref px, map.Size.x), BoundaryMove(ref py, map.Size.y));
+
+            p = new Point(px, py);
+
+            return worldPosition + ret;
         }
     }
-     * */
 
     class Game
     {
         public GameInitializer info;
         public Role roles;
 
-        public Tile[,] world;
+        Dictionary<Point, World> worldsByPoint = new Dictionary<Point, World>();
+        Dictionary<Guid, World> worldsById = new Dictionary<Guid, World>();
+
+        public void AddWorld(World w)
+        {
+            worldsByPoint.Add(w.worldPosition, w);
+            worldsById.Add(w.id, w);
+        }
+
+        public World GetWorld(Guid id) { return worldsById.GetValue(id); }
+        public World GetWorld(Point p) { return worldsByPoint.GetValue(p); }
+        public World TryGetWorld(Point p)
+        {
+            if (worldsByPoint.ContainsKey(p))
+                return worldsByPoint.GetValue(p);
+            else
+                return null;
+        }
+        public World GetPlayerWorld(Guid id) { return GetWorld(playerWorld.GetValue(id)); }
+
+        public IEnumerable<World> AllWorlds() { return worldsById.Values; }
+
         public Dictionary<Guid, Player> players = new Dictionary<Guid, Player>();
-        public Guid worldValidator;
+        public Dictionary<Guid, Point> playerWorld = new Dictionary<Guid, Point>();
+        public Dictionary<Guid, Inventory> playerInventory = new Dictionary<Guid, Inventory>();
 
         public Game(GameInitializer info_, Role roles_)
         {
@@ -167,7 +378,7 @@ namespace ServerClient
             Generate();
         }
 
-        string PlayerNameMap(int value)
+        static string PlayerNameMap(int value)
         {
             char[] baseChars = new char[] { '0','1','2','3','4','5','6','7','8','9',
             'A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W','X','Y','Z',
@@ -187,7 +398,19 @@ namespace ServerClient
 
             return result;
         }
+        public static Guid GuidFromPoint(Point p)
+        {
+            byte[] x = BitConverter.GetBytes(p.x);
+            byte[] y = BitConverter.GetBytes(p.y);
 
+            byte[] guid = new byte[16];
+            for (int i = 0; i < 4; ++i)
+                guid[i] = x[i];
+            for (int i = 0; i < 4; ++i)
+                guid[i + 4] = y[i];
+
+            return new Guid(guid);
+        }
         void Generate()
         {
             ServerClient.MyRandom seededRandom = new ServerClient.MyRandom(info.seed);
@@ -196,67 +419,59 @@ namespace ServerClient
             MyAssert.Assert(info.numberOfValidators == roles.validator.Count());
             MyAssert.Assert(info.numberOfValidators != 0);
 
-            int szX = info.worldWidth;
-            int szY = info.worldHeight;
-
-            MyAssert.Assert(szX >= 3);
-            MyAssert.Assert(szY >= 3);
+            MyAssert.Assert(info.worldSize.x >= 3);
+            MyAssert.Assert(info.worldSize.y >= 3);
 
             // validators
             var validators = (from kv in roles.validator
                               orderby kv.ToString()
                               select kv).ToList();
-
             MyAssert.Assert(info.numberOfValidators == validators.Count);
-            worldValidator = validators.Random(n => seededRandom.Next(n));
 
-            // random terrain
-            world = new Tile[szX, szY];
-
-            for (int x = 0; x < szX; ++x)
-                for (int y = 0; y < szY; ++y)
+            // worlds
+            Point p = new Point();
+            for (p.y = -info.worlds.y; p.y <= info.worlds.y; ++p.y)
+                for (p.x = -info.worlds.x; p.x <= info.worlds.x; ++p.x)
                 {
-                    world[x, y] = new Tile();
-
-                    if (seededRandom.NextDouble() < info.density)
-                        world[x, y].solid = true;
-                    else
+                    Guid worldValidator = validators.Random(n => seededRandom.Next(n));
+                    World world = new World(GuidFromPoint(p), worldValidator, p, info.worldSize, players);
+                    AddWorld(world);
+                    
+                    // random terrain
+                    foreach (Tile t in world.map.GetTiles())
                     {
-                        world[x, y].solid = false;
+                        if (seededRandom.NextDouble() < info.wallDensity)
+                            t.solid = true;
+                        else
+                        {
+                            t.solid = false;
 
-                        if (seededRandom.NextDouble() < .1)
-                            world[x, y].loot = true;
+                            if (seededRandom.NextDouble() < info.lootDensity)
+                                t.loot = true;
+                        }                    
                     }
 
+                    // clear spawn points
+                    /*
+                    foreach (Point bp in world.GetBoundary())
+                    {
+                        Tile t = world.map[bp];
+
+                        //t.solid = false;
+                        t.loot = false;
+                        //MyAssert.Assert(t.IsEmpty());
+                    }
+                    */
                 }
 
             // boundary will be spawning points
 
-            Dictionary<Point, Tile> spawnDic = new Dictionary<Point,Tile>();
-            Action<Point> addSpawn = (p) => spawnDic[p] = world[p.x, p.y];
+            Point spawnWorldPoint = new Point(0, 0);
+            World spawnWorld = GetWorld(spawnWorldPoint);
 
-            for (int x = 0; x < szX; ++x)
-            {
-                addSpawn(new Point(x, 0));
-                addSpawn(new Point(x, szY-1));
-            }
-
-            for (int y = 0; y < szY; ++y)
-            {
-                addSpawn(new Point(0, y));
-                addSpawn(new Point(szX - 1, y));
-            }
-
-            List<KeyValuePair<Point, Tile>> spawnLst = (from pair in spawnDic
+            List<KeyValuePair<Point, Tile>> spawnLst = (from pair in spawnWorld.GetSpawn()
                                                         orderby pair.Key.ToString()
                                                         select pair).ToList();
-            // clear spawning area
-            foreach (var kv in spawnLst)
-            {
-                kv.Value.solid = false;
-                kv.Value.loot = false;
-                MyAssert.Assert(kv.Value.IsEmpty());
-            }
 
             // deterministic shuffle
             spawnLst.Shuffle((n) => seededRandom.Next(n));
@@ -274,35 +489,39 @@ namespace ServerClient
             {
                 Point position = spawnLst[i].Key;
                 Guid id = playersInOrder[i];
-                Tile tile = spawnLst[i].Value;
                 Guid validator = validators.Random(n => seededRandom.Next(n));
 
-                Player newPlayer = new Player(position, id, PlayerNameMap(i), validator);
-                
-                MyAssert.Assert(tile.IsEmpty());
-                tile.p = newPlayer;
-
+                Player newPlayer = new Player(id, validator, PlayerNameMap(i));
                 players.Add(id, newPlayer);
+
+                spawnWorld.AddPlayer(id, position);
+
+                playerWorld.Add(id, spawnWorldPoint);
+                playerInventory.Add(id, new Inventory());
             }
         }
 
         public void ConsoleOut()
         {
-            int szX = world.GetLength(0);
-            int szY = world.GetLength(1);
+            World world = GetWorld(new Point(0, 0));
+
+            int szX = world.map.Size.x;
+            int szY = world.map.Size.y;
 
             char[,] pic = new char[szX, szY];
 
-            for (int x = 0; x < szX; ++x)
-                for (int y = szY-1; y >= 0; --y)
-                {
-                    if (world[x, y].solid)
-                        pic[x, y] = '*';
-                    else if (world[x, y].p != null)
-                        pic[x, y] = world[x, y].p.sName[0];
-                    else if (world[x, y].loot)
-                        pic[x, y] = '$';
-                }
+            foreach (var kv in world.map.GetEnum())
+            {
+                Point p = kv.Key;
+                Tile t = kv.Value;
+
+                if (t.solid)
+                    pic[p.x, p.y] = '*';
+                else if (t.player != Guid.Empty)
+                    pic[p.x, p.y] = players.GetValue(t.player).ShortName[0];
+                else if (t.loot)
+                    pic[p.x, p.y] = '$';
+            }
 
             for (int y = szY - 1; y >= 0; --y)
             {
@@ -310,55 +529,6 @@ namespace ServerClient
                     Console.Write(pic[x, y]);
                 Console.WriteLine();
             }
-        }
-
-        public MoveValidity CheckValidMove(Player p, Point newPos)
-        {
-            Point oldPos = players.GetValue(p.id).pos;
-
-            Tile t;
-            try
-            {
-                t = world[newPos.x, newPos.y];
-            }
-            catch (IndexOutOfRangeException)
-            {
-                return MoveValidity.BOUNDARY;
-            }
-
-            if (!t.IsEmpty())
-            {
-                if(t.p != null)
-                    return MoveValidity.OCCUPIED_PLAYER;
-                if(t.solid)
-                    return MoveValidity.OCCUPIED_WALL;
-
-                throw new InvalidOperationException("CheckValidMove: unexpected tile status");
-            }
-
-            Point diff = newPos - oldPos;
-            if (Math.Abs(diff.x) > 1)
-                return MoveValidity.TELEPORT;
-            if (Math.Abs(diff.y) > 1)
-                return MoveValidity.TELEPORT;
-
-            return MoveValidity.VALID;
-        }
-
-        public void Move(Player p, Point newPos, MoveValidity mv = MoveValidity.VALID)
-        {
-            if (CheckValidMove(p, newPos) != mv)
-                Log.LogWriteLine("Game.Move Warning: Invalid move {0} from {1} to {2} by {3}", CheckValidMove(p, newPos), p.pos, newPos, p.FullName);
-
-            MyAssert.Assert(world[p.pos.x, p.pos.y].p == p);
-            world[p.pos.x, p.pos.y].p = null;
-
-            Tile t = world[newPos.x, newPos.y];
-            MyAssert.Assert(t.IsEmpty());
-
-            p.pos = newPos;
-            t.p = p;
-            t.loot = false;
         }
     }
 }

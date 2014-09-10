@@ -16,12 +16,24 @@ namespace ServerClient
         VALIDATE_MOVE, MOVE,
         LOOT_PICKUP, LOOT_PICKUP_BROADCAST,
         VALIDATE_TELEPORT, FREEZE_ITEM, FREEZING_SUCCESS, FREEZING_FAIL,
-        UNFREEZE_ITEM, CONSUME_FROZEN_ITEM, TELEPORT, LOOT_CONSUMED
+        UNFREEZE_ITEM, CONSUME_FROZEN_ITEM, TELEPORT, LOOT_CONSUMED,
+        VALIDATE_REALM_MOVE, REALM_MOVE, REALM_MOVE_SUCESS, REALM_MOVE_FAIL,
+        REMOVE_PLAYER, ADD_PLAYER
     };
 
-    public enum MoveValidity { VALID, BOUNDARY, OCCUPIED_PLAYER, OCCUPIED_WALL, TELEPORT };
+    public enum MoveValidity
+    {
+        VALID = 0,
+        BOUNDARY = 1,
+        OCCUPIED_PLAYER = 2,
+        OCCUPIED_WALL = 4,
+        TELEPORT = 8,
+        NEW = 16
+    };
 
     public enum NodeRole { PLAYER, WORLD, POTENTIAL_VALIDATOR, PLAYER_VALIDATOR, WORLD_VALIDATOR };
+
+    public enum MoveType { MOVE, LEAVE, JOIN };
 
     abstract class MessageReceiver
     {
@@ -65,6 +77,7 @@ namespace ServerClient
             
             messages.Add(MessageType.VALIDATE_MOVE, new MessageInfo(NodeRole.PLAYER, NodeRole.WORLD_VALIDATOR));
             messages.Add(MessageType.VALIDATE_TELEPORT, new MessageInfo(NodeRole.PLAYER, NodeRole.WORLD_VALIDATOR));
+            messages.Add(MessageType.VALIDATE_REALM_MOVE, new MessageInfo(NodeRole.PLAYER, NodeRole.WORLD_VALIDATOR));
 
             messages.Add(MessageType.MOVE, new MessageInfo(NodeRole.WORLD_VALIDATOR, NodeRole.PLAYER));
             messages.Add(MessageType.TELEPORT, new MessageInfo(NodeRole.WORLD_VALIDATOR, NodeRole.PLAYER));
@@ -79,6 +92,14 @@ namespace ServerClient
 
             messages.Add(MessageType.FREEZING_SUCCESS, new MessageInfo(NodeRole.PLAYER_VALIDATOR, NodeRole.WORLD_VALIDATOR));
             messages.Add(MessageType.FREEZING_FAIL, new MessageInfo(NodeRole.PLAYER_VALIDATOR, NodeRole.WORLD_VALIDATOR));
+
+            messages.Add(MessageType.REALM_MOVE, new MessageInfo(NodeRole.WORLD_VALIDATOR, NodeRole.WORLD_VALIDATOR));
+            messages.Add(MessageType.REALM_MOVE_FAIL, new MessageInfo(NodeRole.WORLD_VALIDATOR, NodeRole.WORLD_VALIDATOR));
+            messages.Add(MessageType.REALM_MOVE_SUCESS, new MessageInfo(NodeRole.WORLD_VALIDATOR, NodeRole.WORLD_VALIDATOR));
+
+            messages.Add(MessageType.REMOVE_PLAYER, new MessageInfo(NodeRole.WORLD_VALIDATOR, NodeRole.PLAYER));
+            messages.Add(MessageType.ADD_PLAYER, new MessageInfo(NodeRole.WORLD_VALIDATOR, NodeRole.PLAYER));
+
 
             validators.Add(NodeRole.WORLD_VALIDATOR);
             validators.Add(NodeRole.PLAYER_VALIDATOR);
@@ -174,6 +195,20 @@ namespace ServerClient
                                                where roles.ContainsValue(id, NodeRole.POTENTIAL_VALIDATOR)
                                                select id);
             return role;
+        }
+
+        public void SendValidatorMessage(MessageType mt, Guid sender, Guid receiver, params object[] args)
+        {
+            List<object> l = new List<object>();
+            l.Add(sender);
+            l.Add(receiver);
+            l.AddRange(args);
+
+            object[] newArgs = l.ToArray();
+
+            Guid validator = GetValidtor(receiver);
+
+            NodeById(validator).SendMessage(mt, newArgs);
         }
     }
 
