@@ -42,29 +42,30 @@ namespace ServerClient
         }
     }
 
-    
-
     class NodeCollection
     {
         public const int nStartPort = 3000;
         const int nPortTries = 25;
 
-        Dictionary<string, Node> nodes = new Dictionary<string, Node>();
-        Handshake myInfo;
+        Dictionary<OverlayHost, Dictionary<OverlayEndpoint, Node> > nodes =
+            new Dictionary<OverlayHost,Dictionary<OverlayEndpoint,Node>>();
+        
         SocketListener sl;
         Action<Action> processQueue;
         Action<Node, Stream, MessageType> messageProcessor;
         Action<Node> onNewConnection;
 
-        public IPEndPoint MyAddress { get { return myInfo.addr; } }
+        public IPEndPoint MyAddress { get; private set; }
 
-        public NodeCollection(Action<Action> processQueue_, Action<Node, Stream, MessageType> messageProcessor_, Action<Node> onNewConnection_)
+        public NodeCollection(Action<Action> processQueue_,
+            Action<Node, Stream, MessageType> messageProcessor_,
+            Action<Node> onNewConnection_)
         {
             processQueue = processQueue_;
             messageProcessor = messageProcessor_;
             onNewConnection = onNewConnection_;
             StartListening();
-            ConnectAsync(myInfo.addr);
+            //ConnectAsync(myInfo.addr);
         }
 
         void StartListening()
@@ -78,15 +79,14 @@ namespace ServerClient
 
             try
             {
-                IPEndPoint my_addr = null;
                 int i;
                 for (i = 0; i < nPortTries; ++i)
                 {
                     try
                     {
                         int nPort = nStartPort + i;
-                        my_addr = new IPEndPoint(ip, nPort);
-                        sckListen.Bind(my_addr);
+                        MyAddress = new IPEndPoint(ip, nPort);
+                        sckListen.Bind(MyAddress);
                         Log.LogWriteLine("Listening at {0}:{1}", ip, nPort);
                         break;
                     }
@@ -99,8 +99,6 @@ namespace ServerClient
                     throw new Exception("Unsucessful binding to ports");
                 }
                 sckListen.Listen(10);
-
-                myInfo = new Handshake(my_addr);
 
                 sl = new SocketListener(
                     ConnectionProcessor.ProcessWithHandshake(
@@ -120,15 +118,15 @@ namespace ServerClient
             Log.LogWriteLine("{0} disconnected on {1} ({2})", n.Address, ds, (ioex == null) ? "" : ioex.Message);
             RemoveNode(n);
         }
-        void Sync_NewIncomingConnection(Handshake theirInfo, Socket sck)
+        void Sync_NewIncomingConnection(Handshake info, Socket sck)
         {
             try
             {
-                Node targetNode = FindNode(theirInfo.addr);
+                Node targetNode = FindNode(info.local.host, info.remote);
 
                 if (targetNode == null)
                 {
-                    targetNode = new Node(theirInfo.addr, processQueue, (n, e, t) => this.Sync_ProcessDisconnect(n, e, t));
+                    targetNode = new Node(info, processQueue, (n, e, t) => this.Sync_ProcessDisconnect(n, e, t));
                     AddNode(targetNode);
                 }
 
@@ -138,7 +136,7 @@ namespace ServerClient
 
                 if (targetNode.readerStatus != Node.ReadStatus.READY)
                 {
-                    Log.LogWriteLine("New connection {0} rejected: node already connected", theirInfo.addr);
+                    Log.LogWriteLine("New connection {0} rejected: node already connected", info.remote.addr);
                     sck.Close();
                     return;
                 }
@@ -190,13 +188,15 @@ namespace ServerClient
             onNewConnection.Invoke(n);
         }
 
-        public Node ConnectAsync(IPEndPoint their_addr)
+        public Node ConnectAsync(OverlayHost ourHost, OverlayEndpoint theirInfo)
         {
-            Node targetNode = FindNode(their_addr);
+            Node targetNode = FindNode(ourHost, theirInfo);
+
+            Handshake info = new Handshake(new OverlayEndpoint(MyAddress, ourHost), theirInfo);
 
             if (targetNode == null)
             {
-                targetNode = new Node(their_addr, processQueue, (n, e, t) => this.Sync_ProcessDisconnect(n, e, t));
+                targetNode = new Node(info, processQueue, (n, e, t) => this.Sync_ProcessDisconnect(n, e, t));
                 AddNode(targetNode);
             }
 
@@ -205,19 +205,19 @@ namespace ServerClient
             MyAssert.Assert(!targetNode.IsClosed);
 
             if (targetNode.writerStatus == Node.WriteStatus.CONNECTED)
-                throw new NodeException("Already connected to " + their_addr.ToString());
+                throw new NodeException("Already connected to " + targetNode.Address);
             else if (targetNode.writerStatus == Node.WriteStatus.CONNECTING)
-                throw new NodeException("Connection in progress " + their_addr.ToString());
+                throw new NodeException("Connection in progress " + targetNode.Address);
             else
                 ConnectNodeAsync(targetNode);
 
             return targetNode;
         }
-        public Node TryConnectAsync(IPEndPoint their_addr)
+        public Node TryConnectAsync(OverlayHost ourHost, OverlayEndpoint theirInfo)
         {
             try
             {
-                return ConnectAsync(their_addr);
+                return ConnectAsync(ourHost, theirInfo);
             }
             catch (NodeException)
             {
@@ -228,8 +228,7 @@ namespace ServerClient
         void ConnectNodeAsync(Node n)
         {
             n.ConnectAsync(
-                            () => this.Sync_OutgoingConnectionReady(n),
-                            myInfo
+                            () => this.Sync_OutgoingConnectionReady(n)
                           );
         }
 
@@ -242,7 +241,9 @@ namespace ServerClient
 
         public IEnumerable<Node> GetAllNodes()
         {
-            return from n in nodes select n.Value;
+            return from dict in nodes.Values
+                   from n in dict.Values
+                   select n;
         }
         public void Close()
         {
@@ -253,22 +254,27 @@ namespace ServerClient
 
             sl.TerminateThread();
         }
-        public Node FindNode(IPEndPoint addr)
+        public Node FindNode(OverlayHost ourHost, OverlayEndpoint theirInfo)
         {
-            Node n = null;
-            nodes.TryGetValue(addr.ToString(), out n);
-            return n;
+            try
+            {
+                return nodes.GetValue(ourHost).GetValue(theirInfo);
+            }
+            catch (InvalidOperationException)
+            {
+                return null;
+            }
         }
 
         void AddNode(Node n)
         {
-            MyAssert.Assert(!nodes.ContainsKey(n.Address.ToString()));
-            nodes.Add(n.Address.ToString(), n);
+            MyAssert.Assert(FindNode(n.info.local.host, n.info.remote) == null);
+            nodes[n.info.local.host].Add(n.info.remote, n);
         }
         void RemoveNode(Node n)
         {
-            MyAssert.Assert(nodes.ContainsKey(n.Address.ToString()));
-            nodes.Remove(n.Address.ToString());
+            MyAssert.Assert(FindNode(n.info.local.host, n.info.remote) != null);
+            nodes[n.info.local.host].Remove(n.info.remote);
         }
     }
 }

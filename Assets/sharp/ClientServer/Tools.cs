@@ -163,7 +163,7 @@ namespace ServerClient
         {
             if (dict.ContainsKey(key))
                 return dict[key];
-            throw new Exception("Key not found " + key.ToString());
+            throw new InvalidOperationException("Key not found " + key.ToString());
         }
     }
 }

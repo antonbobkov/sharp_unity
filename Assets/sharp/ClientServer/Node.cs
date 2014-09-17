@@ -25,9 +25,22 @@ namespace ServerClient
             set { ipAddr = value.Address.GetAddressBytes(); port = value.Port; }
         }        
     }
+
+    [Serializable]
+    public class OverlayHost
+    {
+        Guid id;
+
+        OverlayHost(Guid id_) { id = id_; }
+
+        public override string ToString()
+        {
+            return id.ToString();
+        }
+    }
     
     [Serializable]
-    public class Handshake
+    public class OverlayEndpoint
     {
         [XmlIgnoreAttribute]
         public IPEndPoint addr;
@@ -37,19 +50,35 @@ namespace ServerClient
             get { return new IPEndPointSer(addr); }
             set { addr = value.Addr; }
         }
+        public OverlayHost host;
 
-        public Handshake() { }
-        public Handshake(IPEndPoint addr_)
+        public OverlayEndpoint() { }
+        public OverlayEndpoint(IPEndPoint addr_, OverlayHost host_)
         {
             addr = addr_;
+            host = host_;
         }
 
         public override string ToString()
         {
-            return addr.ToString();
+            return addr.ToString() + " " + host.ToString();
         }
     }
 
+    [Serializable]
+    public class Handshake
+    {
+        public readonly OverlayEndpoint remote;
+        public readonly OverlayEndpoint local;
+
+        public Handshake() { }
+        public Handshake(OverlayEndpoint local_, OverlayEndpoint remote_)
+        {
+            remote = remote_;
+            local = local_;
+        }
+    }
+    
     enum DisconnectType { READ, WRITE, WRITE_CONNECT_FAIL, CLOSED }
 
     class NodeException : Exception
@@ -59,9 +88,9 @@ namespace ServerClient
 
     class Node
     {
-        public Node(IPEndPoint addr, Action<Action> actionQueue_, Action<Node, Exception, DisconnectType> processDisonnect_)
+        public Node(Handshake info_, Action<Action> actionQueue_, Action<Node, Exception, DisconnectType> processDisonnect_)
         {
-            info = new Handshake(addr);
+            info = info_;
             actionQueue = actionQueue_;
             notifyDisonnect = processDisonnect_;
 
@@ -69,13 +98,12 @@ namespace ServerClient
             readerStatus = ReadStatus.READY;
         }
 
-        public IPEndPoint Address{ get { return info.addr; } }
         public bool IsClosed { get; private set; }
         
         public string FullDescription()
         {
             var sb = new StringBuilder();
-            sb.AppendFormat("Address: {0} Read: {1} Write: {2}", Address, readerStatus, writerStatus);
+            sb.AppendFormat("Address: {0} Read: {1} Write: {2}", info, readerStatus, writerStatus);
             return sb.ToString();
         }
 
@@ -86,6 +114,8 @@ namespace ServerClient
 
             writer.SendMessage(mt, messages);
         }
+
+        public IPEndPoint Address { get { return info.remote.addr; } }
 
         // --- private ---
 
@@ -98,9 +128,10 @@ namespace ServerClient
         SocketReader reader;
         internal ReadStatus readerStatus { get; private set; }
 
-        Handshake info;
         Action<Action> actionQueue;
         Action<Node, Exception, DisconnectType> notifyDisonnect;
+
+        internal Handshake info;
 
         internal bool AreBothConnected() { return writerStatus == WriteStatus.CONNECTED && readerStatus == ReadStatus.CONNECTED; }
 
@@ -151,14 +182,14 @@ namespace ServerClient
             AcceptWritingConnection(sck);
         }
         */
-        internal void ConnectAsync(Action onSuccess, Handshake myInfo)
+        internal void ConnectAsync(Action onSuccess)
         {
-            Socket sck = GetReadyForNewWritingConnection(myInfo);
+            Socket sck = GetReadyForNewWritingConnection();
 
             try
             {
                 ThreadManager.NewThread(() => ConnectingThread(sck, onSuccess),
-                    () => sck.Close(), "connect to " + Address.ToString());
+                    () => sck.Close(), "connect to " + info.ToString());
                 //new Thread( () => ConnectingThread(sck, onSuccess) ).Start();
             }
             catch (Exception)
@@ -208,7 +239,7 @@ namespace ServerClient
                 onSuccess.Invoke();
             });
         }
-        Socket GetReadyForNewWritingConnection(Handshake myInfo)
+        Socket GetReadyForNewWritingConnection()
         {
             if (IsClosed)
                 throw new NodeException("GetReadyForNewWritingConnection: node is disconnected " + FullDescription());
@@ -218,7 +249,7 @@ namespace ServerClient
 
             writerStatus = WriteStatus.CONNECTING;
 
-            SendMessage(MessageType.HANDSHAKE, myInfo);
+            SendMessage(MessageType.HANDSHAKE, info);
 
             return new Socket(
                     Address.AddressFamily,

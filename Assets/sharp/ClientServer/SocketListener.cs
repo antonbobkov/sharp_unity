@@ -53,12 +53,12 @@ namespace ServerClient
 
     class ConnectionProcessor
     {
-        public static Action<Socket> ProcessWithHandshake(Action<Handshake, Socket> processConnection)
+        public static Action<Socket> ProcessWithHandshake(Action<OverlayEndpoint, Socket> processConnection)
         {
             return (sck) => ConnectionHandshakeAsync(sck, processConnection);
         }
 
-        public static void ConnectionHandshakeAsync(Socket sckRead, Action<Handshake, Socket> processConnection)
+        public static void ConnectionHandshakeAsync(Socket sckRead, Action<OverlayEndpoint, Socket> processConnection)
         {
             try
             {
@@ -74,7 +74,7 @@ namespace ServerClient
         
         }
         
-        public static void ConnectionHandshake(Socket sckRead, Action<Handshake, Socket> processConnection)
+        public static void ConnectionHandshake(Socket sckRead, Action<OverlayEndpoint, Socket> processConnection)
         {
             using (NetworkStream connectionStream = new NetworkStream(sckRead, false))
             {
@@ -90,7 +90,7 @@ namespace ServerClient
                         return;
                     }
 
-                    Handshake their_info = Serializer.Deserialize<Handshake>(connectionStream);
+                    OverlayEndpoint their_info = Serializer.Deserialize<OverlayEndpoint>(connectionStream);
 
                     processConnection(their_info, sckRead);
                 }
