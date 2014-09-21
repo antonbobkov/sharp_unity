@@ -29,14 +29,17 @@ namespace ServerClient
     [Serializable]
     public class OverlayHost
     {
-        Guid id;
+        string id;
 
-        OverlayHost(Guid id_) { id = id_; }
+        OverlayHost(string id_) { id = id_; }
 
         public override string ToString()
         {
-            return id.ToString();
+            return id;
         }
+
+        public override bool Equals(object comparand) { return this.ToString().Equals(comparand.ToString());  }
+        public override int GetHashCode() { return this.ToString().GetHashCode(); }
     }
     
     [Serializable]
@@ -52,7 +55,6 @@ namespace ServerClient
         }
         public OverlayHost host;
 
-        public OverlayEndpoint() { }
         public OverlayEndpoint(IPEndPoint addr_, OverlayHost host_)
         {
             addr = addr_;
@@ -63,6 +65,9 @@ namespace ServerClient
         {
             return addr.ToString() + " " + host.ToString();
         }
+
+        public override bool Equals(object comparand) { return this.ToString().Equals(comparand.ToString()); }
+        public override int GetHashCode() { return this.ToString().GetHashCode(); }
     }
 
     [Serializable]

@@ -49,7 +49,7 @@ namespace ServerClient
 
         Dictionary<OverlayHost, Dictionary<OverlayEndpoint, Node> > nodes =
             new Dictionary<OverlayHost,Dictionary<OverlayEndpoint,Node>>();
-        
+
         SocketListener sl;
         Action<Action> processQueue;
         Action<Node, Stream, MessageType> messageProcessor;

@@ -8,6 +8,7 @@ using System.Text;
 using System.Threading;
 using System.IO;
 using System.Diagnostics;
+using System.Xml.Serialization;
 
 namespace ServerClient
 {
@@ -15,7 +16,7 @@ namespace ServerClient
     {
         static Random rand = new Random();
         
-        static void PlayerRandomMove(Aggregate a, Guid player)
+        /*static void PlayerRandomMove(Aggregate a, Guid player)
         {
             Game g = a.game;
             if (g == null)
@@ -63,7 +64,7 @@ namespace ServerClient
             else if(mv == MoveValidity.BOUNDARY)
                 a.Move(p, newPosition, MessageType.VALIDATE_REALM_MOVE);
         }
-
+        */
         static void RepeatedAction(Action<Action> queue, Action a, int period)
         {
             while (true)
@@ -102,8 +103,7 @@ namespace ServerClient
                 }
             }
         }
-
-        static public void MeshConnect(Aggregate all)
+        /*static public void MeshConnect(Aggregate all)
         {
             all.sync.Add(() =>
                 {
@@ -132,7 +132,8 @@ namespace ServerClient
                 //Log.LogWriteLine("Error: {0}", e.Message);
             }
         }
-        static public void Ai(Aggregate all)
+         */
+        /*static public void Ai(Aggregate all)
         {
             foreach (var id in all.gameAssignments.GetMyRoles(NodeRole.PLAYER))
             {
@@ -142,9 +143,38 @@ namespace ServerClient
                 //new Thread(() => RepeatedAction(all.sync.GetAsDelegate(), () => PlayerRandomMove(all, idCopy), rand.Next(300, 700))).Start();
             }
         }
-        
+        */
+
         static void Main(string[] args)
         {
+            Point sz = new Point(2,2);
+            Plane<Tile> pl = new Plane<Tile>(sz);
+            foreach (Point p in Point.Range(sz))
+            {
+                Tile t = new Tile();
+                if (rand.NextDouble() < .3)
+                    t.loot = true;
+                else if (rand.NextDouble() < .3)
+                    t.solid = true;
+                pl[p] = t;
+            }
+
+            MemoryStream ms = new MemoryStream();
+
+            XmlSerializer ser = new XmlSerializer(pl.GetType());
+            ser.Serialize(ms, pl);
+
+            //Log.LogWriteLine("XML of size {1}:\n{0}", System.Text.Encoding.Default.GetString(ms.ToArray()), ms.Length);
+
+            ms.Position = 0;
+
+            Plane<Tile> pl2 = (Plane<Tile>)ser.Deserialize(ms);
+        }
+        
+        
+        static void Main2(string[] args)
+        {
+            /*
             Aggregate all = new Aggregate();
             all.sync.Add(() =>
             {
@@ -236,6 +266,7 @@ namespace ServerClient
                 param.RemoveRange(0, 1);
                 inputProc.Process(sCommand, param);
             }
+            */
         }
     }
 }

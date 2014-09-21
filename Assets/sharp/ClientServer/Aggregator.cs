@@ -12,7 +12,7 @@ using System.Diagnostics;
 
 namespace ServerClient
 {
-    class Aggregate
+    /*class Aggregate
     {
         public static System.Random r = new System.Random();
 
@@ -243,7 +243,7 @@ namespace ServerClient
         public void SetMoveHook(Action<World, Player, MoveType> hook)
         { manager.playerMessageReciever.pa.onMoveHook = hook; }
     }
-
+    */
     class Validator
     {
         protected Guid myId;
@@ -736,5 +736,28 @@ namespace ServerClient
             Log.LogWriteLine("Player {0} added to world {1} at {2}", p.FullName, w.worldPosition, newPos);
             onMoveHook(w, p, MoveType.JOIN);
         }
+    }
+
+    [Serializable]
+    class PlayerInfo
+    {
+        public Guid playerId;
+        public OverlayEndpoint playerHost;
+
+        public OverlayEndpoint validatorHost;
+    }
+
+    [Serializable]
+    class WorldInfo
+    {
+        public Point globalPosition;
+        public OverlayEndpoint validatorHost;
+    }
+
+    [Serializable]
+    class GameInfo
+    {
+        public Dictionary<Guid, PlayerInfo> allPlayers;
+        public Dictionary<Point, WorldInfo> allWorlds;
     }
 }

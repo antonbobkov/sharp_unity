@@ -3,6 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Diagnostics;
+using System.Xml.Serialization;
+using System.ComponentModel;
+
 
 namespace ServerClient
 {
@@ -42,39 +45,40 @@ namespace ServerClient
         }
     }
 
-    class Plane<T>
+
+    [Serializable]
+    public class Plane<T>
     {
-        T[,] plane;
+        public T[] plane;
+        public Point Size { get; set; }
 
-        public Plane(Point size) { plane = new T[size.x, size.y]; Size = size; }
-
-        public Point Size { get; private set; }
+        public Plane() { }
+        public Plane(Point size) { plane = new T[size.x * size.y]; Size = size; }
 
         public T this[Point pos]
         {
             get { return this[pos.x, pos.y]; }
             set { this[pos.x, pos.y] = value; }
         }
-
         public T this[int x, int y]
         {
-            get { return plane[x, y]; }
-            set { plane[x, y] = value; }
+            get { return plane[y*Size.x + x]; }
+            set { plane[y*Size.x + x] = value; }
         }
 
         public IEnumerable<T> GetTiles()
         {
             foreach (Point p in Point.Range(Size))
-                yield return plane[p.x, p.y];
+                yield return this[p];
         }
-
         public IEnumerable<KeyValuePair<Point, T>> GetEnum()
         {
             foreach(Point p in Point.Range(Size))
-                    yield return new KeyValuePair<Point, T>(p, plane[p.x, p.y]);
+                yield return new KeyValuePair<Point, T>(p, this[p]);
         }
     }
 
+    [Serializable]
     class Inventory
     {
         public int teleport = 0;
@@ -99,23 +103,8 @@ namespace ServerClient
         }
     }
 
-    /*
     [Serializable]
-    public class PlayerMoveInfo
-    {
-        public Guid id;
-        public Point pos;
-
-        public PlayerMoveInfo() { }
-        public PlayerMoveInfo(Guid id_, Point pos_)
-        {
-            id = id_;
-            pos = pos_;
-        }
-    }
-     * */
-
-    class Tile
+    public class Tile
     {
         public bool solid = false;
         public Guid player = Guid.Empty;
