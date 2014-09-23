@@ -244,7 +244,7 @@ namespace ServerClient
         { manager.playerMessageReciever.pa.onMoveHook = hook; }
     }
     */
-    class Validator
+    /*class Validator
     {
         protected Guid myId;
         protected AssignmentInfo gameInfo;
@@ -258,9 +258,9 @@ namespace ServerClient
 
         Action<MessageType, object[]> broadcaster;
         protected void Broadcast(MessageType mt, params object[] objs) { broadcaster.Invoke(mt, objs); }
-    }
+    }*/
 
-    class WorldValidatorProcessor : MessageReceiver
+    /*class WorldValidatorProcessor : MessageReceiver
     {
         public Dictionary<Guid, WorldValidator> validators = new Dictionary<Guid,WorldValidator>();
 
@@ -321,9 +321,9 @@ namespace ServerClient
                     throw new Exception("WorldValidatorProcessor: Unsupported message " + mt.ToString());
             });
         }
-    }
+    }*/
 
-    class MoveLock
+    /*class MoveLock
     {
         public Point newPos;
         public bool teleport;
@@ -333,9 +333,9 @@ namespace ServerClient
             newPos = newPos_;
             teleport = teleport_;
         }
-    }
+    }*/
     
-    class WorldValidator : Validator
+    /*class WorldValidator : Validator
     {
         Dictionary<Point, Guid> worldByPoint;
         internal World validatorWorld;
@@ -353,6 +353,28 @@ namespace ServerClient
 
             validatorWorld.onLootHook = OnLootPickup;
         }
+
+        public void ProcessPlayerMessage(MessageType mt, Stream stm, Action<Action> syncronizer, Guid playerId)
+        {
+            Point newPos = Serializer.Deserialize<Point>(stm);
+
+            syncronizer.Invoke(() =>
+            {
+                Player p = validatorWorld.players.GetValue(playerId);
+
+                Point currPos = validatorWorld.playerPositions.GetValue(p.id);
+
+                if (mt == MessageType.VALIDATE_MOVE)
+                    OnValidateMove(p, currPos, newPos);
+                else if (mt == MessageType.VALIDATE_TELEPORT)
+                    OnValidateTeleport(p, currPos, newPos);
+                else if (mt == MessageType.VALIDATE_REALM_MOVE)
+                    OnValidateRealmMove(p, currPos, newPos, false);
+                else
+                    throw new Exception("WorldValidatorProcessor ProcessPlayerMessage: Unsupported message " + mt.ToString());
+            });
+        }
+        //public void ProcessPlayerValidatorMessage(MessageType mt, Stream stm, Action<Action> syncronizer
 
         void OnLootPickup(Player p)
         {
@@ -548,9 +570,9 @@ namespace ServerClient
 
             Log.LogWriteLine("Validator: Freeze failed. Was trying to teleport from {0} to {1} by {2}.", currPos, newPos, p.FullName);
         }
-    }
+    }*/
 
-    class PlayerValidatorProcessor : MessageReceiver
+    /*class PlayerValidatorProcessor : MessageReceiver
     {
         public Dictionary<Guid, PlayerValidator> validators = new Dictionary<Guid,PlayerValidator>();
 
@@ -571,9 +593,9 @@ namespace ServerClient
                         throw new Exception("PlayerValidatorProcessor: Unsupported message " + mt.ToString());
                 });
         }
-    }
+    }*/
 
-    class PlayerValidator : Validator
+    /*class PlayerValidator : Validator
     {
         Inventory validatorInventory = new Inventory();
         string name;
@@ -625,9 +647,9 @@ namespace ServerClient
             Log.LogWriteLine("{0} consume teleport, now has {1} (validator)", name, validatorInventory.teleport);
             Broadcast(MessageType.LOOT_CONSUMED, myId, myId);
         }
-    }
+    }*/
 
-    class PlayerActorProcessor : MessageReceiver
+    /*class PlayerActorProcessor : MessageReceiver
     {
         public PlayerActor pa = null;
 
@@ -674,9 +696,9 @@ namespace ServerClient
             }
 
         }
-    }
+    }*/
     
-    class PlayerActor
+    /*class PlayerActor
     {
         internal Game game;
 
@@ -736,28 +758,382 @@ namespace ServerClient
             Log.LogWriteLine("Player {0} added to world {1} at {2}", p.FullName, w.worldPosition, newPos);
             onMoveHook(w, p, MoveType.JOIN);
         }
+    }*/
+
+    class DelayedAction
+    {
+        public OverlayEndpoint ep;
+        public Action a;
     }
 
-    [Serializable]
-    class PlayerInfo
+    class Server
     {
-        public Guid playerId;
-        public OverlayEndpoint playerHost;
+        public static readonly OverlayHostName hostName = new OverlayHostName("server");
+        
+        Random r = new Random();
+        
+        GameInfo gameState = new GameInfo();
+        List<IPEndPoint> validatorPool = new List<IPEndPoint>();
 
-        public OverlayEndpoint validatorHost;
+        Action<Action> sync;
+        OverlayHost myHost;
+
+        int playerCounter = 1;
+
+        Dictionary<Guid, DelayedAction> delayedActions = new Dictionary<Guid,DelayedAction>();
+
+        public OverlayEndpoint Address { get { return myHost.Address; } }
+
+        public Server(Action<Action> sync_, GlobalHost globalHost)
+        {
+            sync = sync_;
+
+            myHost = globalHost.NewHost(Server.hostName, AssignProcessor);
+            myHost.onNewConnectionHook = ProcessNewConnection;
+        }
+        
+        Node.MessageProcessor AssignProcessor(Node n)
+        {
+            OverlayHostName remoteName = n.info.remote.hostname;
+            if (remoteName == Client.hostName)
+                return ProcessClientMessage;
+
+            throw new InvalidOperationException("Server.AssignProcessor unexpected connection " + remoteName.ToString());
+        }
+        void ProcessClientMessage(MessageType mt, Stream stm, Node n)
+        {
+            if (mt == MessageType.NEW_PLAYER)
+            {
+                Guid player = Serializer.Deserialize<Guid>(stm);
+                sync.Invoke(() => OnNewPlayerRequest(player, n.info.remote));
+            }
+            else if (mt == MessageType.NEW_WORLD)
+            {
+                Point worldPos = Serializer.Deserialize<Point>(stm);
+                sync.Invoke(() => OnNewWorldRequest(worldPos));
+            }
+            else if (mt == MessageType.NEW_VALIDATOR)
+            {
+                sync.Invoke(() => OnNewValidator(n.info.remote.addr));
+            }
+            else if (mt == MessageType.ACCEPT)
+            {
+                Guid actionId = Serializer.Deserialize<Guid>(stm);
+                sync.Invoke(() => OnAccept(actionId, n.info.remote));
+            }
+            else
+                throw new Exception("Client.ProcessClientMessage bad message type " + mt.ToString());
+        }
+
+        void ProcessNewConnection(Node n)
+        {
+            OverlayHostName remoteName = n.info.remote.hostname;
+
+            if (remoteName == Client.hostName)
+                OnNewClient(n);
+            else
+                throw new InvalidOperationException("Server.ProcessNewConnection unexpected connection " + remoteName.ToString());
+        }
+        void OnNewClient(Node n)
+        {
+            n.SendMessage(MessageType.GAME_INFO, gameState.Serialize());
+        }
+
+        void OnNewPlayerRequest(Guid playerId, OverlayEndpoint playerHost)
+        {
+            Guid validatorId = Guid.NewGuid();
+            OverlayEndpoint validatorHost = new OverlayEndpoint(validatorPool.Random(n => r.Next(n)), new OverlayHostName(validatorId.ToString()));
+
+            OverlayEndpoint playerNewHost = new OverlayEndpoint(playerHost.addr, new OverlayHostName(playerId.ToString()));
+            PlayerInfo info = new PlayerInfo(playerId, playerNewHost, validatorHost, (playerCounter++).ToString());
+
+            OverlayEndpoint validatorClient = new OverlayEndpoint(validatorHost.addr, Client.hostName);
+            myHost.SendMessage(validatorClient, MessageType.PLAYER_VALIDATOR_ASSIGN, validatorId, info);
+
+            DelayedAction da = new DelayedAction()
+            {
+                ep = validatorClient,
+                a = () =>
+                {
+                    gameState.AddPlayer(info);
+                    myHost.BroadcastGroup(Client.hostName, MessageType.NEW_PLAYER, info);
+                }
+            };
+
+            delayedActions.Add(validatorId, da);
+        }
+        void OnNewValidator(IPEndPoint ip)
+        {
+            MyAssert.Assert(!validatorPool.Where((valip) => valip == ip).Any());
+            validatorPool.Add(ip);
+        }
+        void OnNewWorldRequest(Point worldPos)
+        {
+            Guid validatorId = Guid.NewGuid();
+            OverlayEndpoint validatorHost = new OverlayEndpoint(validatorPool.Random(n => r.Next(n)), new OverlayHostName(validatorId.ToString()));
+
+            WorldInfo info = new WorldInfo(worldPos, validatorHost);
+
+            OverlayEndpoint validatorClient = new OverlayEndpoint(validatorHost.addr, Client.hostName);
+            myHost.SendMessage(validatorClient, MessageType.WORLD_VALIDATOR_ASSIGN, validatorId, info);
+
+            DelayedAction da = new DelayedAction()
+            {
+                ep = validatorClient,
+                a = () =>
+                {
+                    gameState.AddWorld(info);
+                    myHost.BroadcastGroup(Client.hostName, MessageType.NEW_WORLD, info);
+                }
+            };
+
+            delayedActions.Add(validatorId, da);
+
+        }
+
+        void OnAccept(Guid id, OverlayEndpoint remote)
+        {
+            DelayedAction da = delayedActions.GetValue(id);
+            delayedActions.Remove(id);
+
+            MyAssert.Assert(da.ep == remote);
+
+            da.a();
+        }
     }
 
-    [Serializable]
-    class WorldInfo
+    class Client
     {
-        public Point globalPosition;
-        public OverlayEndpoint validatorHost;
+        public static readonly OverlayHostName hostName = new OverlayHostName("client");
+
+        GameInfo gameState = null;
+        OverlayEndpoint serverHost = null;
+        Node server = null;
+
+        Action<Action> sync;
+        OverlayHost myHost;
+
+        public Action hookServerReady = () => { };
+
+        public Client(Action<Action> sync_, GlobalHost globalHost)
+        {
+            sync = sync_;
+
+            myHost = globalHost.NewHost(Client.hostName, AssignProcessor);
+            myHost.onNewConnectionHook = ProcessNewConnection;
+        }
+
+        Node.MessageProcessor AssignProcessor(Node n)
+        {
+            OverlayHostName remoteName = n.info.remote.hostname;
+            if (remoteName == Client.hostName)
+                return ProcessClientMessage;
+
+            if (remoteName == Server.hostName)
+                return ProcessServerMessage;
+
+            throw new InvalidOperationException("Client.AssignProcessor unexpected connection " + remoteName.ToString());
+        }
+        void ProcessClientMessage(MessageType mt, Stream stm, Node n)
+        {
+            if (mt == MessageType.SERVER_ADDRESS)
+            {
+                OverlayEndpoint host = Serializer.Deserialize<OverlayEndpoint>(stm);
+                sync.Invoke(() => OnServerAddress(host));
+            }
+            else
+                throw new Exception("Client.ProcessClientMessage bad message type " + mt.ToString());
+        }
+        void ProcessServerMessage(MessageType mt, Stream stm, Node n)
+        {
+            if (mt == MessageType.GAME_INFO)
+            {
+                GameInfoSerialized info = Serializer.Deserialize<GameInfoSerialized>(stm);
+                sync.Invoke(() => OnGameInfo(new GameInfo(info)));
+            }
+            else if (mt == MessageType.NEW_PLAYER)
+            {
+                PlayerInfo info = Serializer.Deserialize<PlayerInfo>(stm);
+                sync.Invoke(() => OnNewPlayer(info));
+            }
+            else if (mt == MessageType.NEW_WORLD)
+            {
+                WorldInfo info = Serializer.Deserialize<WorldInfo>(stm);
+                sync.Invoke(() => OnNewWorld(info));
+            }
+            else if (mt == MessageType.PLAYER_VALIDATOR_ASSIGN)
+            {
+                Guid actionId = Serializer.Deserialize<Guid>(stm);
+                PlayerInfo info = Serializer.Deserialize<PlayerInfo>(stm);
+                sync.Invoke(() => OnPlayerValidateRequest(actionId, info));
+            }
+            else if (mt == MessageType.WORLD_VALIDATOR_ASSIGN)
+            {
+                Guid actionId = Serializer.Deserialize<Guid>(stm);
+                WorldInfo info = Serializer.Deserialize<WorldInfo>(stm);
+                sync.Invoke(() => OnWorldValidateRequest(actionId, info));
+            }
+            else
+                throw new Exception("Client.ProcessServerMessage bad message type " + mt.ToString());
+        }
+
+        void ProcessNewConnection(Node n)
+        {
+            OverlayHostName remoteName = n.info.remote.hostname;
+
+            if (remoteName == Client.hostName)
+                OnNewClient(n);
+            else if (remoteName == Server.hostName)
+            {
+                MyAssert.Assert(serverHost == n.info.remote);
+            }
+            else
+                throw new InvalidOperationException("Server.ProcessNewConnection unexpected connection " + remoteName.ToString());
+        }
+        void OnNewClient(Node n)
+        {
+            if (serverHost != null)
+                n.SendMessage(MessageType.SERVER_ADDRESS, serverHost);
+        }
+
+        public void OnServerAddress(OverlayEndpoint serverHost_)
+        {
+            if (serverHost == null)
+            {
+                serverHost = serverHost_;
+
+                Log.LogWriteLine("Server at {0}", serverHost);
+
+                server = myHost.ConnectAsync(serverHost);
+                myHost.BroadcastGroup(Client.hostName, MessageType.SERVER_ADDRESS, serverHost);
+
+                hookServerReady();
+            }
+            else
+                MyAssert.Assert(serverHost == serverHost_);
+        }
+        void OnGameInfo(GameInfo gameState_)
+        {
+            MyAssert.Assert(gameState == null);
+            gameState = gameState_;
+            
+            Log.LogWriteLine("Recieved game info");
+            Program.GameInfoOut(gameState);
+        }
+        void OnNewPlayer(PlayerInfo inf)
+        {
+            gameState.AddPlayer(inf);
+            Log.LogWriteLine("New player\n{0}", inf.GetFullInfo());
+        }
+        void OnNewWorld(WorldInfo inf)
+        {
+            gameState.AddWorld(inf);
+            Log.LogWriteLine("New world\n{0}", inf.GetFullInfo());
+        }
+
+        void OnPlayerValidateRequest(Guid actionId, PlayerInfo info)
+        {
+            Log.LogWriteLine("Validating for {0}", info);
+            server.SendMessage(MessageType.ACCEPT, actionId);
+        }
+        void OnWorldValidateRequest(Guid actionId, WorldInfo info)
+        {
+            Log.LogWriteLine("Validating for world {0}", info.worldPos);
+            server.SendMessage(MessageType.ACCEPT, actionId);
+        }
+
+        public bool TryConnect(IPEndPoint ep)
+        {
+            return myHost.TryConnectAsync(new OverlayEndpoint(ep, Client.hostName)) != null;
+        }
+        public void NewMyPlayer()
+        {
+            server.SendMessage(MessageType.NEW_PLAYER, Guid.NewGuid());
+        }
+        public void NewWorld(Point pos)
+        {
+            server.SendMessage(MessageType.NEW_WORLD, pos);
+        }
+        public void Validate()
+        {
+            server.SendMessage(MessageType.NEW_VALIDATOR);
+        }
     }
 
-    [Serializable]
-    class GameInfo
+    class WorldValidator
     {
-        public Dictionary<Guid, PlayerInfo> allPlayers;
-        public Dictionary<Point, WorldInfo> allWorlds;
+        World world;
+        Action<Action> sync;
+        OverlayHost myHost;
+
+        WorldValidator(WorldInfo info, WorldInitializer init, Action<Action> sync_, GlobalHost globalHost)
+        {
+            world = new World(info, init);
+            sync = sync_;
+            
+            myHost = globalHost.NewHost(info.host.hostname, AssignProcessor);
+            //myHost.onNewConnectionHook = ProcessNewConnection;
+        }
+        Node.MessageProcessor AssignProcessor(Node n)
+        {
+            return (a, b, c) => { };
+        }
+    }
+
+    class Aggregator
+    {
+        public ActionSyncronizer sync = new ActionSyncronizer();
+        public GlobalHost host;
+
+        public Client myClient;
+        public Server myServer = null;
+
+        public Aggregator()
+        {
+            lock (sync.syncLock)
+            {
+                host = new GlobalHost(sync.GetAsDelegate());
+                myClient = new Client(sync.GetAsDelegate(), host);
+            }
+        }
+
+        public static IPEndPoint ParseParamForIP(List<string> param)
+        {
+            IPAddress ip = NetTools.GetMyIP();
+            int port = GlobalHost.nStartPort;
+
+            foreach (var s in param)
+            {
+                int parsePort;
+                if (int.TryParse(s, out parsePort))
+                {
+                    port = parsePort;
+                    continue;
+                }
+
+                IPAddress parseIp;
+                if (IPAddress.TryParse(s, out parseIp))
+                {
+                    ip = parseIp;
+                    continue;
+                }
+            }
+
+            return new IPEndPoint(ip, port);
+        }
+
+        public void ParamConnect(List<string> param, bool mesh = false)
+        {
+            IPEndPoint ep = ParseParamForIP(param);
+            Log.LogWriteLine("Connecting to {0} {1}", ep.Address, ep.Port);
+            if (!myClient.TryConnect(ep))
+                Log.LogWriteLine("Already connected/connecting");
+        }
+        public void StartServer()
+        {
+            MyAssert.Assert(myServer == null);
+            myServer = new Server(sync.GetAsDelegate(), host);
+            myClient.OnServerAddress(myServer.Address);
+        }
     }
 }

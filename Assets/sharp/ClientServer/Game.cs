@@ -85,7 +85,7 @@ namespace ServerClient
         public int frozenTeleport = 0;
     }
 
-    class Player
+    /*class Player
     {
         public readonly Guid id;
         public readonly Guid validator;
@@ -101,7 +101,7 @@ namespace ServerClient
             validator = verifier_;
             sName = sName_;
         }
-    }
+    }*/
 
     [Serializable]
     public class Tile
@@ -116,27 +116,23 @@ namespace ServerClient
     }
 
     [Serializable]
-    public class GameInitializer
+    public class WorldInitializer
     {
-        public int numberOfPlayers;
-        public int numberOfValidators;
-        public Point worldSize = new Point(20, 10);
-        public Point worlds = new Point(2, 2);
         public int seed;
-        public double wallDensity = .5;
-        public double lootDensity = .05;
+        public double wallDensity;
+        public double lootDensity;
 
-        public GameInitializer() { }
-        internal GameInitializer(int seed_, Role roles)
+        public WorldInitializer() { }
+        internal WorldInitializer(int seed_, double wallDensity_ = .5, double lootDensity_ = .05)
         { 
             seed = seed_;
-            numberOfPlayers = roles.player.Count();
-            numberOfValidators = roles.validator.Count();
+            wallDensity = wallDensity_;
+            lootDensity = lootDensity_;
         }
     }
 
-    [Serializable]
-    public class Role
+    //[Serializable]
+    /*public class Role
     {
         public HashSet<Guid> player = new HashSet<Guid>();
         public HashSet<Guid> validator = new HashSet<Guid>();
@@ -164,32 +160,31 @@ namespace ServerClient
             }
             return sb.ToString();
         }
-    }
+    }*/
 
     class World
     {
-        public readonly Guid id;
-        public readonly Guid validator;
+        static readonly Point worldSize = new Point(20, 10);
+        
+        public readonly WorldInfo myInfo;
 
-        public readonly Point worldPosition;
         public Plane<Tile> map;
 
-        public Dictionary<Guid, Point> playerPositions = new Dictionary<Guid,Point>();
-        public Dictionary<Guid, Player> players;
+        //public Dictionary<Guid, Point> playerPositions = new Dictionary<Guid,Point>();
+        //public Dictionary<Guid, Player> players;
 
-        public Action<Player> onLootHook = (id) => { };
+        //public Action<Player> onLootHook = (id) => { };
 
-        public World(Guid id_, Guid validator_, Point worldPosition_, Point worldSize, Dictionary<Guid, Player> players_)
+        public World(WorldInfo myInfo_, WorldInitializer init)
         {
-            id = id_;
-            validator = validator_;
-            worldPosition = worldPosition_;
-            players = players_;
+            myInfo = myInfo_;
 
             map = new Plane<Tile>(worldSize);
 
             foreach (Point p in Point.Range(map.Size))
                 map[p] = new Tile();
+
+            Generate(init);
         }
 
         public IEnumerable<Point> GetBoundary()
@@ -222,6 +217,37 @@ namespace ServerClient
             }
         }
 
+        void Generate(WorldInitializer init)
+        {
+            ServerClient.MyRandom seededRandom = new ServerClient.MyRandom(init.seed);
+
+                // random terrain
+                foreach (Tile t in map.GetTiles())
+                {
+                    if (seededRandom.NextDouble() < init.wallDensity)
+                        t.solid = true;
+                    else
+                    {
+                        t.solid = false;
+
+                        if (seededRandom.NextDouble() < init.lootDensity)
+                            t.loot = true;
+                    }                    
+                }
+
+                /*/ clear spawn points
+                foreach (Point bp in world.GetBoundary())
+                {
+                    Tile t = world.map[bp];
+
+                    //t.solid = false;
+                    //t.loot = false;
+                    //MyAssert.Assert(t.IsEmpty());
+                }
+                 */
+
+        }
+        /*
         public void AddPlayer(Guid player, Point pos)
         {
             MyAssert.Assert(!playerPositions.ContainsKey(player));
@@ -326,9 +352,10 @@ namespace ServerClient
 
             return worldPosition + ret;
         }
+        */
     }
 
-    class Game
+    /*class Game
     {
         public GameInitializer info;
         public Role roles;
@@ -441,7 +468,7 @@ namespace ServerClient
                     }
 
                     // clear spawn points
-                    /*
+                    /
                     foreach (Point bp in world.GetBoundary())
                     {
                         Tile t = world.map[bp];
@@ -450,7 +477,7 @@ namespace ServerClient
                         t.loot = false;
                         //MyAssert.Assert(t.IsEmpty());
                     }
-                    */
+                    /
                 }
 
             // boundary will be spawning points
@@ -519,5 +546,5 @@ namespace ServerClient
                 Console.WriteLine();
             }
         }
-    }
+    }*/
 }

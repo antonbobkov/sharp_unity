@@ -27,11 +27,12 @@ namespace ServerClient
     }
 
     [Serializable]
-    public class OverlayHost
+    public class OverlayHostName
     {
-        string id;
+        public string id;
 
-        OverlayHost(string id_) { id = id_; }
+        public OverlayHostName() { }
+        public OverlayHostName(string id_) { id = id_; }
 
         public override string ToString()
         {
@@ -40,6 +41,9 @@ namespace ServerClient
 
         public override bool Equals(object comparand) { return this.ToString().Equals(comparand.ToString());  }
         public override int GetHashCode() { return this.ToString().GetHashCode(); }
+
+        public static bool operator ==(OverlayHostName o1, OverlayHostName o2) { return Object.Equals(o1, o2); }
+        public static bool operator !=(OverlayHostName o1, OverlayHostName o2) { return !(o1 == o2); }
     }
     
     [Serializable]
@@ -53,28 +57,32 @@ namespace ServerClient
             get { return new IPEndPointSer(addr); }
             set { addr = value.Addr; }
         }
-        public OverlayHost host;
+        public OverlayHostName hostname;
 
-        public OverlayEndpoint(IPEndPoint addr_, OverlayHost host_)
+        public OverlayEndpoint() { }
+        public OverlayEndpoint(IPEndPoint addr_, OverlayHostName host_)
         {
             addr = addr_;
-            host = host_;
+            hostname = host_;
         }
 
         public override string ToString()
         {
-            return addr.ToString() + " " + host.ToString();
+            return addr.ToString() + " " + hostname.ToString();
         }
 
         public override bool Equals(object comparand) { return this.ToString().Equals(comparand.ToString()); }
         public override int GetHashCode() { return this.ToString().GetHashCode(); }
+
+        public static bool operator ==(OverlayEndpoint o1, OverlayEndpoint o2) { return Object.Equals(o1, o2); }
+        public static bool operator !=(OverlayEndpoint o1, OverlayEndpoint o2) { return !(o1 == o2); }
     }
 
     [Serializable]
     public class Handshake
     {
-        public readonly OverlayEndpoint remote;
-        public readonly OverlayEndpoint local;
+        public OverlayEndpoint remote;
+        public OverlayEndpoint local;
 
         public Handshake() { }
         public Handshake(OverlayEndpoint local_, OverlayEndpoint remote_)
@@ -93,6 +101,8 @@ namespace ServerClient
 
     class Node
     {
+        public delegate void MessageProcessor(MessageType mt, Stream stm, Node n);
+        
         public Node(Handshake info_, Action<Action> actionQueue_, Action<Node, Exception, DisconnectType> processDisonnect_)
         {
             info = info_;
@@ -101,6 +111,9 @@ namespace ServerClient
 
             writerStatus = WriteStatus.READY;
             readerStatus = ReadStatus.READY;
+
+            // queue up
+            SendMessage(MessageType.HANDSHAKE, info);
         }
 
         public bool IsClosed { get; private set; }
@@ -121,6 +134,7 @@ namespace ServerClient
         }
 
         public IPEndPoint Address { get { return info.remote.addr; } }
+        public readonly Handshake info;
 
         // --- private ---
 
@@ -136,12 +150,10 @@ namespace ServerClient
         Action<Action> actionQueue;
         Action<Node, Exception, DisconnectType> notifyDisonnect;
 
-        internal Handshake info;
-
         internal bool AreBothConnected() { return writerStatus == WriteStatus.CONNECTED && readerStatus == ReadStatus.CONNECTED; }
 
         internal void AcceptReaderConnection(Socket readingSocket,
-            Action<Node, Stream, MessageType> messageProcessor)
+            MessageProcessor messageProcessor)
         {
             try
             {
@@ -151,7 +163,7 @@ namespace ServerClient
                 if (readerStatus != ReadStatus.READY)
                     throw new NodeException("AcceptConnection: reader is aready initialized " + FullDescription());
 
-                reader = new SocketReader((stm, mtp) => messageProcessor(this, stm, mtp),
+                reader = new SocketReader((stm, mtp) => messageProcessor(mtp, stm, this),
                                             (ioex) => actionQueue(() =>
                                             {
                                                 readerStatus = ReadStatus.DISCONNECTED;
@@ -253,8 +265,6 @@ namespace ServerClient
                 throw new NodeException("Unexpected connection request in " + FullDescription());
 
             writerStatus = WriteStatus.CONNECTING;
-
-            SendMessage(MessageType.HANDSHAKE, info);
 
             return new Socket(
                     Address.AddressFamily,

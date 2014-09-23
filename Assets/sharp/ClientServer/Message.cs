@@ -12,6 +12,7 @@ using System.Diagnostics;
 
 namespace ServerClient
 {
+    /*
     public enum MessageType : byte { HANDSHAKE, TABLE_REQUEST, TABLE, ROLE, GENERATE,
         VALIDATE_MOVE, MOVE,
         LOOT_PICKUP, LOOT_PICKUP_BROADCAST,
@@ -34,13 +35,19 @@ namespace ServerClient
     public enum NodeRole { PLAYER, WORLD, POTENTIAL_VALIDATOR, PLAYER_VALIDATOR, WORLD_VALIDATOR };
 
     public enum MoveType { MOVE, LEAVE, JOIN };
+    */
 
-    abstract class MessageReceiver
+    public enum MessageType : byte { HANDSHAKE, SERVER_ADDRESS, GAME_INFO, NEW_VALIDATOR, NEW_PLAYER, NEW_WORLD,
+    PLAYER_VALIDATOR_ASSIGN, WORLD_VALIDATOR_ASSIGN, ACCEPT};
+    
+    public enum NodeRole { PLAYER, PLAYER_VALIDATOR, WORLD_VALIDATOR };
+
+    /*abstract class MessageReceiver
     {
         public abstract void ProcessMessage(MessageType mt, Guid sender, Guid receiver, Stream stm, Action<Action> syncronizer);
-    }
+    }*/
     
-    class MessageInfo
+    /*class MessageInfo
     {
         public readonly NodeRole senderRole;
         public readonly NodeRole receiverRole;
@@ -52,9 +59,9 @@ namespace ServerClient
             senderRole = senderRole_;
             receiverRole = receiverRole_;
         }
-    }
+    }*/
     
-    class MessageTypeManager
+    /*class MessageTypeManager
     {
 
         HashSet<MessageType> uncontorlledMessages = new HashSet<MessageType>();
@@ -137,9 +144,131 @@ namespace ServerClient
                     throw new Exception("Unassigned message " + mt.ToString());
             }
         }
+    }*/
+
+    [Serializable]
+    public class PlayerInfo
+    {
+        public Guid id;
+        public OverlayEndpoint playerHost;
+        public OverlayEndpoint validatorHost;
+        public string name;
+
+        public PlayerInfo() { }
+        public PlayerInfo(Guid id_, OverlayEndpoint playerHost_, OverlayEndpoint validatorHost_, string name_)
+        {
+            id = id_;
+            playerHost = playerHost_;
+            validatorHost = validatorHost_;
+            name = name_;
+        }
+
+        public override string ToString()
+        {
+            return "Player " + name;
+        }
+        
+        public string GetFullInfo()
+        {
+            StringBuilder sb = new StringBuilder();
+            sb.AppendFormat("Player id: {0}\n", id);
+            sb.AppendFormat("Player name: {0}\n", name);
+            sb.AppendFormat("Player host: {0}\n", playerHost);
+            sb.AppendFormat("Player validator: {0}\n", validatorHost);
+
+            return sb.ToString();
+        }
     }
 
-    class AssignmentInfo
+    [Serializable]
+    public class WorldInfo
+    {
+        public Point worldPos;
+        public OverlayEndpoint host;
+
+        public WorldInfo() { }
+        public WorldInfo(Point worldPos_, OverlayEndpoint host_)
+        {
+            worldPos = worldPos_;
+            host = host_;
+        }
+
+        public override string ToString()
+        {
+            return "World " + worldPos.ToString();
+        }
+
+        public string GetFullInfo()
+        {
+            StringBuilder sb = new StringBuilder();
+            sb.AppendFormat("World pos: {0}\n", worldPos);
+            sb.AppendFormat("Validator host: {0}\n", host);
+
+            return sb.ToString();
+        }
+    }
+
+    [Serializable]
+    public class GameInfoSerialized
+    {
+        public PlayerInfo[] players;
+        public WorldInfo[] worlds;
+
+        public GameInfoSerialized() { }
+    }
+
+    class GameInfo
+    {
+        public GameInfo() { }
+        public GameInfo(GameInfoSerialized info)
+        {
+            foreach (PlayerInfo p in info.players)
+                AddPlayer(p);
+            foreach (WorldInfo w in info.worlds)
+                AddWorld(w);
+        }
+
+        public GameInfoSerialized Serialize()
+        {
+            return new GameInfoSerialized() { players = playerById.Values.ToArray(), worlds = worldByPoint.Values.ToArray() };
+        }
+
+        public NodeRole GetRoleOfHost(OverlayEndpoint host) { return roles.GetValue(host); }
+
+        public PlayerInfo GetPlayerByHost(OverlayEndpoint host) { return playerByHost.GetValue(host); }
+        public WorldInfo GetWorldByHost(OverlayEndpoint host) { return worldByHost.GetValue(host); }
+
+        public OverlayEndpoint GetPlayerHost(Guid player) { return playerById.GetValue(player).playerHost; }
+        public OverlayEndpoint GetPlayerValidatorHost(Guid player) { return playerById.GetValue(player).validatorHost; }
+        public OverlayEndpoint GetWorldHost(Point worldPos) { return worldByPoint.GetValue(worldPos).host; }
+
+        public void AddPlayer(PlayerInfo info)
+        {
+            roles.Add(info.playerHost, NodeRole.PLAYER);
+            roles.Add(info.validatorHost, NodeRole.PLAYER_VALIDATOR);
+
+            playerById.Add(info.id, info);
+            playerByHost.Add(info.playerHost, info);
+            playerByHost.Add(info.validatorHost, info);
+        }
+        public void AddWorld(WorldInfo info)
+        {
+            roles.Add(info.host, NodeRole.WORLD_VALIDATOR);
+
+            worldByPoint.Add(info.worldPos, info);
+            worldByHost.Add(info.host, info);
+        }
+
+        Dictionary<OverlayEndpoint, NodeRole> roles = new Dictionary<OverlayEndpoint, NodeRole>();
+
+        Dictionary<Guid, PlayerInfo> playerById = new Dictionary<Guid, PlayerInfo>();
+        Dictionary<OverlayEndpoint, PlayerInfo> playerByHost = new Dictionary<OverlayEndpoint, PlayerInfo>();
+
+        Dictionary<Point, WorldInfo> worldByPoint = new Dictionary<Point, WorldInfo>();
+        Dictionary<OverlayEndpoint, WorldInfo> worldByHost = new Dictionary<OverlayEndpoint, WorldInfo>();
+    }
+
+    /*class AssignmentInfo
     {
         public Dictionary<Guid, Guid> validators = new Dictionary<Guid,Guid>();
         public MultiValueDictionary<Guid, NodeRole> roles = new MultiValueDictionary<Guid,NodeRole>();
@@ -210,9 +339,9 @@ namespace ServerClient
 
             NodeById(validator).SendMessage(mt, newArgs);
         }
-    }
+    }*/
 
-    class MessageProcessor
+    /*class MessageProcessor
     {
         MessageTypeManager mtm;
 
@@ -267,5 +396,5 @@ namespace ServerClient
 
             info.mr.ProcessMessage(mt, sender, receiver, stm, syncronizer);
         }
-    }
+    }*/
 }

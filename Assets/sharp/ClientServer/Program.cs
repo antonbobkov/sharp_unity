@@ -103,12 +103,12 @@ namespace ServerClient
                 }
             }
         }
-        /*static public void MeshConnect(Aggregate all)
+        static public void MeshConnect(Aggregator all)
         {
             all.sync.Add(() =>
                 {
-                    IPEndPoint ep = Aggregate.ParseParamForIP(new List<string>());
-                    if(all.Connect(ep, true))
+                    IPEndPoint ep = Aggregator.ParseParamForIP(new List<string>());
+                    if(all.myClient.TryConnect(ep))
                         Log.LogWriteLine("Connecting to {0} {1}", ep.Address, ep.Port);
                 });
 
@@ -121,8 +121,8 @@ namespace ServerClient
                     List<string> ls = new List<string>(line.Split(' '));
                     all.sync.Add(() =>
                     {
-                        IPEndPoint ep = Aggregate.ParseParamForIP(ls);
-                        if (all.Connect(ep, true))
+                        IPEndPoint ep = Aggregator.ParseParamForIP(ls);
+                        if (all.myClient.TryConnect(ep))
                             Log.LogWriteLine("Connecting to {0} {1}", ep.Address, ep.Port);
                     });
                 }
@@ -132,7 +132,7 @@ namespace ServerClient
                 //Log.LogWriteLine("Error: {0}", e.Message);
             }
         }
-         */
+        
         /*static public void Ai(Aggregate all)
         {
             foreach (var id in all.gameAssignments.GetMyRoles(NodeRole.PLAYER))
@@ -145,30 +145,70 @@ namespace ServerClient
         }
         */
 
+        public static void GameInfoOut(GameInfo inf)
+        {
+            GameInfoSerialized infoser = inf.Serialize();
+            foreach (PlayerInfo pi in infoser.players)
+                Console.WriteLine(pi.GetFullInfo());
+            foreach (WorldInfo pi in infoser.worlds)
+                Console.WriteLine(pi.GetFullInfo());
+        }
+
         static void Main(string[] args)
         {
-            Point sz = new Point(2,2);
-            Plane<Tile> pl = new Plane<Tile>(sz);
-            foreach (Point p in Point.Range(sz))
+            Aggregator all = new Aggregator();
+
+            MeshConnect(all);
+
+            all.myClient.hookServerReady = () =>
             {
-                Tile t = new Tile();
-                if (rand.NextDouble() < .3)
-                    t.loot = true;
-                else if (rand.NextDouble() < .3)
-                    t.solid = true;
-                pl[p] = t;
+                all.myClient.Validate();
+                if (all.host.MyAddress.Port != GlobalHost.nStartPort)
+                {
+                    for (int i = 0; i < 5; ++i)
+                        all.myClient.NewMyPlayer();
+                }
+            };
+
+            if (all.host.MyAddress.Port == GlobalHost.nStartPort)
+                all.StartServer();
+
+            all.sync.Start();
+
+            InputProcessor inputProc = new InputProcessor(all.sync.GetAsDelegate());
+
+            inputProc.commands.Add("connect", (param) => all.ParamConnect(param));
+
+            inputProc.commands.Add("server", (param) =>
+            {
+                all.StartServer();
+            });
+
+            inputProc.commands.Add("player", (param) =>
+            {
+                all.myClient.NewMyPlayer();
+            });
+            
+            inputProc.commands.Add("world", (param) =>
+            {
+                all.myClient.NewWorld(new Point(0, 0));
+            });
+
+            inputProc.commands.Add("validate", (param) =>
+            {
+                all.myClient.Validate();
+            });
+
+            while (true)
+            {
+                string sInput = Console.ReadLine();
+                var param = new List<string>(sInput.Split(' '));
+                if (!param.Any())
+                    continue;
+                string sCommand = param.First();
+                param.RemoveRange(0, 1);
+                inputProc.Process(sCommand, param);
             }
-
-            MemoryStream ms = new MemoryStream();
-
-            XmlSerializer ser = new XmlSerializer(pl.GetType());
-            ser.Serialize(ms, pl);
-
-            //Log.LogWriteLine("XML of size {1}:\n{0}", System.Text.Encoding.Default.GetString(ms.ToArray()), ms.Length);
-
-            ms.Position = 0;
-
-            Plane<Tile> pl2 = (Plane<Tile>)ser.Deserialize(ms);
         }
         
         
