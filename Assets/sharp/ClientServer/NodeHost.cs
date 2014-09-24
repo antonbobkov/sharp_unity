@@ -32,40 +32,32 @@ namespace ServerClient
         public void Add(Action a) { msgs.Add(a); }
         public Action<Action> GetAsDelegate() { return (a) => this.Add(a); }
 
-        public ActionSyncronizer()
+        public void Start()
         {
             ThreadManager.NewThread(() => this.ExecuteThread(),
                 //() => msgs.Add(null),
                 () => { },
                 "global syncronizer");
-            //new Thread(() => this.ExecuteThread()).Start();
         }
+
     }
 
-    class NodeCollection
+    class GlobalHost
     {
         public const int nStartPort = 3000;
         const int nPortTries = 25;
 
-        Dictionary<OverlayHost, Dictionary<OverlayEndpoint, Node> > nodes =
-            new Dictionary<OverlayHost,Dictionary<OverlayEndpoint,Node>>();
-        
+        Dictionary<OverlayHostName, OverlayHost> hosts = new Dictionary<OverlayHostName, OverlayHost>();
+
         SocketListener sl;
         Action<Action> processQueue;
-        Action<Node, Stream, MessageType> messageProcessor;
-        Action<Node> onNewConnection;
 
         public IPEndPoint MyAddress { get; private set; }
 
-        public NodeCollection(Action<Action> processQueue_,
-            Action<Node, Stream, MessageType> messageProcessor_,
-            Action<Node> onNewConnection_)
+        public GlobalHost(Action<Action> processQueue_)
         {
             processQueue = processQueue_;
-            messageProcessor = messageProcessor_;
-            onNewConnection = onNewConnection_;
             StartListening();
-            //ConnectAsync(myInfo.addr);
         }
 
         void StartListening()
@@ -103,7 +95,7 @@ namespace ServerClient
                 sl = new SocketListener(
                     ConnectionProcessor.ProcessWithHandshake(
                         (info, sck) =>
-                            processQueue(() => this.Sync_NewIncomingConnection(info, sck))
+                            processQueue(() => this.NewIncomingConnection(info, sck))
                     ), sckListen);
             }
             catch (Exception)
@@ -113,20 +105,80 @@ namespace ServerClient
             }
         }
 
-        void Sync_ProcessDisconnect(Node n, Exception ioex, DisconnectType ds)
+        void NewIncomingConnection(Handshake info, Socket sck)
         {
-            Log.LogWriteLine("{0} disconnected on {1} ({2})", n.Address, ds, (ioex == null) ? "" : ioex.Message);
+            MyAssert.Assert(hosts.ContainsKey(info.local.hostname));
+            hosts.GetValue(info.local.hostname).NewIncomingConnection(info, sck);
+        }
+
+        public void Close()
+        {
+            foreach (var h in hosts.Values)
+                h.Close();
+
+            sl.TerminateThread();
+        }
+        public OverlayHost NewHost(OverlayHostName hostName, OverlayHost.ProcessorAssigner messageProcessor)
+        {
+            MyAssert.Assert(!hosts.ContainsKey(hostName));
+            OverlayHost host = new OverlayHost(hostName, MyAddress, processQueue, messageProcessor);
+            hosts.Add(hostName, host);
+
+            Log.LogWriteLine("New host: {0}", hostName);
+            
+            return host;
+        }
+    }
+
+    class OverlayHost
+    {
+        OverlayHostName hostName;
+
+        Dictionary<OverlayEndpoint, Node> nodes = new Dictionary<OverlayEndpoint, Node>();
+
+        public delegate Node.MessageProcessor ProcessorAssigner(Node n);
+        
+        public Action<Node> onNewConnectionHook = (n) => { };
+        
+        ProcessorAssigner messageProcessorAssigner;
+
+        Action<Action> processQueue;
+
+        public IPEndPoint IpAddress { get; private set; }
+        public OverlayEndpoint Address { get { return new OverlayEndpoint(IpAddress, hostName); } }
+
+        public OverlayHost(OverlayHostName hostName_, IPEndPoint address_, Action<Action> processQueue_,
+            ProcessorAssigner messageProcessorAssigner_)
+        {
+            hostName = hostName_;
+            IpAddress = address_;
+            processQueue = processQueue_;
+            messageProcessorAssigner = messageProcessorAssigner_;
+        }
+
+        /*
+        public OverlayHost(OverlayHostName hostName_, IPEndPoint address_, Action<Action> processQueue_,
+        MessageProcessor messageProcessor)
+            :this(hostName_, address_, processQueue_, (n) => messageProcessor){}
+        */
+
+        void ProcessDisconnect(Node n, Exception ioex, DisconnectType ds)
+        {
+            Log.LogWriteLine("{0} disconnected on {1} ({2})", n.info.remote, ds, (ioex == null) ? "" : ioex.Message);
             RemoveNode(n);
         }
-        void Sync_NewIncomingConnection(Handshake info, Socket sck)
+        internal void NewIncomingConnection(Handshake info, Socket sck)
         {
             try
             {
-                Node targetNode = FindNode(info.local.host, info.remote);
+                MyAssert.Assert(info.local.hostname == hostName);
 
-                if (targetNode == null)
+                Node targetNode = FindNode(info.remote);
+
+                bool newConnection = (targetNode == null);
+                if (newConnection)
                 {
-                    targetNode = new Node(info, processQueue, (n, e, t) => this.Sync_ProcessDisconnect(n, e, t));
+                    targetNode = new Node(info, processQueue, (n, e, t) => this.ProcessDisconnect(n, e, t));
                     AddNode(targetNode);
                 }
 
@@ -136,12 +188,15 @@ namespace ServerClient
 
                 if (targetNode.readerStatus != Node.ReadStatus.READY)
                 {
-                    Log.LogWriteLine("New connection {0} rejected: node already connected", info.remote.addr);
+                    Log.LogWriteLine("New connection {0} rejected: node already connected", info.remote);
                     sck.Close();
                     return;
                 }
 
-                targetNode.AcceptReaderConnection(sck, ProcessMessageWrap);
+                targetNode.AcceptReaderConnection(sck, ProcessMessageWrap(messageProcessorAssigner(targetNode)));
+
+                if (newConnection)
+                    onNewConnectionHook.Invoke(targetNode);
 
                 if (targetNode.writerStatus == Node.WriteStatus.READY)
                     ConnectNodeAsync(targetNode);
@@ -157,24 +212,26 @@ namespace ServerClient
             }
         }
 
-        void ProcessMessageWrap(Node n, Stream str, MessageType mt)
+        Node.MessageProcessor ProcessMessageWrap(Node.MessageProcessor messageProcessor)
         {
-            //try
-            //{
-                messageProcessor(n, str, mt);
-            //}
-            /*
-            catch (Exception e)
-            {
-                processQueue.Invoke( () =>
+            return (mt, str, n) =>
                 {
-                    Log.LogWriteLine("Error while reading from socket: {0}\nNode {1}\nLast read:{2}", e.ToString(), n.FullDescription(), Serializer.lastRead);
-                    DisconnectNode(n);
-                });
+                    try
+                    {
+                        messageProcessor(mt, str, n);
+                    }
+                    catch (Exception e)
+                    {
+                        processQueue.Invoke( () =>
+                        {
+                            Log.LogWriteLine("Error while reading from socket: {0}\nNode {1}\nLast read:{2}", e.ToString(), n.FullDescription(), Serializer.lastRead);
+                            DisconnectNode(n);
+                        });
 
-                throw new IOException("Unhandled error while processing message", e);
-            }
-             * */
+                        throw new IOException("Unhandled error while processing message", e);
+                    }
+                    
+                };
         }
         
         void Sync_OutgoingConnectionReady(Node n)
@@ -184,19 +241,19 @@ namespace ServerClient
         }
         void OnNewConnectionCompletelyReady(Node n)
         {
-            Log.LogWriteLine("New connection: {0}", n.Address);
-            onNewConnection.Invoke(n);
+            Log.LogWriteLine("New connection: {0} -> {1}", n.info.local.hostname, n.info.remote);
         }
 
-        public Node ConnectAsync(OverlayHost ourHost, OverlayEndpoint theirInfo)
+        public Node ConnectAsync(OverlayEndpoint theirInfo)
         {
-            Node targetNode = FindNode(ourHost, theirInfo);
+            Node targetNode = FindNode(theirInfo);
 
-            Handshake info = new Handshake(new OverlayEndpoint(MyAddress, ourHost), theirInfo);
+            Handshake info = new Handshake(new OverlayEndpoint(IpAddress, hostName), theirInfo);
 
-            if (targetNode == null)
+            bool newConnection = (targetNode == null);
+            if (newConnection)
             {
-                targetNode = new Node(info, processQueue, (n, e, t) => this.Sync_ProcessDisconnect(n, e, t));
+                targetNode = new Node(info, processQueue, (n, e, t) => this.ProcessDisconnect(n, e, t));
                 AddNode(targetNode);
             }
 
@@ -211,13 +268,16 @@ namespace ServerClient
             else
                 ConnectNodeAsync(targetNode);
 
+            if (newConnection)
+                onNewConnectionHook.Invoke(targetNode);
+
             return targetNode;
         }
-        public Node TryConnectAsync(OverlayHost ourHost, OverlayEndpoint theirInfo)
+        public Node TryConnectAsync(OverlayEndpoint theirInfo)
         {
             try
             {
-                return ConnectAsync(ourHost, theirInfo);
+                return ConnectAsync(theirInfo);
             }
             catch (NodeException)
             {
@@ -241,8 +301,7 @@ namespace ServerClient
 
         public IEnumerable<Node> GetAllNodes()
         {
-            return from dict in nodes.Values
-                   from n in dict.Values
+            return from n in nodes.Values
                    select n;
         }
         public void Close()
@@ -251,14 +310,12 @@ namespace ServerClient
                 DisconnectNode(n);
 
             MyAssert.Assert(!nodes.Any());
-
-            sl.TerminateThread();
         }
-        public Node FindNode(OverlayHost ourHost, OverlayEndpoint theirInfo)
+        public Node FindNode(OverlayEndpoint theirInfo)
         {
             try
             {
-                return nodes.GetValue(ourHost).GetValue(theirInfo);
+                return nodes.GetValue(theirInfo);
             }
             catch (InvalidOperationException)
             {
@@ -266,15 +323,49 @@ namespace ServerClient
             }
         }
 
+        public void SendMessage(OverlayEndpoint remote, MessageType mt, params object[] objs)
+        {
+            Node n = FindNode(remote);
+
+            MyAssert.Assert(n != null);
+
+            n.SendMessage(mt, objs);
+        }
+
+        public void ConnectSendMessage(OverlayEndpoint remote, MessageType mt, params object[] objs)
+        {
+            Node n = FindNode(remote);
+            if (n == null)
+                n = ConnectAsync(remote);
+
+            n.SendMessage(mt, objs);
+        }
+
+        public void BroadcastGroup(Func<Node, bool> group, MessageType mt, params object[] objs)
+        {
+            foreach (Node n in GetAllNodes().Where(group))
+                    n.SendMessage(mt, objs);
+        }
+
+        public void BroadcastGroup(OverlayHostName name, MessageType mt, params object[] objs)
+        {
+            BroadcastGroup((n) => n.info.remote.hostname == name, mt, objs);
+        }
+
+        public void Broadcast(MessageType mt, params object[] objs)
+        {
+            BroadcastGroup((n) => true, mt, objs);
+        }
+
         void AddNode(Node n)
         {
-            MyAssert.Assert(FindNode(n.info.local.host, n.info.remote) == null);
-            nodes[n.info.local.host].Add(n.info.remote, n);
+            MyAssert.Assert(FindNode(n.info.remote) == null);
+            nodes.Add(n.info.remote, n);
         }
         void RemoveNode(Node n)
         {
-            MyAssert.Assert(FindNode(n.info.local.host, n.info.remote) != null);
-            nodes[n.info.local.host].Remove(n.info.remote);
+            MyAssert.Assert(FindNode(n.info.remote) != null);
+            nodes.Remove(n.info.remote);
         }
     }
 }

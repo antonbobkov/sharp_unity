@@ -12,7 +12,7 @@ using System.Diagnostics;
 
 namespace ServerClient
 {
-    class Aggregate
+    /*class Aggregate
     {
         public static System.Random r = new System.Random();
 
@@ -243,8 +243,8 @@ namespace ServerClient
         public void SetMoveHook(Action<World, Player, MoveType> hook)
         { manager.playerMessageReciever.pa.onMoveHook = hook; }
     }
-
-    class Validator
+    */
+    /*class Validator
     {
         protected Guid myId;
         protected AssignmentInfo gameInfo;
@@ -258,9 +258,9 @@ namespace ServerClient
 
         Action<MessageType, object[]> broadcaster;
         protected void Broadcast(MessageType mt, params object[] objs) { broadcaster.Invoke(mt, objs); }
-    }
+    }*/
 
-    class WorldValidatorProcessor : MessageReceiver
+    /*class WorldValidatorProcessor : MessageReceiver
     {
         public Dictionary<Guid, WorldValidator> validators = new Dictionary<Guid,WorldValidator>();
 
@@ -321,9 +321,9 @@ namespace ServerClient
                     throw new Exception("WorldValidatorProcessor: Unsupported message " + mt.ToString());
             });
         }
-    }
+    }*/
 
-    class MoveLock
+    /*class MoveLock
     {
         public Point newPos;
         public bool teleport;
@@ -333,9 +333,9 @@ namespace ServerClient
             newPos = newPos_;
             teleport = teleport_;
         }
-    }
+    }*/
     
-    class WorldValidator : Validator
+    /*class WorldValidator : Validator
     {
         Dictionary<Point, Guid> worldByPoint;
         internal World validatorWorld;
@@ -353,6 +353,28 @@ namespace ServerClient
 
             validatorWorld.onLootHook = OnLootPickup;
         }
+
+        public void ProcessPlayerMessage(MessageType mt, Stream stm, Action<Action> syncronizer, Guid playerId)
+        {
+            Point newPos = Serializer.Deserialize<Point>(stm);
+
+            syncronizer.Invoke(() =>
+            {
+                Player p = validatorWorld.players.GetValue(playerId);
+
+                Point currPos = validatorWorld.playerPositions.GetValue(p.id);
+
+                if (mt == MessageType.VALIDATE_MOVE)
+                    OnValidateMove(p, currPos, newPos);
+                else if (mt == MessageType.VALIDATE_TELEPORT)
+                    OnValidateTeleport(p, currPos, newPos);
+                else if (mt == MessageType.VALIDATE_REALM_MOVE)
+                    OnValidateRealmMove(p, currPos, newPos, false);
+                else
+                    throw new Exception("WorldValidatorProcessor ProcessPlayerMessage: Unsupported message " + mt.ToString());
+            });
+        }
+        //public void ProcessPlayerValidatorMessage(MessageType mt, Stream stm, Action<Action> syncronizer
 
         void OnLootPickup(Player p)
         {
@@ -548,9 +570,9 @@ namespace ServerClient
 
             Log.LogWriteLine("Validator: Freeze failed. Was trying to teleport from {0} to {1} by {2}.", currPos, newPos, p.FullName);
         }
-    }
+    }*/
 
-    class PlayerValidatorProcessor : MessageReceiver
+    /*class PlayerValidatorProcessor : MessageReceiver
     {
         public Dictionary<Guid, PlayerValidator> validators = new Dictionary<Guid,PlayerValidator>();
 
@@ -571,9 +593,9 @@ namespace ServerClient
                         throw new Exception("PlayerValidatorProcessor: Unsupported message " + mt.ToString());
                 });
         }
-    }
+    }*/
 
-    class PlayerValidator : Validator
+    /*class PlayerValidator : Validator
     {
         Inventory validatorInventory = new Inventory();
         string name;
@@ -625,9 +647,9 @@ namespace ServerClient
             Log.LogWriteLine("{0} consume teleport, now has {1} (validator)", name, validatorInventory.teleport);
             Broadcast(MessageType.LOOT_CONSUMED, myId, myId);
         }
-    }
+    }*/
 
-    class PlayerActorProcessor : MessageReceiver
+    /*class PlayerActorProcessor : MessageReceiver
     {
         public PlayerActor pa = null;
 
@@ -674,9 +696,9 @@ namespace ServerClient
             }
 
         }
-    }
+    }*/
     
-    class PlayerActor
+    /*class PlayerActor
     {
         internal Game game;
 
@@ -735,6 +757,73 @@ namespace ServerClient
 
             Log.LogWriteLine("Player {0} added to world {1} at {2}", p.FullName, w.worldPosition, newPos);
             onMoveHook(w, p, MoveType.JOIN);
+        }
+    }*/
+
+
+
+    class Aggregator
+    {
+        public ActionSyncronizer sync = new ActionSyncronizer();
+        public GlobalHost host;
+
+        public Client myClient;
+        public Server myServer = null;
+
+        public Dictionary<Point, WorldValidator> worldValidators = new Dictionary<Point, WorldValidator>();
+
+        public Aggregator()
+        {
+            lock (sync.syncLock)
+            {
+                host = new GlobalHost(sync.GetAsDelegate());
+                myClient = new Client(sync.GetAsDelegate(), host, this);
+            }
+        }
+
+        public static IPEndPoint ParseParamForIP(List<string> param)
+        {
+            IPAddress ip = NetTools.GetMyIP();
+            int port = GlobalHost.nStartPort;
+
+            foreach (var s in param)
+            {
+                int parsePort;
+                if (int.TryParse(s, out parsePort))
+                {
+                    port = parsePort;
+                    continue;
+                }
+
+                IPAddress parseIp;
+                if (IPAddress.TryParse(s, out parseIp))
+                {
+                    ip = parseIp;
+                    continue;
+                }
+            }
+
+            return new IPEndPoint(ip, port);
+        }
+
+        public void ParamConnect(List<string> param, bool mesh = false)
+        {
+            IPEndPoint ep = ParseParamForIP(param);
+            Log.LogWriteLine("Connecting to {0} {1}", ep.Address, ep.Port);
+            if (!myClient.TryConnect(ep))
+                Log.LogWriteLine("Already connected/connecting");
+        }
+        public void StartServer()
+        {
+            MyAssert.Assert(myServer == null);
+            myServer = new Server(sync.GetAsDelegate(), host);
+            myClient.OnServerAddress(myServer.Address);
+        }
+
+        public void AddWorldValidator(WorldInfo info, WorldInitializer init)
+        {
+            MyAssert.Assert(!worldValidators.ContainsKey(info.worldPos));
+            worldValidators.Add(info.worldPos, new WorldValidator(info, init, sync.GetAsDelegate(), host));
         }
     }
 }

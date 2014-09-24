@@ -8,6 +8,7 @@ using System.Text;
 using System.Threading;
 using System.IO;
 using System.Diagnostics;
+using System.Xml.Serialization;
 
 namespace ServerClient
 {
@@ -15,7 +16,7 @@ namespace ServerClient
     {
         static Random rand = new Random();
         
-        static void PlayerRandomMove(Aggregate a, Guid player)
+        /*static void PlayerRandomMove(Aggregate a, Guid player)
         {
             Game g = a.game;
             if (g == null)
@@ -63,7 +64,7 @@ namespace ServerClient
             else if(mv == MoveValidity.BOUNDARY)
                 a.Move(p, newPosition, MessageType.VALIDATE_REALM_MOVE);
         }
-
+        */
         static void RepeatedAction(Action<Action> queue, Action a, int period)
         {
             while (true)
@@ -102,13 +103,12 @@ namespace ServerClient
                 }
             }
         }
-
-        static public void MeshConnect(Aggregate all)
+        static public void MeshConnect(Aggregator all)
         {
             all.sync.Add(() =>
                 {
-                    IPEndPoint ep = Aggregate.ParseParamForIP(new List<string>());
-                    if(all.Connect(ep, true))
+                    IPEndPoint ep = Aggregator.ParseParamForIP(new List<string>());
+                    if(all.myClient.TryConnect(ep))
                         Log.LogWriteLine("Connecting to {0} {1}", ep.Address, ep.Port);
                 });
 
@@ -121,8 +121,8 @@ namespace ServerClient
                     List<string> ls = new List<string>(line.Split(' '));
                     all.sync.Add(() =>
                     {
-                        IPEndPoint ep = Aggregate.ParseParamForIP(ls);
-                        if (all.Connect(ep, true))
+                        IPEndPoint ep = Aggregator.ParseParamForIP(ls);
+                        if (all.myClient.TryConnect(ep))
                             Log.LogWriteLine("Connecting to {0} {1}", ep.Address, ep.Port);
                     });
                 }
@@ -132,7 +132,8 @@ namespace ServerClient
                 //Log.LogWriteLine("Error: {0}", e.Message);
             }
         }
-        static public void Ai(Aggregate all)
+        
+        /*static public void Ai(Aggregate all)
         {
             foreach (var id in all.gameAssignments.GetMyRoles(NodeRole.PLAYER))
             {
@@ -142,9 +143,78 @@ namespace ServerClient
                 //new Thread(() => RepeatedAction(all.sync.GetAsDelegate(), () => PlayerRandomMove(all, idCopy), rand.Next(300, 700))).Start();
             }
         }
-        
+        */
+
+        public static void GameInfoOut(GameInfo inf)
+        {
+            GameInfoSerialized infoser = inf.Serialize();
+            foreach (PlayerInfo pi in infoser.players)
+                Console.WriteLine(pi.GetFullInfo());
+            foreach (WorldInfo pi in infoser.worlds)
+                Console.WriteLine(pi.GetFullInfo());
+        }
+
         static void Main(string[] args)
         {
+            Aggregator all = new Aggregator();
+
+            MeshConnect(all);
+
+            all.myClient.hookServerReady = () =>
+            {
+                all.myClient.Validate();
+                if (all.host.MyAddress.Port != GlobalHost.nStartPort)
+                {
+                    for (int i = 0; i < 1; ++i)
+                        all.myClient.NewMyPlayer();
+                }
+            };
+
+            if (all.host.MyAddress.Port == GlobalHost.nStartPort)
+                all.StartServer();
+
+            all.sync.Start();
+
+            InputProcessor inputProc = new InputProcessor(all.sync.GetAsDelegate());
+
+            inputProc.commands.Add("connect", (param) => all.ParamConnect(param));
+
+            inputProc.commands.Add("server", (param) =>
+            {
+                all.StartServer();
+            });
+
+            inputProc.commands.Add("player", (param) =>
+            {
+                all.myClient.NewMyPlayer();
+            });
+            
+            inputProc.commands.Add("world", (param) =>
+            {
+                all.myClient.NewWorld(new Point(0, 0));
+            });
+
+            inputProc.commands.Add("validate", (param) =>
+            {
+                all.myClient.Validate();
+            });
+
+            while (true)
+            {
+                string sInput = Console.ReadLine();
+                var param = new List<string>(sInput.Split(' '));
+                if (!param.Any())
+                    continue;
+                string sCommand = param.First();
+                param.RemoveRange(0, 1);
+                inputProc.Process(sCommand, param);
+            }
+        }
+        
+        
+        static void Main2(string[] args)
+        {
+            /*
             Aggregate all = new Aggregate();
             all.sync.Add(() =>
             {
@@ -236,6 +306,7 @@ namespace ServerClient
                 param.RemoveRange(0, 1);
                 inputProc.Process(sCommand, param);
             }
+            */
         }
     }
 }

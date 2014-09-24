@@ -166,4 +166,18 @@ namespace ServerClient
             throw new InvalidOperationException("Key not found " + key.ToString());
         }
     }
+
+    [Serializable]
+    public class MyTuple<A, B>
+    {
+        public A a;
+        public B b;
+
+        public MyTuple() { }
+        public MyTuple(A a_, B b_)
+        {
+            a = a_;
+            b = b_;
+        }
+    }
 }
