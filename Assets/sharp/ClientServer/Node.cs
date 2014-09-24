@@ -90,6 +90,17 @@ namespace ServerClient
             remote = remote_;
             local = local_;
         }
+
+        public override string ToString()
+        {
+            return "Remote: " + remote.ToString() + " Local: " + local.ToString();
+        }
+
+        public override bool Equals(object comparand) { return this.ToString().Equals(comparand.ToString()); }
+        public override int GetHashCode() { return this.ToString().GetHashCode(); }
+
+        public static bool operator ==(Handshake o1, Handshake o2) { return Object.Equals(o1, o2); }
+        public static bool operator !=(Handshake o1, Handshake o2) { return !(o1 == o2); }
     }
     
     enum DisconnectType { READ, WRITE, WRITE_CONNECT_FAIL, CLOSED }

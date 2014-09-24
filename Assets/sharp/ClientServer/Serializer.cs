@@ -38,7 +38,18 @@ namespace ServerClient
 
             int size = ReadSize(input);
             byte[] data = new byte[size];
-            int c = input.Read(data, 0, size);
+            int total = 0;
+            while(true)
+            {
+                int bytesRead = input.Read(data, total, size - total);
+                
+                total += bytesRead;
+
+                MyAssert.Assert(bytesRead != 0);
+                
+                if (size == total)
+                    break;
+            }
             /*
             for (int i = 0; i < size; ++i)
             {
@@ -48,7 +59,6 @@ namespace ServerClient
             */
 
 
-            MyAssert.Assert(c == size);
 
             lastRead = System.Text.Encoding.Default.GetString(data);
             //Log.LogWriteLine("Received XML:\n{0}", System.Text.Encoding.Default.GetString(data));

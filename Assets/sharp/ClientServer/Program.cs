@@ -165,7 +165,7 @@ namespace ServerClient
                 all.myClient.Validate();
                 if (all.host.MyAddress.Port != GlobalHost.nStartPort)
                 {
-                    for (int i = 0; i < 5; ++i)
+                    for (int i = 0; i < 1; ++i)
                         all.myClient.NewMyPlayer();
                 }
             };

@@ -47,9 +47,12 @@
   <ItemGroup>
     <Compile Include="Aggregator.cs" />
     <Compile Include="BlockingCollection.cs" />
+    <Compile Include="Client.cs" />
     <Compile Include="Game.cs" />
     <Compile Include="DataCollection.cs" />
     <Compile Include="MultiValueDictionary.cs" />
+    <Compile Include="Player.cs" />
+    <Compile Include="Server.cs" />
     <Compile Include="Tools.cs" />
     <Compile Include="Message.cs" />
     <Compile Include="Node.cs" />
@@ -61,6 +64,7 @@
     <Compile Include="SocketListener.cs" />
     <Compile Include="SocketReader.cs" />
     <Compile Include="SocketWriter.cs" />
+    <Compile Include="World.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="app.config" />

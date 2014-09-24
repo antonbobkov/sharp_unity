@@ -123,6 +123,8 @@ namespace ServerClient
             MyAssert.Assert(!hosts.ContainsKey(hostName));
             OverlayHost host = new OverlayHost(hostName, MyAddress, processQueue, messageProcessor);
             hosts.Add(hostName, host);
+
+            Log.LogWriteLine("New host: {0}", hostName);
             
             return host;
         }
@@ -214,11 +216,10 @@ namespace ServerClient
         {
             return (mt, str, n) =>
                 {
-                    //try
-                    //{
-                    messageProcessor(mt, str, n);
-                    //}
-                    /*
+                    try
+                    {
+                        messageProcessor(mt, str, n);
+                    }
                     catch (Exception e)
                     {
                         processQueue.Invoke( () =>
@@ -229,7 +230,7 @@ namespace ServerClient
 
                         throw new IOException("Unhandled error while processing message", e);
                     }
-                     * */
+                    
                 };
         }
         
@@ -240,7 +241,7 @@ namespace ServerClient
         }
         void OnNewConnectionCompletelyReady(Node n)
         {
-            Log.LogWriteLine("New connection: {0}", n.info.remote);
+            Log.LogWriteLine("New connection: {0} -> {1}", n.info.local.hostname, n.info.remote);
         }
 
         public Node ConnectAsync(OverlayEndpoint theirInfo)

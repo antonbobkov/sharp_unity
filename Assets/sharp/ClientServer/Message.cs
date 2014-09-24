@@ -38,7 +38,9 @@ namespace ServerClient
     */
 
     public enum MessageType : byte { HANDSHAKE, SERVER_ADDRESS, GAME_INFO, NEW_VALIDATOR, NEW_PLAYER, NEW_WORLD,
-    PLAYER_VALIDATOR_ASSIGN, WORLD_VALIDATOR_ASSIGN, ACCEPT};
+    PLAYER_VALIDATOR_ASSIGN, WORLD_VALIDATOR_ASSIGN, ACCEPT,
+    WORLD_INIT,
+    INVENTORY_INIT};
     
     public enum NodeRole { PLAYER, PLAYER_VALIDATOR, WORLD_VALIDATOR };
 
@@ -175,34 +177,6 @@ namespace ServerClient
             sb.AppendFormat("Player name: {0}\n", name);
             sb.AppendFormat("Player host: {0}\n", playerHost);
             sb.AppendFormat("Player validator: {0}\n", validatorHost);
-
-            return sb.ToString();
-        }
-    }
-
-    [Serializable]
-    public class WorldInfo
-    {
-        public Point worldPos;
-        public OverlayEndpoint host;
-
-        public WorldInfo() { }
-        public WorldInfo(Point worldPos_, OverlayEndpoint host_)
-        {
-            worldPos = worldPos_;
-            host = host_;
-        }
-
-        public override string ToString()
-        {
-            return "World " + worldPos.ToString();
-        }
-
-        public string GetFullInfo()
-        {
-            StringBuilder sb = new StringBuilder();
-            sb.AppendFormat("World pos: {0}\n", worldPos);
-            sb.AppendFormat("Validator host: {0}\n", host);
 
             return sb.ToString();
         }
