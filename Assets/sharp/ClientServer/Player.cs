@@ -2,15 +2,25 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Xml.Serialization;
 
 namespace ServerClient
 {
     [Serializable]
-    class Inventory
+    public class Inventory
     {
-        public int teleport;
+        public int teleport = 0;
 
-        public Inventory(int teleport_ = 0) { teleport = teleport_; }
+        public Inventory() { }
+        public Inventory(int teleport_) { teleport = teleport_; }
+    }
+
+    class PlayerData
+    {
+        public Point? worldPos = null;
+
+        public Inventory totalInventory = new Inventory(5);
+        public Inventory frozenInventory = new Inventory();
     }
 
     class PlayerValidator

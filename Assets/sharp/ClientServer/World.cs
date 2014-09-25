@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Xml.Serialization;
 
 namespace ServerClient
 {
@@ -88,31 +89,40 @@ namespace ServerClient
         public Plane<Tile> map;
         public WorldInfo myInfo;
     }
+
+    public enum MoveValidity
+    {
+        VALID = 0,
+        BOUNDARY = 1,
+        OCCUPIED_PLAYER = 2,
+        OCCUPIED_WALL = 4,
+        TELEPORT = 8,
+        NEW = 16
+    };
     
     class World
     {
         static readonly Point worldSize = new Point(20, 10);
 
         public readonly WorldInfo myInfo;
-
         public Plane<Tile> map;
 
         public Point Position { get { return myInfo.worldPos; } }
 
-        //public Dictionary<Guid, Point> playerPositions = new Dictionary<Guid,Point>();
-        //public Dictionary<Guid, Player> players;
+        public Dictionary<Guid, Point> playerPositions = new Dictionary<Guid,Point>();
+        GameInfo info;
+        public Action<PlayerInfo> onLootHook = (info) => { };
 
-        //public Action<Player> onLootHook = (id) => { };
-
-        public World(WorldSerialized ws)
+        public World(WorldSerialized ws, GameInfo info_)
         {
             myInfo = ws.myInfo;
+            info = info_;
             map = ws.map;
         }
-        
-        public World(WorldInfo myInfo_, WorldInitializer init)
+        public World(WorldInfo myInfo_, WorldInitializer init, GameInfo info_)
         {
             myInfo = myInfo_;
+            info = info_;
 
             map = new Plane<Tile>(worldSize);
 
@@ -211,7 +221,7 @@ namespace ServerClient
                 Console.WriteLine();
             }
         }
-        /*
+        
         public void AddPlayer(Guid player, Point pos)
         {
             MyAssert.Assert(!playerPositions.ContainsKey(player));
@@ -261,7 +271,7 @@ namespace ServerClient
         }
         public void Move(Guid player, Point newPos, MoveValidity mv = MoveValidity.VALID)
         {
-            Player p = players.GetValue(player);
+            PlayerInfo p = info.GetPlayerById(player);
 
             if (mv != MoveValidity.NEW)
             {
@@ -270,7 +280,7 @@ namespace ServerClient
                 MoveValidity v = CheckValidMove(player, newPos) & ~mv;
                 if (v != MoveValidity.VALID)
                     Log.LogWriteLine("Game.Move Warning: Invalid move {0} from {1} to {2} by {3}",
-                        v, curPos, newPos, p.FullName);
+                        v, curPos, newPos, p.name);
 
                 MyAssert.Assert(map[curPos].player == player);
                 map[curPos].player = Guid.Empty;
@@ -314,9 +324,9 @@ namespace ServerClient
 
             p = new Point(px, py);
 
-            return worldPosition + ret;
+            return Position + ret;
         }
-        */
+        
     }
 
     class WorldValidator
@@ -325,10 +335,14 @@ namespace ServerClient
         Action<Action> sync;
         OverlayHost myHost;
 
-        public WorldValidator(WorldInfo info, WorldInitializer init, Action<Action> sync_, GlobalHost globalHost)
+        GameInfo gameInfo;
+
+        public WorldValidator(WorldInfo info, WorldInitializer init, Action<Action> sync_, GlobalHost globalHost, GameInfo gameInfo_)
         {
-            world = new World(info, init);
+            gameInfo = gameInfo_;
             sync = sync_;
+
+            world = new World(info, init, gameInfo);
 
             myHost = globalHost.NewHost(info.host.hostname, AssignProcessor);
             myHost.onNewConnectionHook = ProcessNewConnection;

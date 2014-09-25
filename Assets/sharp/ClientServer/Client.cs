@@ -15,7 +15,7 @@ namespace ServerClient
     {
         public static readonly OverlayHostName hostName = new OverlayHostName("client");
 
-        GameInfo gameState = null;
+        public GameInfo gameState = null;
         OverlayEndpoint serverHost = null;
         Node server = null;
 
@@ -114,7 +114,7 @@ namespace ServerClient
             if (mt == MessageType.WORLD_INIT)
             {
                 WorldSerialized wrld = Serializer.Deserialize<WorldSerialized>(stm);
-                sync.Invoke(() => OnNewWorld(new World(wrld)));
+                sync.Invoke(() => OnNewWorld(new World(wrld, gameState)));
             }
             else
                 throw new Exception("Client.ProcessWorldMessage bad message type " + mt.ToString());
@@ -124,7 +124,7 @@ namespace ServerClient
             if (mt == MessageType.INVENTORY_INIT)
             {
                 Inventory i = Serializer.Deserialize<Inventory>(stm);
-                sync.Invoke(() => OnInventory(inf, i);
+                sync.Invoke(() => OnInventory(inf, i));
             }
             else
                 throw new Exception("Client.ProcessPlayerValidatorMessage bad message type " + mt.ToString());
@@ -194,11 +194,11 @@ namespace ServerClient
         {
             knownInventories.Add(inf.id, i);
             Log.LogWriteLine("New inventory for {0} ({1} teleports)", inf, i.teleport);
-            w.ConsoleOut();
         }
 
         void OnPlayerValidateRequest(Guid actionId, PlayerInfo info)
         {
+            all.AddPlayerValidator(info);
             Log.LogWriteLine("Validating for {0}", info);
             server.SendMessage(MessageType.ACCEPT, actionId);
         }

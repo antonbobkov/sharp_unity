@@ -22,15 +22,7 @@ namespace ServerClient
         REMOVE_PLAYER, ADD_PLAYER
     };
 
-    public enum MoveValidity
-    {
-        VALID = 0,
-        BOUNDARY = 1,
-        OCCUPIED_PLAYER = 2,
-        OCCUPIED_WALL = 4,
-        TELEPORT = 8,
-        NEW = 16
-    };
+
 
     public enum NodeRole { PLAYER, WORLD, POTENTIAL_VALIDATOR, PLAYER_VALIDATOR, WORLD_VALIDATOR };
 
@@ -212,6 +204,9 @@ namespace ServerClient
         public PlayerInfo GetPlayerByHost(OverlayEndpoint host) { return playerByHost.GetValue(host); }
         public WorldInfo GetWorldByHost(OverlayEndpoint host) { return worldByHost.GetValue(host); }
 
+        public PlayerInfo GetPlayerById(Guid player) { return playerById.GetValue(player); }
+        public WorldInfo GetWorldByPos(Point pos) { return worldByPoint.GetValue(pos); }
+        
         public OverlayEndpoint GetPlayerHost(Guid player) { return playerById.GetValue(player).playerHost; }
         public OverlayEndpoint GetPlayerValidatorHost(Guid player) { return playerById.GetValue(player).validatorHost; }
         public OverlayEndpoint GetWorldHost(Point worldPos) { return worldByPoint.GetValue(worldPos).host; }
