@@ -30,7 +30,26 @@ namespace ServerClient
         OverlayHost myHost;
 
         int playerCounter = 1;
+        static string PlayerNameMap(int value)
+        {
+            char[] baseChars = new char[] { '0','1','2','3','4','5','6','7','8','9',
+            'A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W','X','Y','Z',
+            'a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z'};
 
+            MyAssert.Assert(value >= 0);
+
+            string result = string.Empty;
+            int targetBase = baseChars.Length;
+
+            do
+            {
+                result = baseChars[value % targetBase] + result;
+                value = value / targetBase;
+            }
+            while (value > 0);
+
+            return result;
+        }
         Dictionary<Guid, DelayedAction> delayedActions = new Dictionary<Guid, DelayedAction>();
 
         public OverlayEndpoint Address { get { return myHost.Address; } }
@@ -96,7 +115,7 @@ namespace ServerClient
             OverlayEndpoint validatorHost = new OverlayEndpoint(validatorPool.Random(n => r.Next(n)), new OverlayHostName(validatorId.ToString()));
 
             OverlayEndpoint playerNewHost = new OverlayEndpoint(playerHost.addr, new OverlayHostName(playerId.ToString()));
-            PlayerInfo info = new PlayerInfo(playerId, playerNewHost, validatorHost, (playerCounter++).ToString());
+            PlayerInfo info = new PlayerInfo(playerId, playerNewHost, validatorHost, PlayerNameMap(playerCounter++));
 
             OverlayEndpoint validatorClient = new OverlayEndpoint(validatorHost.addr, Client.hostName);
             myHost.SendMessage(validatorClient, MessageType.PLAYER_VALIDATOR_ASSIGN, validatorId, info);

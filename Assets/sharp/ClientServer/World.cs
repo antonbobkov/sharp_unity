@@ -1,7 +1,13 @@
 ﻿using System;
+using ServerClient.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
+using System.Net.Sockets;
 using System.Text;
+using System.Threading;
+using System.IO;
+using System.Diagnostics;
 using System.Xml.Serialization;
 
 namespace ServerClient
@@ -70,7 +76,7 @@ namespace ServerClient
 
         public override string ToString()
         {
-            return "World " + worldPos.ToString();
+            return GetFullInfo();
         }
 
         public string GetFullInfo()
@@ -81,6 +87,7 @@ namespace ServerClient
 
             return sb.ToString();
         }
+        public string GetShortInfo() { return "World " + worldPos.ToString(); }
     }
 
     [Serializable]
@@ -111,7 +118,9 @@ namespace ServerClient
 
         public Dictionary<Guid, Point> playerPositions = new Dictionary<Guid,Point>();
         GameInfo info;
+
         public Action<PlayerInfo> onLootHook = (info) => { };
+        //public Action<PlayerInfo> onMoveHook = (info) => { };
 
         public World(WorldSerialized ws, GameInfo info_)
         {
@@ -208,8 +217,8 @@ namespace ServerClient
 
                 if (t.solid)
                     pic[p] = '*';
-                //else if (t.player != Guid.Empty)
-                //    pic[p] = players.GetValue(t.player).ShortName[0];
+                else if (t.player != Guid.Empty)
+                    pic[p] = info.GetPlayerById(t.player).name[0];
                 else if (t.loot)
                     pic[p] = '$';
             }
@@ -295,6 +304,8 @@ namespace ServerClient
             playerPositions[player] = newPos;
             tile.player = player;
             tile.loot = false;
+
+            //onMoveHook(p);
         }
 
         int BoundaryMove(ref int p, int sz)
@@ -331,11 +342,20 @@ namespace ServerClient
 
     class WorldValidator
     {
+        Random rand = new Random();
+
         World world;
         Action<Action> sync;
         OverlayHost myHost;
 
         GameInfo gameInfo;
+
+        Dictionary<string, Action<MessageType>> networkLocks = new Dictionary<string, Action<MessageType>>();
+        void FinishLock(string s, MessageType mt)
+        {
+            networkLocks.GetValue(s).Invoke(mt);
+            networkLocks.Remove(s);
+        }
 
         public WorldValidator(WorldInfo info, WorldInitializer init, Action<Action> sync_, GlobalHost globalHost, GameInfo gameInfo_)
         {
@@ -350,7 +370,25 @@ namespace ServerClient
         
         Node.MessageProcessor AssignProcessor(Node n)
         {
-            return (mt, stm, nd) => { throw new Exception("WorldValidator is not expecting any messages. " + mt.ToString() + " from " + nd.info.ToString()); };
+            OverlayHostName remoteName = n.info.remote.hostname;
+            if (remoteName == Client.hostName)
+                return (mt, stm, nd) => { throw new Exception("WorldValidator not expecting messages from Client." + mt + " " + nd.info); };
+            
+            NodeRole role = gameInfo.GetRoleOfHost(n.info.remote);
+
+            if (role == NodeRole.PLAYER_VALIDATOR)
+            {
+                PlayerInfo inf = gameInfo.GetPlayerByHost(n.info.remote);
+                return (mt, stm, nd) => ProcessPlayerValidatorMessage(mt, stm, nd, inf);
+            }
+            
+            if (role == NodeRole.PLAYER)
+            {
+                PlayerInfo inf = gameInfo.GetPlayerByHost(n.info.remote);
+                return (mt, stm, nd) => ProcessPlayerMessage(mt, stm, nd, inf);
+            }
+
+            throw new InvalidOperationException("WorldValidator.AssignProcessor unexpected connection " + n.info.remote + " " + role);
         }
         
         void ProcessNewConnection(Node n)
@@ -359,13 +397,56 @@ namespace ServerClient
 
             if (remoteName == Client.hostName)
                 OnNewClient(n);
-            else
-                throw new InvalidOperationException("WorldValidator.ProcessNewConnection unexpected connection " + remoteName.ToString());
         }
 
         void OnNewClient(Node n)
         {
             n.SendMessage(MessageType.WORLD_INIT, world.Serialize());
+        }
+
+        void ProcessPlayerValidatorMessage(MessageType mt, Stream stm, Node n, PlayerInfo inf)
+        {
+            if (mt == MessageType.SPAWN_FAIL || mt == MessageType.SPAWN_SUCCESS)
+                sync.Invoke(() => FinishLock(inf.validatorHost.ToString(), mt));
+            else
+                throw new Exception("WorldValidator.ProcessClientMessage bad message type " + mt.ToString());
+        }
+
+        void ProcessPlayerMessage(MessageType mt, Stream stm, Node n, PlayerInfo inf)
+        {
+            if (mt == MessageType.SPAWN_REQUEST)
+                sync.Invoke(() => OnSpawnRequest(inf));
+            else
+                throw new Exception("WorldValidator.ProcessClientMessage bad message type " + mt.ToString());
+        }
+
+        void OnSpawnRequest(PlayerInfo inf)
+        {
+            myHost.ConnectSendMessage(inf.validatorHost, MessageType.SPAWN_REQUEST);
+
+            networkLocks.Add(inf.validatorHost.ToString(), (mt) =>
+                {
+                    if (mt == MessageType.SPAWN_FAIL)
+                    {
+                        Log.LogWriteLine("Spawn failed, already spawned.\n World {0} \n Player {1}", world.myInfo, inf);
+                    }
+                    else if (mt == MessageType.SPAWN_SUCCESS)
+                    {
+                        var spawn = world.GetSpawn().ToList();
+                        if (!spawn.Any())
+                        {
+                            Log.LogWriteLine("Spawn failed, no space.\n World {0} \n Player {1}", world.myInfo, inf);
+                            return;
+                        }
+
+                        Point spawnPos = spawn.Random((n) => rand.Next(n)).Key;
+                        
+                        world.AddPlayer(inf.id, spawnPos);
+                        myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_JOIN, inf.id, spawnPos);
+                    }
+                    else
+                        throw new Exception("Unexpected response in OnSpawnRequest " + mt);
+                });
         }
     }
 }

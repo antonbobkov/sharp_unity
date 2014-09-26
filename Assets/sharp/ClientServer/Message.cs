@@ -31,8 +31,9 @@ namespace ServerClient
 
     public enum MessageType : byte { HANDSHAKE, SERVER_ADDRESS, GAME_INFO, NEW_VALIDATOR, NEW_PLAYER, NEW_WORLD,
     PLAYER_VALIDATOR_ASSIGN, WORLD_VALIDATOR_ASSIGN, ACCEPT,
-    WORLD_INIT,
-    INVENTORY_INIT};
+    WORLD_INIT, PLAYER_JOIN,
+    PLAYER_INFO,
+    SPAWN_REQUEST, SPAWN_SUCCESS, SPAWN_FAIL};
     
     public enum NodeRole { PLAYER, PLAYER_VALIDATOR, WORLD_VALIDATOR };
 
@@ -140,39 +141,6 @@ namespace ServerClient
         }
     }*/
 
-    [Serializable]
-    public class PlayerInfo
-    {
-        public Guid id;
-        public OverlayEndpoint playerHost;
-        public OverlayEndpoint validatorHost;
-        public string name;
-
-        public PlayerInfo() { }
-        public PlayerInfo(Guid id_, OverlayEndpoint playerHost_, OverlayEndpoint validatorHost_, string name_)
-        {
-            id = id_;
-            playerHost = playerHost_;
-            validatorHost = validatorHost_;
-            name = name_;
-        }
-
-        public override string ToString()
-        {
-            return "Player " + name;
-        }
-        
-        public string GetFullInfo()
-        {
-            StringBuilder sb = new StringBuilder();
-            sb.AppendFormat("Player id: {0}\n", id);
-            sb.AppendFormat("Player name: {0}\n", name);
-            sb.AppendFormat("Player host: {0}\n", playerHost);
-            sb.AppendFormat("Player validator: {0}\n", validatorHost);
-
-            return sb.ToString();
-        }
-    }
 
     [Serializable]
     public class GameInfoSerialized

@@ -1,11 +1,55 @@
 ﻿using System;
+using ServerClient.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
+using System.Net.Sockets;
 using System.Text;
+using System.Threading;
+using System.IO;
+using System.Diagnostics;
 using System.Xml.Serialization;
 
 namespace ServerClient
 {
+    [Serializable]
+    public class PlayerInfo
+    {
+        public Guid id;
+        public OverlayEndpoint playerHost;
+        public OverlayEndpoint validatorHost;
+        public string name;
+
+        public PlayerInfo() { }
+        public PlayerInfo(Guid id_, OverlayEndpoint playerHost_, OverlayEndpoint validatorHost_, string name_)
+        {
+            id = id_;
+            playerHost = playerHost_;
+            validatorHost = validatorHost_;
+            name = name_;
+        }
+
+        public override string ToString()
+        {
+            return GetFullInfo();
+        }
+
+        public string GetFullInfo()
+        {
+            StringBuilder sb = new StringBuilder();
+            sb.AppendFormat("Player id: {0}\n", id);
+            sb.AppendFormat("Player name: {0}\n", name);
+            sb.AppendFormat("Player host: {0}\n", playerHost);
+            sb.AppendFormat("Player validator: {0}\n", validatorHost);
+
+            return sb.ToString();
+        }
+        public string GetShortInfo()
+        {
+            return "Player " + name;
+        }
+    }
+
     [Serializable]
     public class Inventory
     {
@@ -13,14 +57,25 @@ namespace ServerClient
 
         public Inventory() { }
         public Inventory(int teleport_) { teleport = teleport_; }
+
+        public override string ToString()
+        {
+            return "teleport: " + teleport;
+        }
     }
 
-    class PlayerData
+    [Serializable]
+    public class PlayerData
     {
-        public Point? worldPos = null;
+        public bool connected = false;
+        public Point worldPos = new Point(0,0);
 
         public Inventory totalInventory = new Inventory(5);
-        public Inventory frozenInventory = new Inventory();
+
+        public override string ToString()
+        {
+            return (connected ? worldPos.ToString() : "[not connected]") + " " + totalInventory;
+        }
     }
 
     class PlayerValidator
@@ -28,15 +83,18 @@ namespace ServerClient
         Action<Action> sync;
         OverlayHost myHost;
 
-        PlayerInfo info;
+        GameInfo gameInfo;
         
-        Inventory totalInventory = new Inventory(5);
+        PlayerInfo info;
+
+        PlayerData playerData = new PlayerData(); 
         Inventory frozenInventory = new Inventory();
 
-        public PlayerValidator(PlayerInfo info_, Action<Action> sync_, GlobalHost globalHost)
+        public PlayerValidator(PlayerInfo info_, Action<Action> sync_, GlobalHost globalHost, GameInfo gameInfo_)
         {
             info = info_;
             sync = sync_;
+            gameInfo = gameInfo_;
 
             myHost = globalHost.NewHost(info.validatorHost.hostname, AssignProcessor);
             myHost.onNewConnectionHook = ProcessNewConnection;
@@ -44,7 +102,19 @@ namespace ServerClient
         
         Node.MessageProcessor AssignProcessor(Node n)
         {
-            return (mt, stm, nd) => { throw new Exception("PlayerValidator is not expecting any messages. " + mt.ToString() + " from " + nd.info.ToString()); };
+            OverlayHostName remoteName = n.info.remote.hostname;
+            if (remoteName == Client.hostName)
+                return (mt, stm, nd) => { throw new Exception("PlayerValidator not expecting messages from Client." + mt + " " + nd.info); };
+
+            NodeRole role = gameInfo.GetRoleOfHost(n.info.remote);
+
+            if (role == NodeRole.WORLD_VALIDATOR)
+            {
+                WorldInfo inf = gameInfo.GetWorldByHost(n.info.remote);
+                return (mt, stm, nd) => ProcessWorldMessage(mt, stm, nd, inf);
+            }
+
+            throw new InvalidOperationException("WorldValidator.AssignProcessor unexpected connection " + n.info.remote + " " + role);
         }
         
         void ProcessNewConnection(Node n)
@@ -53,13 +123,37 @@ namespace ServerClient
 
             if (remoteName == Client.hostName)
                 OnNewClient(n);
-            else
-                throw new InvalidOperationException("PlayerValidator.ProcessNewConnection unexpected connection " + remoteName.ToString());
         }
-
         void OnNewClient(Node n)
         {
-            n.SendMessage(MessageType.INVENTORY_INIT, totalInventory);
+            n.SendMessage(MessageType.PLAYER_INFO, playerData);
         }
+
+        void ProcessWorldMessage(MessageType mt, Stream stm, Node n, WorldInfo inf)
+        {
+            if (mt == MessageType.SPAWN_REQUEST)
+            {
+                sync.Invoke(() => OnSpawnRequest(inf, n));
+            }
+            else
+                throw new Exception("PlayerValidator.ProcessWorldMessage bad message type " + mt.ToString());
+        }
+
+        void OnSpawnRequest(WorldInfo inf, Node n)
+        {
+            if (playerData.connected)
+            {
+                n.SendMessage(MessageType.SPAWN_FAIL);
+            }
+            else
+            {
+                playerData.connected = true;
+                playerData.worldPos = inf.worldPos;
+
+                n.SendMessage(MessageType.SPAWN_SUCCESS);
+                myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_INFO, playerData);
+            }
+        }
+
     }
 }

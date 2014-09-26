@@ -15,7 +15,7 @@ namespace ServerClient
     {
         public static readonly OverlayHostName hostName = new OverlayHostName("client");
 
-        public GameInfo gameState = null;
+        public GameInfo gameInfo = null;
         OverlayEndpoint serverHost = null;
         Node server = null;
 
@@ -25,7 +25,7 @@ namespace ServerClient
         Aggregator all;
 
         Dictionary<Point, World> knownWorlds = new Dictionary<Point, World>();
-        Dictionary<Guid, Inventory> knownInventories = new Dictionary<Guid, Inventory>();
+        Dictionary<Guid, PlayerData> knownInventories = new Dictionary<Guid, PlayerData>();
 
         public Action hookServerReady = () => { };
 
@@ -50,17 +50,17 @@ namespace ServerClient
                 return ProcessServerMessage;
             }
 
-            NodeRole role = gameState.GetRoleOfHost(n.info.remote);
+            NodeRole role = gameInfo.GetRoleOfHost(n.info.remote);
 
             if (role == NodeRole.WORLD_VALIDATOR)
             {
-                WorldInfo inf = gameState.GetWorldByHost(n.info.remote);
+                WorldInfo inf = gameInfo.GetWorldByHost(n.info.remote);
                 return (mt, stm, nd) => ProcessWorldMessage(mt, stm, nd, inf);
             }
 
             if (role == NodeRole.PLAYER_VALIDATOR)
             {
-                PlayerInfo inf = gameState.GetPlayerByHost(n.info.remote);
+                PlayerInfo inf = gameInfo.GetPlayerByHost(n.info.remote);
                 return (mt, stm, nd) => ProcessPlayerValidatorMessage(mt, stm, nd, inf);
             }
 
@@ -114,17 +114,23 @@ namespace ServerClient
             if (mt == MessageType.WORLD_INIT)
             {
                 WorldSerialized wrld = Serializer.Deserialize<WorldSerialized>(stm);
-                sync.Invoke(() => OnNewWorld(new World(wrld, gameState)));
+                sync.Invoke(() => OnNewWorld(new World(wrld, gameInfo)));
+            }
+            else if (mt == MessageType.PLAYER_JOIN)
+            {
+                Guid id = Serializer.Deserialize<Guid>(stm);
+                Point pos = Serializer.Deserialize<Point>(stm);
+                sync.Invoke(() => OnPlayerJoin(inf, gameInfo.GetPlayerById(id), pos));
             }
             else
                 throw new Exception("Client.ProcessWorldMessage bad message type " + mt.ToString());
         }
         void ProcessPlayerValidatorMessage(MessageType mt, Stream stm, Node n, PlayerInfo inf)
         {
-            if (mt == MessageType.INVENTORY_INIT)
+            if (mt == MessageType.PLAYER_INFO)
             {
-                Inventory i = Serializer.Deserialize<Inventory>(stm);
-                sync.Invoke(() => OnInventory(inf, i));
+                PlayerData pd = Serializer.Deserialize<PlayerData>(stm);
+                sync.Invoke(() => OnPlayerData(inf, pd));
             }
             else
                 throw new Exception("Client.ProcessPlayerValidatorMessage bad message type " + mt.ToString());
@@ -161,8 +167,8 @@ namespace ServerClient
         }
         void OnGameInfo(GameInfoSerialized gameStateSer)
         {
-            MyAssert.Assert(gameState == null);
-            gameState = new GameInfo(gameStateSer);
+            MyAssert.Assert(gameInfo == null);
+            gameInfo = new GameInfo(gameStateSer);
 
             foreach (WorldInfo w in gameStateSer.worlds)
                 myHost.ConnectAsync(w.host);
@@ -170,17 +176,17 @@ namespace ServerClient
                 myHost.ConnectAsync(p.validatorHost);
 
             Log.LogWriteLine("Recieved game info");
-            Program.GameInfoOut(gameState);
+            Program.GameInfoOut(gameInfo);
         }
         void OnNewPlayer(PlayerInfo inf)
         {
-            gameState.AddPlayer(inf);
+            gameInfo.AddPlayer(inf);
             Log.LogWriteLine("New player\n{0}", inf.GetFullInfo());
             myHost.ConnectAsync(inf.validatorHost);
         }
         void OnNewWorld(WorldInfo inf)
         {
-            gameState.AddWorld(inf);
+            gameInfo.AddWorld(inf);
             Log.LogWriteLine("New world\n{0}", inf.GetFullInfo());
             myHost.ConnectAsync(inf.host);
         }
@@ -190,10 +196,10 @@ namespace ServerClient
             Log.LogWriteLine("New world {0}", w.Position);
             w.ConsoleOut();
         }
-        void OnInventory(PlayerInfo inf, Inventory i)
+        void OnPlayerData(PlayerInfo inf, PlayerData pd)
         {
-            knownInventories.Add(inf.id, i);
-            Log.LogWriteLine("New inventory for {0} ({1} teleports)", inf, i.teleport);
+            knownInventories[inf.id] = pd;
+            Log.LogWriteLine("{0} data update {1}", inf.GetShortInfo(), pd);
         }
 
         void OnPlayerValidateRequest(Guid actionId, PlayerInfo info)
@@ -207,6 +213,15 @@ namespace ServerClient
             all.AddWorldValidator(info, init);
             Log.LogWriteLine("Validating for world {0}", info.worldPos);
             server.SendMessage(MessageType.ACCEPT, actionId);
+        }
+
+        void OnPlayerJoin(WorldInfo worldInfo, PlayerInfo playerInfo, Point pos)
+        {
+            World world = knownWorlds.GetValue(worldInfo.worldPos);
+            world.AddPlayer(playerInfo.id, pos);
+            
+            Log.LogWriteLine("{0} joined {1}", playerInfo.GetShortInfo(), worldInfo.GetShortInfo());
+            world.ConsoleOut();
         }
 
         public bool TryConnect(IPEndPoint ep)

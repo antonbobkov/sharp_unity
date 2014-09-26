@@ -205,7 +205,7 @@ namespace ServerClient
                     OnNewConnectionCompletelyReady(targetNode);
                     
             }
-            catch (Exception)
+            catch (NodeException) // FIXME
             {
                 sck.Close();
                 throw;
