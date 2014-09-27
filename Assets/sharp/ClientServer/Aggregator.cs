@@ -772,6 +772,7 @@ namespace ServerClient
 
         public Dictionary<Point, WorldValidator> worldValidators = new Dictionary<Point, WorldValidator>();
         public Dictionary<Guid, PlayerValidator> playerValidators = new Dictionary<Guid, PlayerValidator>();
+        public Dictionary<Guid, PlayerAgent> playerAgents = new Dictionary<Guid, PlayerAgent>();
 
         public Aggregator()
         {
@@ -826,11 +827,21 @@ namespace ServerClient
             MyAssert.Assert(!worldValidators.ContainsKey(info.worldPos));
             worldValidators.Add(info.worldPos, new WorldValidator(info, init, sync.GetAsDelegate(), host, myClient.gameInfo));
         }
-
         public void AddPlayerValidator(PlayerInfo info)
         {
             MyAssert.Assert(!playerValidators.ContainsKey(info.id));
             playerValidators.Add(info.id, new PlayerValidator(info, sync.GetAsDelegate(), host, myClient.gameInfo));
+        }
+        public void AddPlayerAgent(PlayerInfo info)
+        {
+            MyAssert.Assert(!playerAgents.ContainsKey(info.id));
+            playerAgents.Add(info.id, new PlayerAgent(info, sync.GetAsDelegate(), host, myClient.gameInfo));
+        }
+
+        public void SpawnAll()
+        {
+            foreach (Guid id in myClient.myPlayerAgents)
+                playerAgents.GetValue(id).Spawn(new Point(0, 0));
         }
     }
 }

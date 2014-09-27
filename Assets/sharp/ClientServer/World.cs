@@ -422,6 +422,12 @@ namespace ServerClient
 
         void OnSpawnRequest(PlayerInfo inf)
         {
+            if(networkLocks.ContainsKey(inf.validatorHost.ToString()))
+            {
+                Log.LogWriteLine("Spawn failed, spawn in progress.\n World {0} \n Player {1}", world.myInfo, inf);
+                return;
+            }
+            
             myHost.ConnectSendMessage(inf.validatorHost, MessageType.SPAWN_REQUEST);
 
             networkLocks.Add(inf.validatorHost.ToString(), (mt) =>

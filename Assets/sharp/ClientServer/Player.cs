@@ -154,6 +154,51 @@ namespace ServerClient
                 myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_INFO, playerData);
             }
         }
+    }
 
+    class PlayerAgent
+    {
+        Action<Action> sync;
+        OverlayHost myHost;
+
+        GameInfo gameInfo;
+
+        PlayerInfo info;
+
+        public PlayerAgent(PlayerInfo info_, Action<Action> sync_, GlobalHost globalHost, GameInfo gameInfo_)
+        {
+            info = info_;
+            sync = sync_;
+            gameInfo = gameInfo_;
+
+            myHost = globalHost.NewHost(info.playerHost.hostname, AssignProcessor);
+
+            Log.LogWriteLine("Player Agent {0}", info.GetShortInfo());
+        }
+
+        Node.MessageProcessor AssignProcessor(Node n)
+        {
+            return (mt, stm, nd) => { throw new Exception("PlayerAgent is not expecting messages." + mt + " " + nd.info); };
+            /*
+            OverlayHostName remoteName = n.info.remote.hostname;
+            if (remoteName == Client.hostName)
+
+            NodeRole role = gameInfo.GetRoleOfHost(n.info.remote);
+
+            if (role == NodeRole.WORLD_VALIDATOR)
+            {
+                WorldInfo inf = gameInfo.GetWorldByHost(n.info.remote);
+                return (mt, stm, nd) => ProcessWorldMessage(mt, stm, nd, inf);
+            }
+
+            throw new InvalidOperationException("WorldValidator.AssignProcessor unexpected connection " + n.info.remote + " " + role);
+            */
+        }
+
+        public void Spawn(Point worldPos)
+        {
+            WorldInfo w = gameInfo.GetWorldByPos(worldPos);
+            myHost.ConnectSendMessage(w.host, MessageType.SPAWN_REQUEST);
+        }
     }
 }

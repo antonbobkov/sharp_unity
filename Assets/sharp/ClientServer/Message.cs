@@ -29,7 +29,8 @@ namespace ServerClient
     public enum MoveType { MOVE, LEAVE, JOIN };
     */
 
-    public enum MessageType : byte { HANDSHAKE, SERVER_ADDRESS, GAME_INFO, NEW_VALIDATOR, NEW_PLAYER, NEW_WORLD,
+    public enum MessageType : byte { HANDSHAKE,
+    SERVER_ADDRESS, GAME_INFO, NEW_VALIDATOR, NEW_PLAYER, NEW_WORLD,
     PLAYER_VALIDATOR_ASSIGN, WORLD_VALIDATOR_ASSIGN, ACCEPT,
     WORLD_INIT, PLAYER_JOIN,
     PLAYER_INFO,

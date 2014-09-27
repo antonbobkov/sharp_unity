@@ -27,6 +27,8 @@ namespace ServerClient
         Dictionary<Point, World> knownWorlds = new Dictionary<Point, World>();
         Dictionary<Guid, PlayerData> knownInventories = new Dictionary<Guid, PlayerData>();
 
+        public HashSet<Guid> myPlayerAgents = new HashSet<Guid>();
+
         public Action hookServerReady = () => { };
 
         public Client(Action<Action> sync_, GlobalHost globalHost, Aggregator all_)
@@ -183,6 +185,9 @@ namespace ServerClient
             gameInfo.AddPlayer(inf);
             Log.LogWriteLine("New player\n{0}", inf.GetFullInfo());
             myHost.ConnectAsync(inf.validatorHost);
+
+            if (myPlayerAgents.Contains(inf.id))
+                all.AddPlayerAgent(inf);
         }
         void OnNewWorld(WorldInfo inf)
         {
@@ -230,7 +235,9 @@ namespace ServerClient
         }
         public void NewMyPlayer()
         {
-            server.SendMessage(MessageType.NEW_PLAYER, Guid.NewGuid());
+            Guid id = Guid.NewGuid();
+            myPlayerAgents.Add(id);
+            server.SendMessage(MessageType.NEW_PLAYER, id);
         }
         public void NewWorld(Point pos)
         {
@@ -240,5 +247,6 @@ namespace ServerClient
         {
             server.SendMessage(MessageType.NEW_VALIDATOR);
         }
+
     }
 }

@@ -165,7 +165,7 @@ namespace ServerClient
                 all.myClient.Validate();
                 if (all.host.MyAddress.Port != GlobalHost.nStartPort)
                 {
-                    for (int i = 0; i < 1; ++i)
+                    for (int i = 0; i < 3; ++i)
                         all.myClient.NewMyPlayer();
                 }
             };
@@ -197,6 +197,11 @@ namespace ServerClient
             inputProc.commands.Add("validate", (param) =>
             {
                 all.myClient.Validate();
+            });
+
+            inputProc.commands.Add("spawn", (param) =>
+            {
+                all.SpawnAll();
             });
 
             while (true)
