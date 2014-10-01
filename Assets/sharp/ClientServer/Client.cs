@@ -24,8 +24,8 @@ namespace ServerClient
 
         Aggregator all;
 
-        Dictionary<Point, World> knownWorlds = new Dictionary<Point, World>();
-        Dictionary<Guid, PlayerData> knownInventories = new Dictionary<Guid, PlayerData>();
+        public Dictionary<Point, World> knownWorlds = new Dictionary<Point, World>();
+        public Dictionary<Guid, PlayerData> knownPlayers = new Dictionary<Guid, PlayerData>();
 
         public HashSet<Guid> myPlayerAgents = new HashSet<Guid>();
 
@@ -124,6 +124,12 @@ namespace ServerClient
                 Point pos = Serializer.Deserialize<Point>(stm);
                 sync.Invoke(() => OnPlayerJoin(inf, gameInfo.GetPlayerById(id), pos));
             }
+            else if (mt == MessageType.MOVE)
+            {
+                Guid id = Serializer.Deserialize<Guid>(stm);
+                Point pos = Serializer.Deserialize<Point>(stm);
+                sync.Invoke(() => OnPlayerMove(inf, gameInfo.GetPlayerById(id), pos));
+            }
             else
                 throw new Exception("Client.ProcessWorldMessage bad message type " + mt.ToString());
         }
@@ -203,7 +209,7 @@ namespace ServerClient
         }
         void OnPlayerData(PlayerInfo inf, PlayerData pd)
         {
-            knownInventories[inf.id] = pd;
+            knownPlayers[inf.id] = pd;
             Log.LogWriteLine("{0} data update {1}", inf.GetShortInfo(), pd);
         }
 
@@ -228,6 +234,11 @@ namespace ServerClient
             Log.LogWriteLine("{0} joined {1}", playerInfo.GetShortInfo(), worldInfo.GetShortInfo());
             world.ConsoleOut();
         }
+        void OnPlayerMove(WorldInfo worldInfo, PlayerInfo playerInfo, Point newPos)
+        {
+            World world = knownWorlds.GetValue(worldInfo.worldPos);
+            world.Move(playerInfo.id, newPos);
+        }
 
         public bool TryConnect(IPEndPoint ep)
         {
@@ -247,6 +258,5 @@ namespace ServerClient
         {
             server.SendMessage(MessageType.NEW_VALIDATOR);
         }
-
     }
 }

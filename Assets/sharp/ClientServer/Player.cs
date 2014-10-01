@@ -163,7 +163,7 @@ namespace ServerClient
 
         GameInfo gameInfo;
 
-        PlayerInfo info;
+        public PlayerInfo info;
 
         public PlayerAgent(PlayerInfo info_, Action<Action> sync_, GlobalHost globalHost, GameInfo gameInfo_)
         {
@@ -199,6 +199,10 @@ namespace ServerClient
         {
             WorldInfo w = gameInfo.GetWorldByPos(worldPos);
             myHost.ConnectSendMessage(w.host, MessageType.SPAWN_REQUEST);
+        }
+        public void Move(WorldInfo worldInfo, Point newPos)
+        {
+            myHost.ConnectSendMessage(worldInfo.host, MessageType.MOVE, newPos);
         }
     }
 }

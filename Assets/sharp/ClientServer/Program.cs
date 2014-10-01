@@ -15,6 +15,60 @@ namespace ServerClient
     class Program
     {
         static Random rand = new Random();
+
+        static Point? PlayerRandomMove(World world, Guid player)
+        {
+            Point currPos = world.playerPositions.GetValue(player);
+
+            Point[] moves = {
+                                new Point(-1, 0),
+                                new Point(1, 0),
+                                new Point(0, 1),
+                                new Point(0, -1),
+                                new Point(-1, 1),
+                                new Point(1, -1),
+                                new Point(1, 1),
+                                new Point(-1, -1)
+                            };
+
+            Point newPosition = currPos + moves[rand.Next(0, moves.Length)];
+
+            MoveValidity mv = world.CheckValidMove(player, newPosition);
+            if (mv == MoveValidity.VALID)
+                return newPosition;
+            else
+                return null;
+        }
+
+        public static int PlayerAi(Client myClient, PlayerAgent pa)
+        {
+            Guid playerId = pa.info.id;
+
+            if (!myClient.knownPlayers.ContainsKey(playerId))
+            {
+                return 1000 * 1;
+            }
+
+            
+            PlayerData playerData = myClient.knownPlayers.GetValue(playerId);
+
+            if (!playerData.connected)
+            {
+                if(myClient.knownWorlds.ContainsKey(new Point(0,0)))
+                    pa.Spawn(new Point(0,0));
+
+                return 1000 * 5;
+            }
+            
+            World playerWorld = myClient.knownWorlds.GetValue(playerData.worldPos);
+
+            Point? newPos = PlayerRandomMove(playerWorld, playerId);
+
+            if(newPos.HasValue)
+                pa.Move(playerWorld.myInfo, newPos.Value);
+
+            return 1000 * 1;
+        }
         
         /*static void PlayerRandomMove(Aggregate a, Guid player)
         {
@@ -65,6 +119,7 @@ namespace ServerClient
                 a.Move(p, newPosition, MessageType.VALIDATE_REALM_MOVE);
         }
         */
+        
         static void RepeatedAction(Action<Action> queue, Action a, int period)
         {
             while (true)
@@ -202,6 +257,13 @@ namespace ServerClient
             inputProc.commands.Add("spawn", (param) =>
             {
                 all.SpawnAll();
+            });
+
+            inputProc.commands.Add("draw", (param) =>
+            {
+                World w = all.myClient.knownWorlds.GetValue(new Point(0,0));
+                ThreadManager.NewThread(() => RepeatedAction(all.sync.GetAsDelegate(), () => w.ConsoleOut(), 500),
+                    () => { }, "console drawer");
             });
 
             while (true)

@@ -416,6 +416,11 @@ namespace ServerClient
         {
             if (mt == MessageType.SPAWN_REQUEST)
                 sync.Invoke(() => OnSpawnRequest(inf));
+            else if (mt == MessageType.MOVE)
+            {
+                Point newPos = Serializer.Deserialize<Point>(stm);
+                sync.Invoke(() => OnMoveValidate(inf, newPos));
+            }
             else
                 throw new Exception("WorldValidator.ProcessClientMessage bad message type " + mt.ToString());
         }
@@ -454,10 +459,8 @@ namespace ServerClient
                         throw new Exception("Unexpected response in OnSpawnRequest " + mt);
                 });
         }
-        void OnMoveValidate(PlayerInfo inf, Point currPos, Point newPos)
+        void OnMoveValidate(PlayerInfo inf, Point newPos)
         {
-            
-            
             /*
             if (movementLocks.ContainsKey(p.id))
             {
@@ -465,6 +468,15 @@ namespace ServerClient
                 return;
             }
             */
+
+            if (!world.playerPositions.ContainsKey(inf.id))
+            {
+                Log.LogWriteLine("World {0}: Invalid move {1} by {2}: player absent from this world",
+                    world.myInfo.GetShortInfo(), newPos, inf.GetShortInfo());
+                return;
+            }
+            
+            Point currPos = world.playerPositions.GetValue(inf.id);
 
             MoveValidity v = world.CheckValidMove(inf.id, newPos);
             if (v != MoveValidity.VALID)

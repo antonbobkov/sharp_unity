@@ -835,7 +835,21 @@ namespace ServerClient
         public void AddPlayerAgent(PlayerInfo info)
         {
             MyAssert.Assert(!playerAgents.ContainsKey(info.id));
-            playerAgents.Add(info.id, new PlayerAgent(info, sync.GetAsDelegate(), host, myClient.gameInfo));
+            PlayerAgent pa = new PlayerAgent(info, sync.GetAsDelegate(), host, myClient.gameInfo);
+            playerAgents.Add(info.id, pa);
+
+            ThreadManager.NewThread(() =>
+                {
+                    while (true)
+                    {
+                        int sleepTime;
+                        
+                        lock(sync.syncLock)    
+                            sleepTime = Program.PlayerAi(myClient, pa);
+
+                        Thread.Sleep(sleepTime);
+                    }
+                }, () => {}, "Ai for " + info.GetShortInfo());
         }
 
         public void SpawnAll()
