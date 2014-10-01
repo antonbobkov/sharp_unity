@@ -454,5 +454,30 @@ namespace ServerClient
                         throw new Exception("Unexpected response in OnSpawnRequest " + mt);
                 });
         }
+        void OnMoveValidate(PlayerInfo inf, Point currPos, Point newPos)
+        {
+            
+            
+            /*
+            if (movementLocks.ContainsKey(p.id))
+            {
+                Log.LogWriteLine("Validator: {0} can't move, locked", p.FullName);
+                return;
+            }
+            */
+
+            MoveValidity v = world.CheckValidMove(inf.id, newPos);
+            if (v != MoveValidity.VALID)
+            {
+                Log.LogWriteLine("World {4}: Invalid move {0} from {1} to {2} by {3}", v,
+                    currPos, newPos, inf.GetShortInfo(), world.myInfo.GetShortInfo());
+                return;
+            }
+
+            world.Move(inf.id, newPos, MoveValidity.VALID);
+
+            myHost.BroadcastGroup(Client.hostName, MessageType.MOVE, inf.id, newPos);
+            //Broadcast(MessageType.MOVE, myId, p.id, newPos);
+        }
     }
 }
