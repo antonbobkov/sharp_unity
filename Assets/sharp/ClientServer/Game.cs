@@ -55,6 +55,21 @@ namespace ServerClient
         public Plane() { }
         public Plane(Point size) { plane = new T[size.x * size.y]; Size = size; }
 
+        void AssertRange(int x, int y)
+        {
+            if(!InRange(x, y))
+                throw new IndexOutOfRangeException(new StringBuilder().AppendFormat("Plane<{0}>{1} w/ size {2}", typeof(T).Name, new Point(x, y), Size).ToString());
+        }
+        
+        bool InRange(int x, int y)
+        {
+            if (x < 0 || x >= Size.x)
+                return false;
+            if (y < 0 || y >= Size.y)
+                return false;
+            return true;
+        }
+
         public T this[Point pos]
         {
             get { return this[pos.x, pos.y]; }
@@ -62,8 +77,8 @@ namespace ServerClient
         }
         public T this[int x, int y]
         {
-            get { return plane[y*Size.x + x]; }
-            set { plane[y*Size.x + x] = value; }
+            get { AssertRange(x, y);  return plane[y * Size.x + x]; }
+            set { AssertRange(x, y);  plane[y * Size.x + x] = value; }
         }
 
         public IEnumerable<T> GetTiles()

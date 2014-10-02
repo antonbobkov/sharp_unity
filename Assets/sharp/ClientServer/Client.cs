@@ -30,6 +30,8 @@ namespace ServerClient
         public HashSet<Guid> myPlayerAgents = new HashSet<Guid>();
 
         public Action hookServerReady = () => { };
+        public Action<World, PlayerInfo, MoveType> onMoveHook = (a, b, c) => { };
+        public Action<World> onNewWorldHook = (a) => { };
 
         public Client(Action<Action> sync_, GlobalHost globalHost, Aggregator all_)
         {
@@ -39,6 +41,7 @@ namespace ServerClient
             myHost = globalHost.NewHost(Client.hostName, AssignProcessor);
             myHost.onNewConnectionHook = ProcessNewConnection;
         }
+
 
         Node.MessageProcessor AssignProcessor(Node n)
         {
@@ -204,6 +207,10 @@ namespace ServerClient
         void OnNewWorld(World w)
         {
             knownWorlds.Add(w.Position, w);
+            w.onMoveHook = (player, mv) => OnMove(w, player, mv);
+
+            onNewWorldHook(w);
+
             Log.LogWriteLine("New world {0}", w.Position);
             w.ConsoleOut();
         }
@@ -244,9 +251,8 @@ namespace ServerClient
         {
             return myHost.TryConnectAsync(new OverlayEndpoint(ep, Client.hostName)) != null;
         }
-        public void NewMyPlayer()
+        public void NewMyPlayer(Guid id)
         {
-            Guid id = Guid.NewGuid();
             myPlayerAgents.Add(id);
             server.SendMessage(MessageType.NEW_PLAYER, id);
         }
@@ -257,6 +263,11 @@ namespace ServerClient
         public void Validate()
         {
             server.SendMessage(MessageType.NEW_VALIDATOR);
+        }
+
+        void OnMove(World w, PlayerInfo player, MoveType mv)
+        {
+            onMoveHook.Invoke(w, player, mv);
         }
     }
 }

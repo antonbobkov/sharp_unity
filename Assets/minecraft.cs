@@ -82,9 +82,9 @@ class WorldDraw
 
 public class minecraft : MonoBehaviour {
 
-    Aggregate all;
+    Aggregator all;
 
-    bool gameStarted = false;
+    //bool gameStarted = false;
 
     Dictionary<Guid, GameObject> players = new Dictionary<Guid, GameObject>();
 	Dictionary<Point, WorldDraw> worlds = new Dictionary<Point, WorldDraw>();
@@ -95,12 +95,12 @@ public class minecraft : MonoBehaviour {
 
     static internal Vector3 GetPositionAtGrid(World w, Point pos)
     {
-		Point worldPos = new Point(w.worldPosition.x * w.map.Size.x, w.worldPosition.y * w.map.Size.y);
+        Point worldPos = new Point(w.Position.x * w.map.Size.x, w.Position.y * w.map.Size.y);
 		return new Vector3(worldPos.x + pos.x, worldPos.y + pos.y, 0);
     }
 	static internal Point GetPositionAtMap(World w, Point pos)
 	{
-		Point worldPos = new Point(w.worldPosition.x * w.map.Size.x, w.worldPosition.y * w.map.Size.y);
+        Point worldPos = new Point(w.Position.x * w.map.Size.x, w.Position.y * w.map.Size.y);
 		return pos - worldPos;
 	}
 
@@ -108,23 +108,23 @@ public class minecraft : MonoBehaviour {
 
 	// Use this for initialization
 	void Start () {
-        Log.log = msg => Debug.Log(msg); 
+        Log.log = msg => Debug.Log(msg);
 
-        all = new Aggregate();
+        all = new Aggregator();
 
-        all.sync.Add(() =>
+        Program.MeshConnect(all);
+
+        all.myClient.hookServerReady = () =>
         {
             me = Guid.NewGuid();
-
-			Role r = new Role();
-			r.player.Add(me);
-			all.AddMyRole(r);
-            //all.myRole.validator.Add(Guid.NewGuid());
             Log.LogWriteLine("Player {0}", me);
+            all.myClient.NewMyPlayer(me);
+        };
 
-            // mesh connect
-            Program.MeshConnect(all);
-        });
+        all.myClient.onMoveHook = (w, pl, mt) => bufferedActions.Enqueue(() => OnMove(w, pl, mt));
+        all.myClient.onNewWorldHook = (w) => bufferedActions.Enqueue(() => OnNewWorld(w));
+
+        all.sync.Start();
 
         var light = gameObject.AddComponent<Light>();
         light.type = LightType.Point;
@@ -137,28 +137,9 @@ public class minecraft : MonoBehaviour {
         Application.runInBackground = true;
     }
 
-    void StartGame()
-    {
-		all.SetMoveHook( (w, p, mt) => bufferedActions.Enqueue(() => onMove(w, p, mt)));
-
-        UpdateWorlds(all.game.GetWorld(new Point(0, 0)));
-
-		foreach (Player pl in all.game.players.Values)
-		{
-			World w = all.game.GetPlayerWorld(pl.id);
-            if (!worlds.ContainsKey(w.worldPosition))
-                continue;
-
-            AddPlayer(w, pl);
-
-            onMove(w, pl, MoveType.MOVE);
-        }
-		
-	}
-
     void OnApplicationQuit () {
 		Log.LogWriteLine ("Terminating");
-		all.peers.Close();
+		all.host.Close();
 		System.Threading.Thread.Sleep (100);
 		Log.LogWriteLine (ThreadManager.Status ());
 		ThreadManager.Terminate();
@@ -166,14 +147,14 @@ public class minecraft : MonoBehaviour {
 		//all.sync.Add(null);
 	}
 
-    void AddPlayer(World w, Player pl)
+    void AddPlayer(World w, Guid player)
     {
-        MyAssert.Assert(!players.ContainsKey(pl.id));
-        Point pos = w.playerPositions.GetValue(pl.id);
+        MyAssert.Assert(!players.ContainsKey(player));
+        Point pos = w.playerPositions.GetValue(player);
 
         var avatar = GameObject.CreatePrimitive(PrimitiveType.Sphere);
 
-        var r = new ServerClient.MyRandom(BitConverter.ToInt32(pl.id.ToByteArray(), 0));
+        var r = new ServerClient.MyRandom(BitConverter.ToInt32(player.ToByteArray(), 0));
 
         avatar.renderer.material.color = new Color(
             (float)r.NextDouble(),
@@ -181,57 +162,82 @@ public class minecraft : MonoBehaviour {
             (float)r.NextDouble());
 
         avatar.transform.position = GetPositionAtGrid(w, pos);
-        players.Add(pl.id, avatar);
+        players.Add(player, avatar);
     }
-    void UpdateWorlds(World w)
+
+    void AddNewPlayers(World w)
     {
-        Point worldPos = w.worldPosition;
+        foreach (Guid id in w.playerPositions.Keys)
+        {
+            if (!players.ContainsKey(id))
+                AddPlayer(w, id);
+        }
+    }
+
+    void UpdateWorlds()
+    {
+        Point centerWorldPos = new Point(0,0);
+
+        PlayerData myData = all.myClient.knownPlayers.TryGetValue(me);
+        if (myData != null)
+        {
+            if (myData.connected)
+                centerWorldPos = myData.worldPos;
+        }
+
         Dictionary<Point, WorldDraw> newWorlds = new Dictionary<Point, WorldDraw>();
         foreach (Point delta in Point.SymmetricRange(new Point(1, 1)))
         {
-            World worldCandidate = all.game.TryGetWorld(worldPos + delta);
+            Point targetPos = centerWorldPos + delta;
+            World worldCandidate = all.myClient.knownWorlds.TryGetValue(targetPos);
             if (worldCandidate == null)
                 continue;
-            if (worlds.ContainsKey(worldCandidate.worldPosition))
+
+            if (worlds.ContainsKey(targetPos))
             {
-                newWorlds[worldCandidate.worldPosition] = worlds[worldCandidate.worldPosition];
-                worlds.Remove(worldCandidate.worldPosition);
+                newWorlds[targetPos] = worlds[targetPos];
+                worlds.Remove(targetPos);
             }
             else
-                newWorlds[worldCandidate.worldPosition] = new WorldDraw(worldCandidate);
+                newWorlds[targetPos] = new WorldDraw(worldCandidate);
         }
 
         foreach (WorldDraw wdt in worlds.Values)
             wdt.Purge();
         worlds = newWorlds;
-    
     }
 
-	void onMove(World w, Player p, MoveType mv)
+    void OnNewWorld(World w)
+    {
+        UpdateWorlds();
+        Log.LogWriteLine("Unity : OnNewWorld " + w.Position);
+    }
+
+    void OnMove(World w, PlayerInfo player, MoveType mv)
 	{
         if (mv == MoveType.LEAVE)
             return;
 
-		Point pos = w.playerPositions.GetValue(p.id);
+        Point pos = w.playerPositions.GetValue(player.id);
 
-        if (mv == MoveType.JOIN && p.id == me)
-            UpdateWorlds(w);
+        if (mv == MoveType.JOIN && player.id == me)
+            UpdateWorlds();
 
 
-        if (!worlds.ContainsKey(w.worldPosition))
+        if (!worlds.ContainsKey(w.Position))
         {
-            if (players.ContainsKey(p.id))
+            if (players.ContainsKey(player.id))
             {
-                Destroy(players[p.id]);
-                players.Remove(p.id);
+                Destroy(players[player.id]);
+                players.Remove(player.id);
             }
             return;
         }
 
-		if(!players.ContainsKey(p.id))
-			AddPlayer(w, p);
+        if (!players.ContainsKey(player.id))
+            AddPlayer(w, player.id);
 
-        WorldDraw wd = worlds.GetValue(w.worldPosition);
+        WorldDraw wd = worlds.GetValue(w.Position);
 		
 
 		GameObject obj = wd.loots[pos];
@@ -240,17 +246,18 @@ public class minecraft : MonoBehaviour {
 			Destroy(obj);
 			wd.loots[pos] = null;
 		}
-		
-		GameObject movedPlayer = players.GetValue(p.id);
+
+        GameObject movedPlayer = players.GetValue(player.id);
 		movedPlayer.transform.position = GetPositionAtGrid(w, pos);
-		
-		if(p.id == me)
+
+        if (player.id == me)
 		{
 			camera.transform.position = movedPlayer.transform.position;
 			camera.transform.position += new Vector3(0f, 0f, -cameraDistance);
 		}
 	}
 
+    /*
 	void ProcessMovement()
     {
         Point p = new Point();
@@ -308,10 +315,12 @@ public class minecraft : MonoBehaviour {
 			all.Move(pl, pos, MessageType.VALIDATE_TELEPORT);
         }
     }
+    */
 	
 	// Update is called once per frame
 	void Update () {
 
+        /*
         if (!gameStarted)
         {
             lock(all.sync.syncLock)
@@ -338,11 +347,11 @@ public class minecraft : MonoBehaviour {
                 StartGame();
                 Debug.Log("Game started");
             }
-        }
+        }*/
 
         lock (all.sync.syncLock)
         {
-            ProcessMovement();
+            //ProcessMovement();
 
             while(bufferedActions.Any())
                 bufferedActions.Dequeue().Invoke();

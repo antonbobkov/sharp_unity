@@ -12,7 +12,7 @@ using System.Xml.Serialization;
 
 namespace ServerClient
 {
-    class Program
+    static class Program
     {
         static Random rand = new Random();
 
@@ -40,15 +40,21 @@ namespace ServerClient
                 return null;
         }
 
-        public static int PlayerAi(Client myClient, PlayerAgent pa)
+        static int PlayerAiMove(Aggregator all, Guid playerId)
         {
-            Guid playerId = pa.info.id;
+            int longSleep = 1000 * 5;
+
+            Client myClient = all.myClient;
 
             if (!myClient.knownPlayers.ContainsKey(playerId))
-            {
-                return 1000 * 1;
-            }
+                return longSleep;
 
+            if (!all.playerAgents.ContainsKey(playerId))
+                return longSleep;
+
+            MyAssert.Assert(myClient.myPlayerAgents.Contains(playerId));
+
+            PlayerAgent pa = all.playerAgents.GetValue(playerId);
             
             PlayerData playerData = myClient.knownPlayers.GetValue(playerId);
 
@@ -70,6 +76,23 @@ namespace ServerClient
             return 1000 * 1;
         }
         
+        public static void StartPlayerAiThread(Aggregator all, Guid playerId)
+        {
+            ThreadManager.NewThread(() =>
+                {
+                    while (true)
+                    {
+                        int sleepTime;
+                        
+                        lock(all.sync.syncLock)
+                            sleepTime = PlayerAiMove(all, playerId);
+
+                        Thread.Sleep(sleepTime);
+                    }
+                }, () => { }, "Ai for player " + playerId);
+        
+        }
+
         /*static void PlayerRandomMove(Aggregate a, Guid player)
         {
             Game g = a.game;
@@ -209,6 +232,16 @@ namespace ServerClient
                 Console.WriteLine(pi.GetFullInfo());
         }
 
+        static Guid NewAiPlayer(Aggregator all)
+        {
+            Guid newPlayer = Guid.NewGuid();
+
+            all.myClient.NewMyPlayer(newPlayer);
+            StartPlayerAiThread(all, newPlayer);
+
+            return newPlayer;
+        }
+
         static void Main(string[] args)
         {
             Aggregator all = new Aggregator();
@@ -221,7 +254,7 @@ namespace ServerClient
                 if (all.host.MyAddress.Port != GlobalHost.nStartPort)
                 {
                     for (int i = 0; i < 3; ++i)
-                        all.myClient.NewMyPlayer();
+                        NewAiPlayer(all);
                 }
             };
 
@@ -241,7 +274,7 @@ namespace ServerClient
 
             inputProc.commands.Add("player", (param) =>
             {
-                all.myClient.NewMyPlayer();
+                NewAiPlayer(all);
             });
             
             inputProc.commands.Add("world", (param) =>

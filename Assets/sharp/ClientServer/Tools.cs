@@ -165,6 +165,14 @@ namespace ServerClient
                 return dict[key];
             throw new InvalidOperationException("Key not found " + key.ToString());
         }
+
+        public static V TryGetValue<K, V>(this Dictionary<K, V> dict, K key)
+        {
+            if (dict.ContainsKey(key))
+                return dict[key];
+            else
+                return default(V);
+        }
     }
 
     [Serializable]

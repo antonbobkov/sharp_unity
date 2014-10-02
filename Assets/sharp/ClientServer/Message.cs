@@ -26,7 +26,6 @@ namespace ServerClient
 
     public enum NodeRole { PLAYER, WORLD, POTENTIAL_VALIDATOR, PLAYER_VALIDATOR, WORLD_VALIDATOR };
 
-    public enum MoveType { MOVE, LEAVE, JOIN };
     */
 
     public enum MessageType : byte { HANDSHAKE,
@@ -37,6 +36,8 @@ namespace ServerClient
     SPAWN_REQUEST, SPAWN_SUCCESS, SPAWN_FAIL};
     
     public enum NodeRole { PLAYER, PLAYER_VALIDATOR, WORLD_VALIDATOR };
+
+    public enum MoveType { MOVE, LEAVE, JOIN };
 
     /*abstract class MessageReceiver
     {

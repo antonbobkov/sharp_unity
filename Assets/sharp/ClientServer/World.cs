@@ -120,7 +120,7 @@ namespace ServerClient
         GameInfo info;
 
         public Action<PlayerInfo> onLootHook = (info) => { };
-        //public Action<PlayerInfo> onMoveHook = (info) => { };
+        public Action<PlayerInfo, MoveType> onMoveHook = (a,b) => { };
 
         public World(WorldSerialized ws, GameInfo info_)
         {
@@ -305,7 +305,9 @@ namespace ServerClient
             tile.player = player;
             tile.loot = false;
 
-            //onMoveHook(p);
+            MoveType mt = mv == MoveValidity.NEW ? MoveType.JOIN : MoveType.MOVE;
+            
+            onMoveHook(p, mt);
         }
 
         int BoundaryMove(ref int p, int sz)
