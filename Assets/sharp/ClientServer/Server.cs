@@ -23,7 +23,7 @@ namespace ServerClient
 
         Random r = new Random();
 
-        GameInfo gameState = new GameInfo();
+        GameInfo gameInfo = new GameInfo();
         List<IPEndPoint> validatorPool = new List<IPEndPoint>();
 
         Action<Action> sync;
@@ -68,7 +68,12 @@ namespace ServerClient
             if (remoteName == Client.hostName)
                 return ProcessClientMessage;
 
-            throw new InvalidOperationException("Server.AssignProcessor unexpected connection " + remoteName.ToString());
+            NodeRole role = gameInfo.GetRoleOfHost(n.info.remote);
+
+            if (role == NodeRole.WORLD_VALIDATOR)
+                return ProcessWorldMessage;
+
+            throw new InvalidOperationException("Client.AssignProcessor unexpected connection " + n.info.remote + " " + role);
         }
         void ProcessClientMessage(MessageType mt, Stream stm, Node n)
         {
@@ -94,6 +99,16 @@ namespace ServerClient
             else
                 throw new Exception("Client.ProcessClientMessage bad message type " + mt.ToString());
         }
+        void ProcessWorldMessage(MessageType mt, Stream stm, Node n)
+        {
+            if (mt == MessageType.NEW_WORLD)
+            {
+                Point worldPos = Serializer.Deserialize<Point>(stm);
+                sync.Invoke(() => OnNewWorldRequest(worldPos));
+            }
+            else
+                throw new Exception("Client.ProcessWorldMessage bad message type " + mt.ToString());
+        }
 
         void ProcessNewConnection(Node n)
         {
@@ -101,12 +116,10 @@ namespace ServerClient
 
             if (remoteName == Client.hostName)
                 OnNewClient(n);
-            else
-                throw new InvalidOperationException("Server.ProcessNewConnection unexpected connection " + remoteName.ToString());
         }
         void OnNewClient(Node n)
         {
-            n.SendMessage(MessageType.GAME_INFO, gameState.Serialize());
+            n.SendMessage(MessageType.GAME_INFO, gameInfo.Serialize());
         }
 
         void OnNewPlayerRequest(Guid playerId, OverlayEndpoint playerHost)
@@ -125,7 +138,7 @@ namespace ServerClient
                 ep = validatorClient,
                 a = () =>
                 {
-                    gameState.AddPlayer(info);
+                    gameInfo.AddPlayer(info);
                     myHost.BroadcastGroup(Client.hostName, MessageType.NEW_PLAYER, info);
                 }
             };
@@ -153,7 +166,7 @@ namespace ServerClient
                 ep = validatorClient,
                 a = () =>
                 {
-                    gameState.AddWorld(info);
+                    gameInfo.AddWorld(info);
                     myHost.BroadcastGroup(Client.hostName, MessageType.NEW_WORLD, info);
                 }
             };

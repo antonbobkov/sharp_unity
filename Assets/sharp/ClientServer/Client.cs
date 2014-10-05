@@ -16,7 +16,7 @@ namespace ServerClient
         public static readonly OverlayHostName hostName = new OverlayHostName("client");
 
         public GameInfo gameInfo = null;
-        OverlayEndpoint serverHost = null;
+        public OverlayEndpoint serverHost = null;
         Node server = null;
 
         Action<Action> sync;

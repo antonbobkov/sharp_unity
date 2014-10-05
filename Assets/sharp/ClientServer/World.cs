@@ -355,6 +355,7 @@ namespace ServerClient
         OverlayHost myHost;
 
         GameInfo gameInfo;
+        OverlayEndpoint serverHost;
 
         Dictionary<string, Action<MessageType>> networkLocks = new Dictionary<string, Action<MessageType>>();
         void FinishLock(string s, MessageType mt)
@@ -363,10 +364,11 @@ namespace ServerClient
             networkLocks.Remove(s);
         }
 
-        public WorldValidator(WorldInfo info, WorldInitializer init, Action<Action> sync_, GlobalHost globalHost, GameInfo gameInfo_)
+        public WorldValidator(WorldInfo info, WorldInitializer init, Action<Action> sync_, GlobalHost globalHost, GameInfo gameInfo_, OverlayEndpoint serverHost_)
         {
             gameInfo = gameInfo_;
             sync = sync_;
+            serverHost = serverHost_;
 
             world = new World(info, init, gameInfo);
 
@@ -379,6 +381,8 @@ namespace ServerClient
             OverlayHostName remoteName = n.info.remote.hostname;
             if (remoteName == Client.hostName)
                 return (mt, stm, nd) => { throw new Exception("WorldValidator not expecting messages from Client." + mt + " " + nd.info); };
+            if (remoteName == Server.hostName)
+                return (mt, stm, nd) => { throw new Exception("WorldValidator not expecting messages from Server." + mt + " " + nd.info); };
             
             NodeRole role = gameInfo.GetRoleOfHost(n.info.remote);
 
@@ -457,6 +461,9 @@ namespace ServerClient
                         }
 
                         Point spawnPos = spawn.Random((n) => rand.Next(n)).Key;
+
+                        if (!world.playerPositions.Any())   // on first spawn
+                            BoundaryRequest();
                         
                         world.AddPlayer(inf.id, spawnPos);
                         myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_JOIN, inf.id, spawnPos);
@@ -496,6 +503,21 @@ namespace ServerClient
 
             myHost.BroadcastGroup(Client.hostName, MessageType.MOVE, inf.id, newPos);
             //Broadcast(MessageType.MOVE, myId, p.id, newPos);
+        }
+
+        void BoundaryRequest()
+        {
+            Point myPosition = world.Position;
+            foreach (Point delta in Point.SymmetricRange(new Point(1, 1)))
+            {
+                Point newPos = myPosition + delta;
+                
+                try { gameInfo.GetWorldByPos(newPos); }
+                catch (Exception)
+                {
+                    myHost.ConnectSendMessage(serverHost, MessageType.NEW_WORLD, newPos);
+                }
+            }
         }
     }
 }

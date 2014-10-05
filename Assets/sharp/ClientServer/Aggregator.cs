@@ -825,7 +825,7 @@ namespace ServerClient
         public void AddWorldValidator(WorldInfo info, WorldInitializer init)
         {
             MyAssert.Assert(!worldValidators.ContainsKey(info.worldPos));
-            worldValidators.Add(info.worldPos, new WorldValidator(info, init, sync.GetAsDelegate(), host, myClient.gameInfo));
+            worldValidators.Add(info.worldPos, new WorldValidator(info, init, sync.GetAsDelegate(), host, myClient.gameInfo, myClient.serverHost));
         }
         public void AddPlayerValidator(PlayerInfo info)
         {
