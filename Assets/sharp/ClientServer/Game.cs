@@ -29,6 +29,12 @@ namespace ServerClient
         public static Point operator -(Point p1, Point p2) { return p1 + -p2; }
         //public static bool operator !=(Point p1, Point p2) { return !(p1 == p2); }
 
+        public override bool Equals(object comparand) { return this.ToString().Equals(comparand.ToString()); }
+        public override int GetHashCode() { return this.ToString().GetHashCode(); }
+
+        public static bool operator ==(Point o1, Point o2) { return Object.Equals(o1, o2); }
+        public static bool operator !=(Point o1, Point o2) { return !(o1 == o2); }
+
         public static IEnumerable<Point> Range(Point size)
         {
             Point p = new Point();

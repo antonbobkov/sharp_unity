@@ -32,6 +32,7 @@ namespace ServerClient
         public Action hookServerReady = () => { };
         public Action<World, PlayerInfo, MoveType> onMoveHook = (a, b, c) => { };
         public Action<World> onNewWorldHook = (a) => { };
+        public Action<PlayerInfo> onNewPlayerHook = (a) => { };
 
         public Client(Action<Action> sync_, GlobalHost globalHost, Aggregator all_)
         {
@@ -197,6 +198,8 @@ namespace ServerClient
 
             if (myPlayerAgents.Contains(inf.id))
                 all.AddPlayerAgent(inf);
+
+            onNewPlayerHook(inf);
         }
         void OnNewWorld(WorldInfo inf)
         {

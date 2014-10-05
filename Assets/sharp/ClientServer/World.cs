@@ -90,13 +90,6 @@ namespace ServerClient
         public string GetShortInfo() { return "World " + worldPos.ToString(); }
     }
 
-    [Serializable]
-    public class WorldSerialized
-    {
-        public Plane<Tile> map;
-        public WorldInfo myInfo;
-    }
-
     public enum MoveValidity
     {
         VALID = 0,
@@ -106,15 +99,22 @@ namespace ServerClient
         TELEPORT = 8,
         NEW = 16
     };
+
+    [Serializable]
+    public class WorldSerialized
+    {
+        public Plane<Tile> map;
+        public WorldInfo myInfo;
+    }
     
     class World
     {
         static readonly Point worldSize = new Point(20, 10);
 
-        public readonly WorldInfo myInfo;
+        public readonly WorldInfo worldInfo;
         public Plane<Tile> map;
 
-        public Point Position { get { return myInfo.worldPos; } }
+        public Point Position { get { return worldInfo.worldPos; } }
 
         public Dictionary<Guid, Point> playerPositions = new Dictionary<Guid,Point>();
         GameInfo info;
@@ -124,13 +124,17 @@ namespace ServerClient
 
         public World(WorldSerialized ws, GameInfo info_)
         {
-            myInfo = ws.myInfo;
+            worldInfo = ws.myInfo;
             info = info_;
             map = ws.map;
+
+            foreach (Point p in Point.Range(map.Size))
+                if (map[p].player != Guid.Empty)
+                    playerPositions.Add(map[p].player, p);
         }
         public World(WorldInfo myInfo_, WorldInitializer init, GameInfo info_)
         {
-            myInfo = myInfo_;
+            worldInfo = myInfo_;
             info = info_;
 
             map = new Plane<Tile>(worldSize);
@@ -143,7 +147,7 @@ namespace ServerClient
 
         public WorldSerialized Serialize()
         {
-            return new WorldSerialized() { map = map, myInfo = myInfo };
+            return new WorldSerialized() { map = map, myInfo = worldInfo };
         }
 
         public IEnumerable<Point> GetBoundary()
@@ -431,7 +435,7 @@ namespace ServerClient
         {
             if(networkLocks.ContainsKey(inf.validatorHost.ToString()))
             {
-                Log.LogWriteLine("Spawn failed, spawn in progress.\n World {0} \n Player {1}", world.myInfo, inf);
+                Log.LogWriteLine("Spawn failed, spawn in progress.\n World {0} \n Player {1}", world.worldInfo, inf);
                 return;
             }
             
@@ -441,14 +445,14 @@ namespace ServerClient
                 {
                     if (mt == MessageType.SPAWN_FAIL)
                     {
-                        Log.LogWriteLine("Spawn failed, already spawned.\n World {0} \n Player {1}", world.myInfo, inf);
+                        Log.LogWriteLine("Spawn failed, already spawned.\n World {0} \n Player {1}", world.worldInfo, inf);
                     }
                     else if (mt == MessageType.SPAWN_SUCCESS)
                     {
                         var spawn = world.GetSpawn().ToList();
                         if (!spawn.Any())
                         {
-                            Log.LogWriteLine("Spawn failed, no space.\n World {0} \n Player {1}", world.myInfo, inf);
+                            Log.LogWriteLine("Spawn failed, no space.\n World {0} \n Player {1}", world.worldInfo, inf);
                             return;
                         }
 
@@ -474,7 +478,7 @@ namespace ServerClient
             if (!world.playerPositions.ContainsKey(inf.id))
             {
                 Log.LogWriteLine("World {0}: Invalid move {1} by {2}: player absent from this world",
-                    world.myInfo.GetShortInfo(), newPos, inf.GetShortInfo());
+                    world.worldInfo.GetShortInfo(), newPos, inf.GetShortInfo());
                 return;
             }
             
@@ -484,7 +488,7 @@ namespace ServerClient
             if (v != MoveValidity.VALID)
             {
                 Log.LogWriteLine("World {4}: Invalid move {0} from {1} to {2} by {3}", v,
-                    currPos, newPos, inf.GetShortInfo(), world.myInfo.GetShortInfo());
+                    currPos, newPos, inf.GetShortInfo(), world.worldInfo.GetShortInfo());
                 return;
             }
 

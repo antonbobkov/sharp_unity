@@ -18,20 +18,25 @@ class WorldDraw
 {
     static public bool continuousBackground = true;
 
+    World w;
+
     public readonly Point sz;
 
 	public GameObject background;
 	public Plane<GameObject> walls;
 	public Plane<GameObject> loots;
+    public Dictionary<Guid, GameObject> players = new Dictionary<Guid, GameObject>();
 
 	public void MessBackground()
     {
         //background.transform.rotation = Quaternion.AngleAxis(2f, UnityEngine.Random.onUnitSphere);
         background.transform.localScale *= .99f;
     }
-    public WorldDraw(World w)
+
+    public WorldDraw(World w_)
 	{
-		sz = w.map.Size;
+		w = w_;
+        sz = w.map.Size;
 
 		walls = new Plane<GameObject>(sz);
 		loots = new Plane<GameObject>(sz);
@@ -67,7 +72,11 @@ class WorldDraw
 
         if (!continuousBackground)
             MessBackground();
-	}
+        
+        foreach (Guid id in w.playerPositions.Keys)
+            AddPlayer(id);
+    }
+
 	public void Purge()
 	{
 		foreach(Point pos in Point.Range(sz))
@@ -76,8 +85,35 @@ class WorldDraw
 			UnityEngine.Object.Destroy (loots[pos]);
 		}
 
+        foreach(GameObject pl in players.Values)
+            UnityEngine.Object.Destroy(pl);
+
 		UnityEngine.Object.Destroy(background);
 	}
+
+    public void AddPlayer(Guid player)
+    {
+        MyAssert.Assert(w.playerPositions.ContainsKey(player));
+        Point pos = w.playerPositions.GetValue(player);
+
+        var avatar = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+
+        var r = new ServerClient.MyRandom(BitConverter.ToInt32(player.ToByteArray(), 0));
+
+        avatar.renderer.material.color = new Color(
+            (float)r.NextDouble(),
+            (float)r.NextDouble(),
+            (float)r.NextDouble());
+
+        avatar.transform.position = minecraft.GetPositionAtGrid(w, pos);
+        players.Add(player, avatar);
+    }
+
+    public void RemovePlayer(Guid player)
+    {
+        MyAssert.Assert(players.ContainsKey(player));
+        players.Remove(player);
+    }
 }
 
 public class minecraft : MonoBehaviour {
@@ -86,7 +122,6 @@ public class minecraft : MonoBehaviour {
 
     //bool gameStarted = false;
 
-    Dictionary<Guid, GameObject> players = new Dictionary<Guid, GameObject>();
 	Dictionary<Point, WorldDraw> worlds = new Dictionary<Point, WorldDraw>();
 
 	Guid me;
@@ -121,6 +156,12 @@ public class minecraft : MonoBehaviour {
             all.myClient.NewMyPlayer(me);
         };
 
+        all.myClient.onNewPlayerHook = (inf) =>
+        {
+            if (inf.id == me)
+                TrySpawn();
+        };
+
         all.myClient.onMoveHook = (w, pl, mt) => bufferedActions.Enqueue(() => OnMove(w, pl, mt));
         all.myClient.onNewWorldHook = (w) => bufferedActions.Enqueue(() => OnNewWorld(w));
 
@@ -137,6 +178,27 @@ public class minecraft : MonoBehaviour {
         Application.runInBackground = true;
     }
 
+    bool TrySpawn()
+    {
+        try
+        {
+            PlayerAgent pa = all.playerAgents.GetValue(me);
+            all.myClient.knownWorlds.GetValue(new Point(0, 0));
+            PlayerData pd = all.myClient.knownPlayers.GetValue(me);
+
+            if (pd.connected)
+                return false;
+
+            pa.Spawn(new Point(0, 0));
+
+            return true;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
     void OnApplicationQuit () {
 		Log.LogWriteLine ("Terminating");
 		all.host.Close();
@@ -146,33 +208,6 @@ public class minecraft : MonoBehaviour {
 		//System.Threading.Thread.Sleep (100);
 		//all.sync.Add(null);
 	}
-
-    void AddPlayer(World w, Guid player)
-    {
-        MyAssert.Assert(!players.ContainsKey(player));
-        Point pos = w.playerPositions.GetValue(player);
-
-        var avatar = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-
-        var r = new ServerClient.MyRandom(BitConverter.ToInt32(player.ToByteArray(), 0));
-
-        avatar.renderer.material.color = new Color(
-            (float)r.NextDouble(),
-            (float)r.NextDouble(),
-            (float)r.NextDouble());
-
-        avatar.transform.position = GetPositionAtGrid(w, pos);
-        players.Add(player, avatar);
-    }
-
-    void AddNewPlayers(World w)
-    {
-        foreach (Guid id in w.playerPositions.Keys)
-        {
-            if (!players.ContainsKey(id))
-                AddPlayer(w, id);
-        }
-    }
 
     void UpdateWorlds()
     {
@@ -211,34 +246,33 @@ public class minecraft : MonoBehaviour {
     {
         UpdateWorlds();
         Log.LogWriteLine("Unity : OnNewWorld " + w.Position);
+
+        if (w.Position == new Point(0, 0))
+            TrySpawn();
     }
 
     void OnMove(World w, PlayerInfo player, MoveType mv)
 	{
         if (mv == MoveType.LEAVE)
-            return;
-
-        Point pos = w.playerPositions.GetValue(player.id);
-
-        if (mv == MoveType.JOIN && player.id == me)
-            UpdateWorlds();
-
-
-        if (!worlds.ContainsKey(w.Position))
         {
-            if (players.ContainsKey(player.id))
-            {
-                Destroy(players[player.id]);
-                players.Remove(player.id);
-            }
+            WorldDraw worldDraw = worlds.TryGetValue(w.Position);
+            if (worldDraw != null)
+                worldDraw.RemovePlayer(player.id);
             return;
         }
 
-        if (!players.ContainsKey(player.id))
-            AddPlayer(w, player.id);
+        //if (mv == MoveType.JOIN && player.id == me)
+        //    UpdateWorlds(w.Position);
+
+        if (!worlds.ContainsKey(w.Position))
+            return;
 
         WorldDraw wd = worlds.GetValue(w.Position);
-		
+
+        if (mv == MoveType.JOIN)
+            wd.AddPlayer(player.id);
+
+        Point pos = w.playerPositions.GetValue(player.id);
 
 		GameObject obj = wd.loots[pos];
 		if (obj != null)
@@ -247,7 +281,9 @@ public class minecraft : MonoBehaviour {
 			wd.loots[pos] = null;
 		}
 
-        GameObject movedPlayer = players.GetValue(player.id);
+        MyAssert.Assert(wd.players.ContainsKey(player.id));
+
+        GameObject movedPlayer = wd.players.GetValue(player.id);
 		movedPlayer.transform.position = GetPositionAtGrid(w, pos);
 
         if (player.id == me)
@@ -257,7 +293,6 @@ public class minecraft : MonoBehaviour {
 		}
 	}
 
-    /*
 	void ProcessMovement()
     {
         Point p = new Point();
@@ -271,33 +306,23 @@ public class minecraft : MonoBehaviour {
         if (Input.GetKeyDown(KeyCode.RightArrow))
             p = p + new Point(1, 0);
 
-        if (Input.GetKeyDown(KeyCode.Space))
+        if (p != new Point(0,0))
         {
-            p = p + new Point(1,1);
-        }
-
-        if (p.x != 0 || p.y != 0)
-        {
-            Game g = all.game;
-            Player pl = g.players[me];
-			World w = g.GetPlayerWorld(pl.id);
-			Point oldPos = w.playerPositions.GetValue(pl.id);
+            PlayerAgent pa = all.playerAgents.GetValue(me);
+            PlayerData pd = all.myClient.knownPlayers.GetValue(me);
+            if (!pd.connected)
+                return;
+            World w = all.myClient.knownWorlds.GetValue(pd.worldPos);
+			
+            Point oldPos = w.playerPositions.GetValue(me);
 			Point newPos = oldPos + p;
 
-			if (w.CheckValidMove(pl.id, newPos) == MoveValidity.VALID)
-				all.Move(pl, newPos, MessageType.VALIDATE_MOVE);
-			else if((w.CheckValidMove(pl.id, newPos) & ~MoveValidity.BOUNDARY) == MoveValidity.VALID)
-				all.Move(pl, newPos, MessageType.VALIDATE_REALM_MOVE);
-
-
-
-            if (Input.GetKeyDown(KeyCode.Space))
-            {
-                for(int i = 0; i < 10000; ++i)
-					all.Move(pl, newPos, MessageType.VALIDATE_MOVE);
-            }
+			if (w.CheckValidMove(me, newPos) == MoveValidity.VALID)
+				pa.Move(w.worldInfo, newPos);
+			//else if((w.CheckValidMove(pl.id, newPos) & ~MoveValidity.BOUNDARY) == MoveValidity.VALID)
+			//	all.Move(pl, newPos, MessageType.VALIDATE_REALM_MOVE);
         }
-
+        /*
         if (Input.GetMouseButtonDown(0))
         {
 			Game g = all.game;
@@ -314,8 +339,8 @@ public class minecraft : MonoBehaviour {
             Log.LogWriteLine("Teleporting to {0}", pos);
 			all.Move(pl, pos, MessageType.VALIDATE_TELEPORT);
         }
+         * */
     }
-    */
 	
 	// Update is called once per frame
 	void Update () {
@@ -351,7 +376,7 @@ public class minecraft : MonoBehaviour {
 
         lock (all.sync.syncLock)
         {
-            //ProcessMovement();
+            ProcessMovement();
 
             while(bufferedActions.Any())
                 bufferedActions.Dequeue().Invoke();
