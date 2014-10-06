@@ -132,9 +132,9 @@ namespace ServerClient
         void ProcessWorldMessage(MessageType mt, Stream stm, Node n, WorldInfo inf)
         {
             if (mt == MessageType.SPAWN_REQUEST)
-            {
                 sync.Invoke(() => OnSpawnRequest(inf, n));
-            }
+            else if (mt == MessageType.PLAYER_JOIN)
+                sync.Invoke(() => OnPlayerNewRealm(inf));
             else
                 throw new Exception("PlayerValidator.ProcessWorldMessage bad message type " + mt.ToString());
         }
@@ -151,8 +151,14 @@ namespace ServerClient
                 playerData.worldPos = inf.worldPos;
 
                 n.SendMessage(MessageType.SPAWN_SUCCESS);
-                myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_INFO, playerData);
+                myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_INFO, playerData, PlayerDataUpdate.CONNECT);
             }
+        }
+        void OnPlayerNewRealm(WorldInfo inf)
+        {
+            MyAssert.Assert(playerData.connected);
+            playerData.worldPos = inf.worldPos;
+            myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_INFO, playerData, PlayerDataUpdate.MOVE_REALM);
         }
     }
 
@@ -200,9 +206,10 @@ namespace ServerClient
             WorldInfo w = gameInfo.GetWorldByPos(worldPos);
             myHost.ConnectSendMessage(w.host, MessageType.SPAWN_REQUEST);
         }
-        public void Move(WorldInfo worldInfo, Point newPos)
+        
+        public void Move(WorldInfo worldInfo, Point newPos, MessageType mt)
         {
-            myHost.ConnectSendMessage(worldInfo.host, MessageType.MOVE, newPos);
+            myHost.ConnectSendMessage(worldInfo.host, mt, newPos);
         }
     }
 }

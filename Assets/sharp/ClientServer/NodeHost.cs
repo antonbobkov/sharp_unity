@@ -226,6 +226,7 @@ namespace ServerClient
                         {
                             Log.LogWriteLine("Error while reading from socket: {0}\nNode {1}\nLast read:{2}", e.ToString(), n.FullDescription(), Serializer.lastRead);
                             DisconnectNode(n);
+                            throw new Exception("Fatal", e);
                         });
 
                         throw new IOException("Unhandled error while processing message", e);

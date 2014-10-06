@@ -318,9 +318,9 @@ public class minecraft : MonoBehaviour {
 			Point newPos = oldPos + p;
 
 			if (w.CheckValidMove(me, newPos) == MoveValidity.VALID)
-				pa.Move(w.worldInfo, newPos);
-			//else if((w.CheckValidMove(pl.id, newPos) & ~MoveValidity.BOUNDARY) == MoveValidity.VALID)
-			//	all.Move(pl, newPos, MessageType.VALIDATE_REALM_MOVE);
+				pa.Move(w.info, newPos, MessageType.MOVE);
+            else if (w.CheckValidMove(me, newPos) == MoveValidity.BOUNDARY)
+            	pa.Move(w.info, newPos, MessageType.REALM_MOVE);
         }
         /*
         if (Input.GetMouseButtonDown(0))

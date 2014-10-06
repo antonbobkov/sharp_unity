@@ -42,7 +42,7 @@ namespace ServerClient
 
         static int PlayerAiMove(Aggregator all, Guid playerId)
         {
-            int longSleep = 1000 * 5;
+            int longSleep = 1000 * 2;
 
             Client myClient = all.myClient;
 
@@ -63,7 +63,7 @@ namespace ServerClient
                 if(myClient.knownWorlds.ContainsKey(new Point(0,0)))
                     pa.Spawn(new Point(0,0));
 
-                return 1000 * 5;
+                return longSleep;
             }
             
             World playerWorld = myClient.knownWorlds.GetValue(playerData.worldPos);
@@ -71,9 +71,9 @@ namespace ServerClient
             Point? newPos = PlayerRandomMove(playerWorld, playerId);
 
             if(newPos.HasValue)
-                pa.Move(playerWorld.info, newPos.Value);
+                pa.Move(playerWorld.info, newPos.Value, MessageType.MOVE);
 
-            return 1000 * 1;
+            return 750;
         }
         
         public static void StartPlayerAiThread(Aggregator all, Guid playerId)
@@ -255,6 +255,10 @@ namespace ServerClient
                 {
                     for (int i = 0; i < 3; ++i)
                         NewAiPlayer(all);
+                }
+                else
+                {
+                    all.myClient.NewWorld(new Point(0, 0));
                 }
             };
 
