@@ -31,7 +31,8 @@ namespace ServerClient
     public enum MessageType : byte { HANDSHAKE,
     SERVER_ADDRESS, GAME_INFO, NEW_VALIDATOR, NEW_PLAYER, NEW_WORLD,
     PLAYER_VALIDATOR_ASSIGN, WORLD_VALIDATOR_ASSIGN, ACCEPT,
-    WORLD_INIT, PLAYER_JOIN, VALIDATE_MOVE, MOVE,
+    WORLD_INIT, PLAYER_JOIN, PLAYER_LEAVE,
+    VALIDATE_MOVE, MOVE, REALM_MOVE, REALM_MOVE_SUCCESS, REALM_MOVE_FAIL,
     PLAYER_INFO,
     SPAWN_REQUEST, SPAWN_SUCCESS, SPAWN_FAIL};
     
@@ -176,7 +177,9 @@ namespace ServerClient
 
         public PlayerInfo GetPlayerById(Guid player) { return playerById.GetValue(player); }
         public WorldInfo GetWorldByPos(Point pos) { return worldByPoint.GetValue(pos); }
-        
+
+        public WorldInfo TryGetWorldByPos(Point pos) { return worldByPoint.TryGetValue(pos); }
+
         public OverlayEndpoint GetPlayerHost(Guid player) { return playerById.GetValue(player).playerHost; }
         public OverlayEndpoint GetPlayerValidatorHost(Guid player) { return playerById.GetValue(player).validatorHost; }
         public OverlayEndpoint GetWorldHost(Point worldPos) { return worldByPoint.GetValue(worldPos).host; }

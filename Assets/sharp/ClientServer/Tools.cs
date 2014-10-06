@@ -10,6 +10,7 @@ using System.Diagnostics;
 using System.Text;
 using System.Runtime.Serialization.Formatters.Binary;
 using System.Xml.Serialization;
+using System.Runtime.CompilerServices;
 
 namespace ServerClient
 {
@@ -22,6 +23,23 @@ namespace ServerClient
             StringBuilder sb = new StringBuilder();
             sb.AppendFormat(msg, vals);
             log(sb.ToString());
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static public string Dump<T>(T host, params object[] vals)
+        {
+            StackTrace st = new StackTrace();
+            StackFrame sf = st.GetFrame(1);
+
+            string sMethod = sf.GetMethod().Name;
+            string sClass = typeof(T).Name;
+
+            string ret = sClass + "." + sMethod + " ";
+
+            foreach (object o in vals)
+                ret += o.ToString() + " ";
+
+            return ret;
         }
     }
 

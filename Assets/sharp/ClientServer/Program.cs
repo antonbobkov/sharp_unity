@@ -71,7 +71,7 @@ namespace ServerClient
             Point? newPos = PlayerRandomMove(playerWorld, playerId);
 
             if(newPos.HasValue)
-                pa.Move(playerWorld.worldInfo, newPos.Value);
+                pa.Move(playerWorld.info, newPos.Value);
 
             return 1000 * 1;
         }

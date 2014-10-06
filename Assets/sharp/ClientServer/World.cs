@@ -111,21 +111,21 @@ namespace ServerClient
     {
         static readonly Point worldSize = new Point(20, 10);
 
-        public readonly WorldInfo worldInfo;
+        public readonly WorldInfo info;
         public Plane<Tile> map;
 
-        public Point Position { get { return worldInfo.worldPos; } }
+        public Point Position { get { return info.worldPos; } }
 
         public Dictionary<Guid, Point> playerPositions = new Dictionary<Guid,Point>();
-        GameInfo info;
+        GameInfo gameInfo;
 
         public Action<PlayerInfo> onLootHook = (info) => { };
         public Action<PlayerInfo, MoveType> onMoveHook = (a,b) => { };
 
         public World(WorldSerialized ws, GameInfo info_)
         {
-            worldInfo = ws.myInfo;
-            info = info_;
+            info = ws.myInfo;
+            gameInfo = info_;
             map = ws.map;
 
             foreach (Point p in Point.Range(map.Size))
@@ -134,8 +134,8 @@ namespace ServerClient
         }
         public World(WorldInfo myInfo_, WorldInitializer init, GameInfo info_)
         {
-            worldInfo = myInfo_;
-            info = info_;
+            info = myInfo_;
+            gameInfo = info_;
 
             map = new Plane<Tile>(worldSize);
 
@@ -147,7 +147,7 @@ namespace ServerClient
 
         public WorldSerialized Serialize()
         {
-            return new WorldSerialized() { map = map, myInfo = worldInfo };
+            return new WorldSerialized() { map = map, myInfo = info };
         }
 
         public IEnumerable<Point> GetBoundary()
@@ -222,7 +222,7 @@ namespace ServerClient
                 if (t.solid)
                     pic[p] = '*';
                 else if (t.player != Guid.Empty)
-                    pic[p] = info.GetPlayerById(t.player).name[0];
+                    pic[p] = gameInfo.GetPlayerById(t.player).name[0];
                 else if (t.loot)
                     pic[p] = '$';
             }
@@ -284,7 +284,7 @@ namespace ServerClient
         }
         public void Move(Guid player, Point newPos, MoveValidity mv = MoveValidity.VALID)
         {
-            PlayerInfo p = info.GetPlayerById(player);
+            PlayerInfo p = gameInfo.GetPlayerById(player);
 
             if (mv != MoveValidity.NEW)
             {
@@ -357,11 +357,14 @@ namespace ServerClient
         GameInfo gameInfo;
         OverlayEndpoint serverHost;
 
-        Dictionary<string, Action<MessageType>> networkLocks = new Dictionary<string, Action<MessageType>>();
-        void FinishLock(string s, MessageType mt)
+        Dictionary<Guid, Action<MessageType>> playerLocks = new Dictionary<Guid, Action<MessageType>>();
+        void FinishLock(Guid id, MessageType mt)
         {
-            networkLocks.GetValue(s).Invoke(mt);
-            networkLocks.Remove(s);
+            var act = playerLocks.GetValue(id);
+            
+            playerLocks.Remove(id);
+            
+            act.Invoke(mt);
         }
 
         public WorldValidator(WorldInfo info, WorldInitializer init, Action<Action> sync_, GlobalHost globalHost, GameInfo gameInfo_, OverlayEndpoint serverHost_)
@@ -398,6 +401,12 @@ namespace ServerClient
                 return (mt, stm, nd) => ProcessPlayerMessage(mt, stm, nd, inf);
             }
 
+            if (role == NodeRole.WORLD_VALIDATOR)
+            {
+                WorldInfo inf = gameInfo.GetWorldByHost(n.info.remote);
+                return (mt, stm, nd) => ProcessWorldValidatorMessage(mt, stm, nd, inf);
+            }
+
             throw new InvalidOperationException("WorldValidator.AssignProcessor unexpected connection " + n.info.remote + " " + role);
         }
         
@@ -417,11 +426,20 @@ namespace ServerClient
         void ProcessPlayerValidatorMessage(MessageType mt, Stream stm, Node n, PlayerInfo inf)
         {
             if (mt == MessageType.SPAWN_FAIL || mt == MessageType.SPAWN_SUCCESS)
-                sync.Invoke(() => FinishLock(inf.validatorHost.ToString(), mt));
+                sync.Invoke(() => FinishLock(inf.id, mt));
             else
                 throw new Exception("WorldValidator.ProcessClientMessage bad message type " + mt.ToString());
         }
-
+        void ProcessWorldValidatorMessage(MessageType mt, Stream stm, Node n, WorldInfo inf)
+        {
+            if (mt == MessageType.REALM_MOVE_FAIL || mt == MessageType.REALM_MOVE_SUCCESS)
+            {
+                Guid id = Serializer.Deserialize<Guid>(stm);
+                sync.Invoke(() => FinishLock(id, mt));
+            }
+            else
+                throw new Exception("WorldValidator.ProcessClientMessage bad message type " + mt.ToString());
+        }
         void ProcessPlayerMessage(MessageType mt, Stream stm, Node n, PlayerInfo inf)
         {
             if (mt == MessageType.SPAWN_REQUEST)
@@ -437,27 +455,28 @@ namespace ServerClient
 
         void OnSpawnRequest(PlayerInfo inf)
         {
-            if(networkLocks.ContainsKey(inf.validatorHost.ToString()))
+            if(playerLocks.ContainsKey(inf.id))
             {
-                Log.LogWriteLine("Spawn failed, spawn in progress.\n World {0} \n Player {1}", world.worldInfo, inf);
+                Log.LogWriteLine("Spawn failed, spawn in progress.\n World {0} \n Player {1}", world.info, inf);
                 return;
             }
             
             myHost.ConnectSendMessage(inf.validatorHost, MessageType.SPAWN_REQUEST);
 
-            networkLocks.Add(inf.validatorHost.ToString(), (mt) =>
+            playerLocks.Add(inf.id, (mt) =>
                 {
                     if (mt == MessageType.SPAWN_FAIL)
                     {
-                        Log.LogWriteLine("Spawn failed, already spawned.\n World {0} \n Player {1}", world.worldInfo, inf);
+                        Log.LogWriteLine("Spawn failed, already spawned.\n World {0} \n Player {1}", world.info, inf);
                     }
                     else if (mt == MessageType.SPAWN_SUCCESS)
                     {
                         var spawn = world.GetSpawn().ToList();
                         if (!spawn.Any())
                         {
-                            Log.LogWriteLine("Spawn failed, no space.\n World {0} \n Player {1}", world.worldInfo, inf);
-                            return;
+                            throw new Exception("Spawn failed, no space");
+                            //Log.LogWriteLine("Spawn failed, no space.\n World {0} \n Player {1}", world.worldInfo, inf);
+                            //return;
                         }
 
                         Point spawnPos = spawn.Random((n) => rand.Next(n)).Key;
@@ -467,6 +486,7 @@ namespace ServerClient
                         
                         world.AddPlayer(inf.id, spawnPos);
                         myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_JOIN, inf.id, spawnPos);
+                        myHost.ConnectSendMessage(inf.validatorHost, MessageType.PLAYER_JOIN);
                     }
                     else
                         throw new Exception("Unexpected response in OnSpawnRequest " + mt);
@@ -474,18 +494,16 @@ namespace ServerClient
         }
         void OnMoveValidate(PlayerInfo inf, Point newPos)
         {
-            /*
-            if (movementLocks.ContainsKey(p.id))
+            if (playerLocks.ContainsKey(inf.id))
             {
-                Log.LogWriteLine("Validator: {0} can't move, locked", p.FullName);
+                Log.LogWriteLine("World {0}: {1} can't move, locked", world.info.GetShortInfo(), inf.GetShortInfo());
                 return;
             }
-            */
 
             if (!world.playerPositions.ContainsKey(inf.id))
             {
                 Log.LogWriteLine("World {0}: Invalid move {1} by {2}: player absent from this world",
-                    world.worldInfo.GetShortInfo(), newPos, inf.GetShortInfo());
+                    world.info.GetShortInfo(), newPos, inf.GetShortInfo());
                 return;
             }
             
@@ -495,7 +513,7 @@ namespace ServerClient
             if (v != MoveValidity.VALID)
             {
                 Log.LogWriteLine("World {4}: Invalid move {0} from {1} to {2} by {3}", v,
-                    currPos, newPos, inf.GetShortInfo(), world.worldInfo.GetShortInfo());
+                    currPos, newPos, inf.GetShortInfo(), world.info.GetShortInfo());
                 return;
             }
 
@@ -503,6 +521,91 @@ namespace ServerClient
 
             myHost.BroadcastGroup(Client.hostName, MessageType.MOVE, inf.id, newPos);
             //Broadcast(MessageType.MOVE, myId, p.id, newPos);
+        }
+        public void OnValidateRealmMove(PlayerInfo player, Point currPos, Point newPos)
+        {
+            if (playerLocks.ContainsKey(player.id))
+            {
+                Log.LogWriteLine(Log.Dump(this, world.info, player, "can't move, locked"));
+                return;
+            }
+
+            MoveValidity v = world.CheckValidMove(player.id, newPos);
+
+            if (v != MoveValidity.BOUNDARY)
+            {
+                Log.LogWriteLine(Log.Dump(this, world.info, player, v, currPos, newPos, "invalid move"));
+                return;
+            }
+
+            Point currentRealmPos = world.Position;
+            Point targetRealmPos = world.BoundaryMove(ref newPos);
+
+            MyAssert.Assert(currentRealmPos != targetRealmPos);
+            WorldInfo targetRealm = gameInfo.TryGetWorldByPos(targetRealmPos);
+            if (targetRealm == null)
+            {
+                Log.LogWriteLine(Log.Dump(this, world.info, player, currentRealmPos, targetRealmPos, newPos, "no realm to move in"));
+                return;
+            }
+
+            Log.LogWriteLine(Log.Dump(this, world.info, player, currentRealmPos, targetRealmPos, newPos, "realm request"));
+
+            myHost.ConnectSendMessage(targetRealm.host, MessageType.REALM_MOVE, player.id, newPos);
+
+            playerLocks.Add(player.id, (mt) =>
+            {
+                if (mt == MessageType.REALM_MOVE_FAIL)
+                {
+                    Log.LogWriteLine("World {2}: Realm move failed {0} for {1}", v,
+                        player.GetShortInfo(), world.info.GetShortInfo());
+                }
+                else if (mt == MessageType.REALM_MOVE_SUCCESS)
+                {
+                    Log.LogWriteLine("World {1}: Realm move success for {0}",
+                        player.GetShortInfo(), world.info.GetShortInfo());
+
+                    world.RemovePlayer(player.id);
+                    myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_LEAVE, player.id);
+                }
+                else
+                    throw new Exception("Unexpected response in OnValidateRealmMove " + mt);
+            });
+
+        }
+
+        public void OnRealmMove(PlayerInfo player, Point newPos, Node n)
+        {
+            if (playerLocks.ContainsKey(player.id))
+            {
+                Log.LogWriteLine(Log.Dump(this, world.info, player, "can't join, locked"));
+                return;
+            }
+
+            Tile t = world.map[newPos];
+
+            if (!t.IsEmpty())
+            {
+                MoveValidity mv = MoveValidity.VALID;
+
+                if (t.player != Guid.Empty)
+                    mv = MoveValidity.OCCUPIED_PLAYER;
+                else if (t.solid)
+                    mv = MoveValidity.OCCUPIED_WALL;
+                else
+                    throw new Exception(Log.Dump(this, world.info, player, mv, "bad tile status"));
+
+                Log.LogWriteLine(Log.Dump(this, world.info, player, mv, "can't join, blocked"));
+
+                n.SendMessage(MessageType.REALM_MOVE_FAIL, player.id);
+
+                return;
+            }
+
+                n.SendMessage(MessageType.REALM_MOVE_SUCCESS, player.id);
+
+            world.AddPlayer(player.id, newPos);
+            myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_JOIN, player.id);
         }
 
         void BoundaryRequest()
@@ -512,11 +615,8 @@ namespace ServerClient
             {
                 Point newPos = myPosition + delta;
                 
-                try { gameInfo.GetWorldByPos(newPos); }
-                catch (Exception)
-                {
+                if(gameInfo.GetWorldByPos(newPos) == null)
                     myHost.ConnectSendMessage(serverHost, MessageType.NEW_WORLD, newPos);
-                }
             }
         }
     }
