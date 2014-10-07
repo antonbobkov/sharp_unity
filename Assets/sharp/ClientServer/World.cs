@@ -76,7 +76,7 @@ namespace ServerClient
 
         public override string ToString()
         {
-            return GetFullInfo();
+            return GetShortInfo();
         }
 
         public string GetFullInfo()
@@ -247,6 +247,8 @@ namespace ServerClient
             map[pos].player = Guid.Empty;
 
             playerPositions.Remove(player);
+
+            onMoveHook(gameInfo.GetPlayerById(player), MoveType.LEAVE);
         }
 
         public MoveValidity CheckValidMove(Guid player, Point newPos)
@@ -464,6 +466,14 @@ namespace ServerClient
                 throw new Exception("WorldValidator.ProcessClientMessage bad message type " + mt.ToString());
         }
 
+        void AddPlayer(PlayerInfo player, Point newPos)
+        {
+            if (!world.playerPositions.Any())   // on first spawn
+                BoundaryRequest();
+
+            world.AddPlayer(player.id, newPos);        
+        }
+
         void OnSpawnRequest(PlayerInfo player)
         {
             if(playerLocks.ContainsKey(player.id))
@@ -489,12 +499,10 @@ namespace ServerClient
 
                         Point spawnPos = spawn.Random((n) => rand.Next(n)).Key;
 
-                        if (!world.playerPositions.Any())   // on first spawn
-                            BoundaryRequest();
-                        
-                        world.AddPlayer(player.id, spawnPos);
+                        AddPlayer(player, spawnPos);
+
                         myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_JOIN, player.id, spawnPos);
-                        myHost.ConnectSendMessage(player.validatorHost, MessageType.PLAYER_JOIN);
+                        //myHost.ConnectSendMessage(player.validatorHost, MessageType.PLAYER_JOIN);
                     }
                     else
                         throw new Exception(Log.Dump(this, world.info, mt, "unexpected"));
@@ -610,10 +618,11 @@ namespace ServerClient
                 return;
             }
 
-                n.SendMessage(MessageType.REALM_MOVE_SUCCESS, player.id);
+            n.SendMessage(MessageType.REALM_MOVE_SUCCESS, player.id);
 
-            world.AddPlayer(player.id, newPos);
-            myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_JOIN, player.id);
+            AddPlayer(player, newPos);
+            myHost.ConnectSendMessage(player.validatorHost, MessageType.PLAYER_JOIN);
+            myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_JOIN, player.id, newPos);
         }
 
         void BoundaryRequest()
@@ -622,9 +631,12 @@ namespace ServerClient
             foreach (Point delta in Point.SymmetricRange(new Point(1, 1)))
             {
                 Point newPos = myPosition + delta;
-                
-                if(gameInfo.TryGetWorldByPos(newPos) == null)
+
+                if (gameInfo.TryGetWorldByPos(newPos) == null)
+                {
+                    Log.LogWriteLine(Log.Dump(this, newPos));
                     myHost.ConnectSendMessage(serverHost, MessageType.NEW_WORLD, newPos);
+                }
             }
         }
     }

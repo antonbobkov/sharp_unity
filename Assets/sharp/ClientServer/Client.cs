@@ -33,7 +33,8 @@ namespace ServerClient
         public Action<World, PlayerInfo, MoveType> onMoveHook = (a, b, c) => { };
         public Action<World> onNewWorldHook = (a) => { };
         public Action<PlayerInfo> onNewPlayerHook = (a) => { };
-        public Action<PlayerInfo> onPlayerNewRealm = (a) => { };
+        public Action<PlayerInfo, PlayerData> onNewPlayerDataHook = (a, b) => { };
+        public Action<PlayerInfo, PlayerData> onPlayerNewRealm = (a, b) => { };
 
         public Client(Action<Action> sync_, GlobalHost globalHost, Aggregator all_)
         {
@@ -211,7 +212,7 @@ namespace ServerClient
         void OnNewWorld(WorldInfo inf)
         {
             gameInfo.AddWorld(inf);
-            Log.LogWriteLine("New world\n{0}", inf.GetFullInfo());
+            //Log.LogWriteLine("New world\n{0}", inf.GetFullInfo());
             myHost.ConnectAsync(inf.host);
         }
         void OnNewWorld(World w)
@@ -221,14 +222,20 @@ namespace ServerClient
 
             onNewWorldHook(w);
 
-            Log.LogWriteLine("New world {0}", w.Position);
-            w.ConsoleOut();
+            //Log.LogWriteLine("New world {0}", w.Position);
+            //w.ConsoleOut();
         }
         void OnPlayerData(PlayerInfo inf, PlayerData pd, PlayerDataUpdate pdu)
         {
             knownPlayers[inf.id] = pd;
-            Log.LogWriteLine("{0} data update {1}", inf.GetShortInfo(), pd);
-            onPlayerNewRealm(inf);
+            Log.LogWriteLine(Log.Dump(this, inf, pd, pdu));
+            
+            if(pdu == PlayerDataUpdate.NEW)
+                onNewPlayerDataHook(inf, pd);
+            else if(pdu == PlayerDataUpdate.MOVE_REALM || pdu == PlayerDataUpdate.CONNECT)
+                onPlayerNewRealm(inf, pd);
+            else 
+                throw new Exception(Log.Dump(this, pdu, "unexpected"));
         }
 
         void OnPlayerValidateRequest(Guid actionId, PlayerInfo info)

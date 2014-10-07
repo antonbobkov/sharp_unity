@@ -242,7 +242,7 @@ namespace ServerClient
         }
         void OnNewConnectionCompletelyReady(Node n)
         {
-            Log.LogWriteLine("New connection: {0} -> {1}", n.info.local.hostname, n.info.remote);
+            //Log.LogWriteLine("New connection: {0} -> {1}", n.info.local.hostname, n.info.remote);
         }
 
         public Node ConnectAsync(OverlayEndpoint theirInfo)

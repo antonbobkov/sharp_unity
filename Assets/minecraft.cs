@@ -74,7 +74,10 @@ class WorldDraw
             MessBackground();
         
         foreach (Guid id in w.playerPositions.Keys)
-            AddPlayer(id);
+		{
+			Log.LogWriteLine(Log.Dump(this, w.info, id));
+			AddPlayer(id);
+		}
     }
 
 	public void Purge()
@@ -93,7 +96,14 @@ class WorldDraw
 
     public void AddPlayer(Guid player)
     {
-        MyAssert.Assert(w.playerPositions.ContainsKey(player));
+		if(players.ContainsKey(player))
+		{
+			// due to syncronization fail, this player may be already initialized
+			// this happens is world join is really close to world creation
+			return;
+		}
+
+		MyAssert.Assert(w.playerPositions.ContainsKey(player));
         Point pos = w.playerPositions.GetValue(player);
 
         var avatar = GameObject.CreatePrimitive(PrimitiveType.Sphere);
@@ -112,7 +122,8 @@ class WorldDraw
     public void RemovePlayer(Guid player)
     {
         MyAssert.Assert(players.ContainsKey(player));
-        players.Remove(player);
+		UnityEngine.Object.Destroy(players.GetValue(player));
+		players.Remove(player);
     }
 }
 
@@ -162,8 +173,19 @@ public class minecraft : MonoBehaviour {
                 TrySpawn();
         };
 
+		all.myClient.onNewPlayerDataHook = (inf, pd) =>
+		{
+			if (inf.id == me)
+				TrySpawn();
+		};
+
         all.myClient.onMoveHook = (w, pl, mt) => bufferedActions.Enqueue(() => OnMove(w, pl, mt));
         all.myClient.onNewWorldHook = (w) => bufferedActions.Enqueue(() => OnNewWorld(w));
+		all.myClient.onPlayerNewRealm = (inf, pd) => bufferedActions.Enqueue(() => 
+		{
+			if(inf.id == me)
+				UpdateWorlds();
+		});
 
         all.sync.Start();
 
@@ -244,7 +266,7 @@ public class minecraft : MonoBehaviour {
 
     void OnNewWorld(World w)
     {
-        UpdateWorlds();
+		UpdateWorlds();
         Log.LogWriteLine("Unity : OnNewWorld " + w.Position);
 
         if (w.Position == new Point(0, 0))
@@ -253,7 +275,9 @@ public class minecraft : MonoBehaviour {
 
     void OnMove(World w, PlayerInfo player, MoveType mv)
 	{
-        if (mv == MoveType.LEAVE)
+		//Log.LogWriteLine(Log.Dump(this, w.info, player, player.id, mv));
+
+		if (mv == MoveType.LEAVE)
         {
             WorldDraw worldDraw = worlds.TryGetValue(w.Position);
             if (worldDraw != null)
@@ -313,7 +337,10 @@ public class minecraft : MonoBehaviour {
             if (!pd.connected)
                 return;
             World w = all.myClient.knownWorlds.GetValue(pd.worldPos);
-			
+
+			if(!w.playerPositions.ContainsKey(me))
+				return;
+
             Point oldPos = w.playerPositions.GetValue(me);
 			Point newPos = oldPos + p;
 

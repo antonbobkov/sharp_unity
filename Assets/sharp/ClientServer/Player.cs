@@ -31,7 +31,7 @@ namespace ServerClient
 
         public override string ToString()
         {
-            return GetFullInfo();
+            return GetShortInfo();
         }
 
         public string GetFullInfo()
@@ -126,7 +126,7 @@ namespace ServerClient
         }
         void OnNewClient(Node n)
         {
-            n.SendMessage(MessageType.PLAYER_INFO, playerData);
+            n.SendMessage(MessageType.PLAYER_INFO, playerData, PlayerDataUpdate.NEW);
         }
 
         void ProcessWorldMessage(MessageType mt, Stream stm, Node n, WorldInfo inf)

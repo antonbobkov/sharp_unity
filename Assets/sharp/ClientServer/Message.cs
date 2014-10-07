@@ -40,7 +40,7 @@ namespace ServerClient
 
     public enum MoveType { MOVE, LEAVE, JOIN };
 
-    public enum PlayerDataUpdate { CONNECT, MOVE_REALM };
+    public enum PlayerDataUpdate { NEW, CONNECT, MOVE_REALM };
 
     /*abstract class MessageReceiver
     {
