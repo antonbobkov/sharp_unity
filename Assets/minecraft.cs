@@ -162,9 +162,16 @@ public class minecraft : MonoBehaviour {
 
         all.myClient.hookServerReady = () =>
         {
+            if (all.host.MyAddress.Port == GlobalHost.nStartPort)
+            {
+                all.myClient.Validate();
+                all.myClient.NewWorld(new Point(0, 0));
+            }
+
             me = Guid.NewGuid();
             Log.LogWriteLine("Player {0}", me);
             all.myClient.NewMyPlayer(me);
+
         };
 
         all.myClient.onNewPlayerHook = (inf) =>
@@ -186,6 +193,9 @@ public class minecraft : MonoBehaviour {
 			if(inf.id == me)
 				UpdateWorlds();
 		});
+
+        if (all.host.MyAddress.Port == GlobalHost.nStartPort)
+            all.StartServer();
 
         all.sync.Start();
 
