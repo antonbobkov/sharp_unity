@@ -150,6 +150,7 @@ namespace ServerClient
             MyAssert.Assert(!validatorPool.Where((valip) => valip == ip).Any());
             validatorPool.Add(ip);
         }
+        
         void OnNewWorldRequest(Point worldPos)
         {
             Guid validatorId = Guid.NewGuid();

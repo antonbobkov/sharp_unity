@@ -12,11 +12,17 @@ using System.Xml.Serialization;
 
 namespace ServerClient
 {
+    class PlayerMove
+    {
+        public MoveValidity mv;
+        public Point newPos;
+    }
+
     static class Program
     {
         static Random rand = new Random();
 
-        static Point? PlayerRandomMove(World world, Guid player)
+        static PlayerMove PlayerRandomMove(World world, Guid player)
         {
             Point currPos = world.playerPositions.GetValue(player);
 
@@ -34,8 +40,8 @@ namespace ServerClient
             Point newPosition = currPos + moves[rand.Next(0, moves.Length)];
 
             MoveValidity mv = world.CheckValidMove(player, newPosition);
-            if (mv == MoveValidity.VALID)
-                return newPosition;
+            if (mv == MoveValidity.VALID || mv == MoveValidity.BOUNDARY)
+                return new PlayerMove() { mv = mv, newPos = newPosition };
             else
                 return null;
         }
@@ -68,10 +74,24 @@ namespace ServerClient
             
             World playerWorld = myClient.knownWorlds.GetValue(playerData.worldPos);
 
-            Point? newPos = PlayerRandomMove(playerWorld, playerId);
+            PlayerMove move = null;
+            for (int i = 0; i < 5; ++i)
+            {
+                move = PlayerRandomMove(playerWorld, playerId);
+                if (move != null)
+                    break;
+            }
 
-            if(newPos.HasValue)
-                pa.Move(playerWorld.info, newPos.Value, MessageType.MOVE);
+            if (move != null)
+            {
+                if (move.mv == MoveValidity.VALID)
+                    pa.Move(playerWorld.info, move.newPos, MessageType.MOVE);
+                else if (move.mv == MoveValidity.BOUNDARY)
+                    pa.Move(playerWorld.info, move.newPos, MessageType.REALM_MOVE);
+                else
+                    throw new Exception(Log.Dump("", move.mv, move.newPos, "unexpected move"));
+            }
+
 
             return 750;
         }
