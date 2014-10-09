@@ -75,7 +75,7 @@ class WorldDraw
         
         foreach (Guid id in w.playerPositions.Keys)
 		{
-			Log.LogWriteLine(Log.Dump(this, w.info, id));
+			Log.Dump(w.info, id);
 			AddPlayer(id);
 		}
     }
@@ -340,14 +340,21 @@ public class minecraft : MonoBehaviour {
         if (Input.GetKeyDown(KeyCode.RightArrow))
             p = p + new Point(1, 0);
 
-        if (p != new Point(0,0))
-        {
-            PlayerAgent pa = all.playerAgents.GetValue(me);
-            PlayerData pd = all.myClient.knownPlayers.GetValue(me);
-            if (!pd.connected)
-                return;
-            World w = all.myClient.knownWorlds.GetValue(pd.worldPos);
+        bool teleport = Input.GetMouseButtonDown(0);
+        bool move = (p != new Point(0, 0));
 
+        if (! (move || teleport))
+            return;
+
+        PlayerAgent pa = all.playerAgents.GetValue(me);
+        PlayerData pd = all.myClient.knownPlayers.GetValue(me);
+        if (!pd.connected)
+            return;
+        World w = all.myClient.knownWorlds.GetValue(pd.worldPos);
+
+
+        if (move)
+        {
 			if(!w.playerPositions.ContainsKey(me))
 				return;
 
@@ -359,13 +366,8 @@ public class minecraft : MonoBehaviour {
             else if (w.CheckValidMove(me, newPos) == MoveValidity.BOUNDARY)
             	pa.Move(w.info, newPos, MessageType.REALM_MOVE);
         }
-        /*
-        if (Input.GetMouseButtonDown(0))
+        else if (teleport)
         {
-			Game g = all.game;
-			Player pl = g.players[me];
-			World w = g.GetPlayerWorld(pl.id);
-
 			Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
             Plane xy = new Plane(Vector3.forward, new Vector3(0, 0, .5f));
             float distance;
@@ -374,9 +376,8 @@ public class minecraft : MonoBehaviour {
             Point pos = new Point(Convert.ToInt32(tile.x), Convert.ToInt32(tile.y));
 			pos = GetPositionAtMap(w, pos);
             Log.LogWriteLine("Teleporting to {0}", pos);
-			all.Move(pl, pos, MessageType.VALIDATE_TELEPORT);
+            pa.Move(w.info, pos, MessageType.TELEPORT_MOVE);
         }
-         * */
     }
 	
 	// Update is called once per frame

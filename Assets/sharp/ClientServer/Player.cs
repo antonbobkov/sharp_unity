@@ -135,8 +135,16 @@ namespace ServerClient
                 sync.Invoke(() => OnSpawnRequest(inf, n));
             else if (mt == MessageType.PLAYER_JOIN)
                 sync.Invoke(() => OnPlayerNewRealm(inf));
+            else if (mt == MessageType.PICKUP_ITEM)
+                sync.Invoke(() => OnPickupItem());
+            else if (mt == MessageType.FREEZE_ITEM)
+                sync.Invoke(() => OnFreezeItem(n));
+            else if (mt == MessageType.UNFREEZE_ITEM)
+                sync.Invoke(() => OnUnfreezeItem());
+            else if (mt == MessageType.CONSUME_FROZEN_ITEM)
+                sync.Invoke(() => OnConsumeFrozen());
             else
-                throw new Exception("PlayerValidator.ProcessWorldMessage bad message type " + mt.ToString());
+                throw new Exception(Log.StDump(info, inf, mt, "unexpected message"));
         }
 
         void OnSpawnRequest(WorldInfo inf, Node n)
@@ -159,6 +167,46 @@ namespace ServerClient
             MyAssert.Assert(playerData.connected);
             playerData.worldPos = inf.worldPos;
             myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_INFO, playerData, PlayerDataUpdate.MOVE_REALM);
+        }
+        void OnPickupItem()
+        {
+            ++playerData.totalInventory.teleport;
+            Log.Dump(info, playerData, "frozen", frozenInventory);
+            myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_INFO, playerData, PlayerDataUpdate.INVENTORY);
+        }
+        void OnFreezeItem(Node n)
+        {
+            MyAssert.Assert(playerData.totalInventory.teleport >= 0);
+            MyAssert.Assert(frozenInventory.teleport >= 0);
+
+            if (playerData.totalInventory.teleport > frozenInventory.teleport)
+            {
+                ++frozenInventory.teleport;
+                Log.Dump("success", info, playerData, "frozen", frozenInventory);
+                n.SendMessage(MessageType.FREEZE_SUCCESS);
+            }
+            else
+            {
+                Log.Dump("fail", info, playerData, "frozen", frozenInventory);
+                n.SendMessage(MessageType.FREEZE_FAIL);
+            }
+        }
+        void OnUnfreezeItem()
+        {
+            --frozenInventory.teleport;
+            MyAssert.Assert(frozenInventory.teleport >= 0);
+            Log.Dump(info, playerData, "frozen", frozenInventory);
+        }
+        void OnConsumeFrozen()
+        {
+            --frozenInventory.teleport;
+            --playerData.totalInventory.teleport;
+
+            MyAssert.Assert(playerData.totalInventory.teleport >= 0);
+            MyAssert.Assert(frozenInventory.teleport >= 0);
+
+            Log.Dump(info, playerData, "frozen", frozenInventory);
+            myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_INFO, playerData, PlayerDataUpdate.INVENTORY);
         }
     }
 

@@ -26,13 +26,24 @@ namespace ServerClient
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
-        static public string Dump<T>(T host, params object[] vals)
+        static public string StDump(params object[] vals)
         {
             StackTrace st = new StackTrace();
-            StackFrame sf = st.GetFrame(1);
+            StackFrame sf = null;
+            for (int i = 0; i < 10; ++i )
+            {
+                sf = st.GetFrame(i);
+                if (sf == null)
+                    break;
+
+                string strClass = sf.GetMethod().DeclaringType.Name;
+
+                if (strClass != typeof(Log).Name)
+                    break;
+            }
 
             string sMethod = sf.GetMethod().Name;
-            string sClass = typeof(T).Name;
+            string sClass = sf.GetMethod().DeclaringType.Name;
 
             string ret = sClass + "." + sMethod + " ";
 
@@ -40,6 +51,11 @@ namespace ServerClient
                 ret += o.ToString() + " ";
 
             return ret;
+        }
+
+        static public void Dump(params object[] vals)
+        {
+            LogWriteLine(StDump(vals));
         }
     }
 

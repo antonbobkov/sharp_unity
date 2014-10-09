@@ -89,7 +89,7 @@ namespace ServerClient
                 else if (move.mv == MoveValidity.BOUNDARY)
                     pa.Move(playerWorld.info, move.newPos, MessageType.REALM_MOVE);
                 else
-                    throw new Exception(Log.Dump("", move.mv, move.newPos, "unexpected move"));
+                    throw new Exception(Log.StDump(move.mv, move.newPos, "unexpected move"));
             }
 
 

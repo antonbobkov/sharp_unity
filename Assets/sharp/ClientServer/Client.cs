@@ -139,10 +139,16 @@ namespace ServerClient
             {
                 Guid id = Serializer.Deserialize<Guid>(stm);
                 Point pos = Serializer.Deserialize<Point>(stm);
-                sync.Invoke(() => OnPlayerMove(knownWorlds.GetValue(inf.worldPos), gameInfo.GetPlayerById(id), pos));
+                sync.Invoke(() => OnPlayerMove(knownWorlds.GetValue(inf.worldPos), gameInfo.GetPlayerById(id), pos, MoveValidity.VALID));
+            }
+            else if (mt == MessageType.TELEPORT_MOVE)
+            {
+                Guid id = Serializer.Deserialize<Guid>(stm);
+                Point pos = Serializer.Deserialize<Point>(stm);
+                sync.Invoke(() => OnPlayerMove(knownWorlds.GetValue(inf.worldPos), gameInfo.GetPlayerById(id), pos, MoveValidity.TELEPORT));
             }
             else
-                throw new Exception(Log.Dump(this, mt, "unexpected"));
+                throw new Exception(Log.StDump( mt, "unexpected"));
         }
         void ProcessPlayerValidatorMessage(MessageType mt, Stream stm, Node n, PlayerInfo inf)
         {
@@ -228,14 +234,14 @@ namespace ServerClient
         void OnPlayerData(PlayerInfo inf, PlayerData pd, PlayerDataUpdate pdu)
         {
             knownPlayers[inf.id] = pd;
-            Log.LogWriteLine(Log.Dump(this, inf, pd, pdu));
+            Log.LogWriteLine(Log.StDump( inf, pd, pdu));
             
             if(pdu == PlayerDataUpdate.NEW)
                 onNewPlayerDataHook(inf, pd);
             else if(pdu == PlayerDataUpdate.MOVE_REALM || pdu == PlayerDataUpdate.CONNECT)
                 onPlayerNewRealm(inf, pd);
-            else 
-                throw new Exception(Log.Dump(this, pdu, "unexpected"));
+            else if(pdu != PlayerDataUpdate.INVENTORY)
+                throw new Exception(Log.StDump(pdu, "unexpected"));
         }
 
         void OnPlayerValidateRequest(Guid actionId, PlayerInfo info)
@@ -263,9 +269,9 @@ namespace ServerClient
 
             Log.LogWriteLine("{0} left {1}", playerInfo, world.info);
         }
-        void OnPlayerMove(World world, PlayerInfo playerInfo, Point newPos)
+        void OnPlayerMove(World world, PlayerInfo playerInfo, Point newPos, MoveValidity mv)
         {
-            world.Move(playerInfo.id, newPos);
+            world.Move(playerInfo.id, newPos, mv);
         }
 
         public bool TryConnect(IPEndPoint ep)
