@@ -106,6 +106,12 @@ namespace ServerClient
         public Plane<Tile> map;
         public WorldInfo myInfo;
     }
+
+    class WorldMove
+    {
+        public Point newWorld;
+        public Point newPosition;
+    }
     
     class World
     {
@@ -334,7 +340,7 @@ namespace ServerClient
 
             return ret;
         }
-        public Point BoundaryMove(ref Point p)
+        public WorldMove BoundaryMove(Point p)
         {
             int px = p.x;
             int py = p.y;
@@ -343,7 +349,7 @@ namespace ServerClient
 
             p = new Point(px, py);
 
-            return Position + ret;
+            return new WorldMove() { newPosition = p, newWorld = ret + Position };
         }
         
     }
@@ -547,56 +553,77 @@ namespace ServerClient
             myHost.BroadcastGroup(Client.hostName, MessageType.MOVE, inf.id, newPos);
             //Broadcast(MessageType.MOVE, myId, p.id, newPos);
         }
-        void OnValidateRealmMove(PlayerInfo player, Point newPos)
+        void OnValidateRealmMove(PlayerInfo player, Point newPos) { OnValidateRealmMove(player, newPos, false, (mt) => { }); }
+        void OnValidateRealmMove(PlayerInfo player, Point newPos, bool teleporting, Action<MessageType> postProcess)
         {
-            if (playerLocks.ContainsKey(player.id))
+            bool success = false;
+
+            try
             {
-                Log.LogWriteLine(Log.StDump( world.info, player, "can't move, locked"));
-                return;
-            }
-
-            Point currPos = world.playerPositions.GetValue(player.id);
-
-            MoveValidity v = world.CheckValidMove(player.id, newPos);
-
-            if (v != MoveValidity.BOUNDARY)
-            {
-                Log.LogWriteLine(Log.StDump( world.info, player, v, currPos, newPos, "invalid move"));
-                return;
-            }
-
-            Point currentRealmPos = world.Position;
-            Point targetRealmPos = world.BoundaryMove(ref newPos);
-
-            MyAssert.Assert(currentRealmPos != targetRealmPos);
-            WorldInfo targetRealm = gameInfo.TryGetWorldByPos(targetRealmPos);
-            if (targetRealm == null)
-            {
-                Log.LogWriteLine(Log.StDump( world.info, player, currentRealmPos, targetRealmPos, newPos, "no realm to move in"));
-                return;
-            }
-
-            Log.LogWriteLine(Log.StDump( world.info, player, currentRealmPos, targetRealmPos, newPos, "realm request"));
-
-            myHost.ConnectSendMessage(targetRealm.host, MessageType.REALM_MOVE, player.id, newPos);
-
-            playerLocks.Add(player.id, (mt) =>
-            {
-                if (mt == MessageType.REALM_MOVE_FAIL)
+                if (playerLocks.ContainsKey(player.id))
                 {
-                    Log.LogWriteLine(Log.StDump( world.info, player, currentRealmPos, targetRealmPos, newPos, "realm move fail"));
+                    Log.LogWriteLine(Log.StDump(world.info, player, "can't move, locked"));
+                    return;
                 }
-                else if (mt == MessageType.REALM_MOVE_SUCCESS)
+
+                Point currPos = world.playerPositions.GetValue(player.id);
+
+                MoveValidity v = world.CheckValidMove(player.id, newPos);
+
+                if (teleporting)
+                    v &= ~MoveValidity.TELEPORT;
+
+                if (v != MoveValidity.BOUNDARY)
                 {
-                    Log.LogWriteLine(Log.StDump( world.info, player, currentRealmPos, targetRealmPos, newPos, "realm move success"));
-
-                    world.RemovePlayer(player.id);
-                    myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_LEAVE, player.id);
+                    Log.LogWriteLine(Log.StDump(world.info, player, v, currPos, newPos, "invalid move"));
+                    return;
                 }
-                else
-                    throw new Exception(Log.StDump( world.info, mt, "unexpected"));
-            });
 
+                Point currentRealmPos = world.Position;
+
+                WorldMove wm = world.BoundaryMove(newPos);
+                newPos = wm.newPosition;
+                Point targetRealmPos = wm.newWorld;
+
+                MyAssert.Assert(currentRealmPos != targetRealmPos);
+                WorldInfo targetRealm = gameInfo.TryGetWorldByPos(targetRealmPos);
+                if (targetRealm == null)
+                {
+                    Log.LogWriteLine(Log.StDump(world.info, player, currentRealmPos, targetRealmPos, newPos, "no realm to move in"));
+                    return;
+                }
+
+                Log.LogWriteLine(Log.StDump(world.info, player, currentRealmPos, targetRealmPos, newPos, "realm request"));
+
+                myHost.ConnectSendMessage(targetRealm.host, MessageType.REALM_MOVE, player.id, newPos);
+
+                playerLocks.Add(player.id, (mt) =>
+                {
+                    if (mt == MessageType.REALM_MOVE_FAIL)
+                    {
+                        Log.LogWriteLine(Log.StDump(world.info, player, currentRealmPos, targetRealmPos, newPos, "realm move fail"));
+                    }
+                    else if (mt == MessageType.REALM_MOVE_SUCCESS)
+                    {
+                        Log.LogWriteLine(Log.StDump(world.info, player, currentRealmPos, targetRealmPos, newPos, "realm move success"));
+
+                        world.RemovePlayer(player.id);
+                        myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_LEAVE, player.id);
+                    }
+                    else
+                        throw new Exception(Log.StDump(world.info, mt, "unexpected"));
+
+                    postProcess.Invoke(mt);
+                });
+
+                success = true;
+                return;
+            }
+            finally
+            {
+                if(success == false)
+                    postProcess.Invoke(MessageType.REALM_MOVE_FAIL);
+            }
         }
 
         void OnRealmMove(PlayerInfo player, Point newPos, Node n)
@@ -643,8 +670,8 @@ namespace ServerClient
             }
 
             Point currPos = world.playerPositions.GetValue(player.id);
-            //MoveValidity v = world.CheckValidMove(player.id, newPos) & ~(MoveValidity.TELEPORT | MoveValidity.BOUNDARY);
-            MoveValidity v = MoveValidity.VALID;// world.CheckValidMove(player.id, newPos) & ~(MoveValidity.TELEPORT);
+            MoveValidity v = world.CheckValidMove(player.id, newPos) & ~(MoveValidity.TELEPORT | MoveValidity.BOUNDARY);
+            //MoveValidity v = MoveValidity.VALID;// world.CheckValidMove(player.id, newPos) & ~(MoveValidity.TELEPORT);
 
             if (v != MoveValidity.VALID)
             {
@@ -678,34 +705,37 @@ namespace ServerClient
 
             if (v != MoveValidity.VALID)
             {
-                /*
-                if (v == MoveValidity.BOUNDARY)
+                if (v == MoveValidity.BOUNDARY) // not done yet - realm teleport
                 {
-                    Log.LogWriteLine("Validator: requesting realm teleport");
-                    // requesting intra-realm teleport
-                    bool realmMoveRequestSuccess = OnValidateRealmMove(p, currPos, newPos, true);
-                    if (!realmMoveRequestSuccess)
+                    Log.Dump("Realm teleport request", world.info, player, v, currPos, newPos);
+
+                    OnValidateRealmMove(player, newPos, true, (mt) =>
                     {
-                        // request denied
-                        Log.LogWriteLine("Validator: Invalid teleport {0} from {1} to {2} by {3}; realm move request failed", v, currPos, newPos, p.FullName);
-                        TeleportCleanup(false, p.id);
-                    }
+                        if (mt == MessageType.REALM_MOVE_FAIL)
+                        {
+                            Log.Dump("Realm teleport fail", world.info, player, v, currPos, newPos);
+                            myHost.ConnectSendMessage(player.validatorHost, MessageType.UNFREEZE_ITEM);
+                        }
+                        else if (mt == MessageType.REALM_MOVE_SUCCESS)
+                        {
+                            Log.Dump("Realm teleport success", world.info, player, v, currPos, newPos);
+                            myHost.ConnectSendMessage(player.validatorHost, MessageType.CONSUME_FROZEN_ITEM);
+                        }
+                        else
+                            throw new Exception(Log.StDump(world.info, mt, "unexpected"));
+                    });
                 }
                 else
                 {
-                 */
                     // teleporting fail
-                    Log.LogWriteLine("Invalid teleport (frozen)", world.info, player, v, currPos, newPos);
+                    Log.Dump("Invalid teleport (check 2)", world.info, player, v, currPos, newPos);
                     myHost.ConnectSendMessage(player.validatorHost, MessageType.UNFREEZE_ITEM);
-                //TeleportCleanup(false, p.id);
-                //}
+                }
             }
             else // teleporting success
             {
-                Log.LogWriteLine("Teleported", world.info, player, currPos, newPos);
+                Log.Dump("Teleported", world.info, player, currPos, newPos);
                 world.Move(player.id, newPos, MoveValidity.TELEPORT);
-
-                //TeleportCleanup(true, p.id);
 
                 myHost.ConnectSendMessage(player.validatorHost, MessageType.CONSUME_FROZEN_ITEM);
                 myHost.BroadcastGroup(Client.hostName, MessageType.TELEPORT_MOVE, player.id, newPos);

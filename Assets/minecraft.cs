@@ -321,11 +321,14 @@ public class minecraft : MonoBehaviour {
 		movedPlayer.transform.position = GetPositionAtGrid(w, pos);
 
         if (player.id == me)
-		{
-			camera.transform.position = movedPlayer.transform.position;
-			camera.transform.position += new Vector3(0f, 0f, -cameraDistance);
-		}
+            UpdateCamera(movedPlayer);
 	}
+
+    public void UpdateCamera(GameObject ourPlayer)
+    {
+        camera.transform.position = ourPlayer.transform.position;
+        camera.transform.position += new Vector3(0f, 0f, -cameraDistance);
+    }
 
 	void ProcessMovement()
     {
