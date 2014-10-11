@@ -84,10 +84,10 @@ namespace ServerClient
 
                     if (nTp != (int)MessageType.HANDSHAKE)
                     {
-                        Log.LogWriteLine("Invalid incoming connection message (expecting handshake): type {0} {1}", nTp, (MessageType)nTp);
+                        //Log.LogWriteLine("Invalid incoming connection message (expecting handshake): type {0} {1}", nTp, (MessageType)nTp);
 
                         sckRead.Close();
-                        return;
+                        throw new Exception("Invalid incoming connection message (expecting handshake): type " + nTp + " " + (MessageType)nTp);
                     }
 
                     Handshake info = Serializer.Deserialize<Handshake>(connectionStream);

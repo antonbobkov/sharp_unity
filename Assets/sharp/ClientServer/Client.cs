@@ -235,7 +235,7 @@ namespace ServerClient
         void OnPlayerData(PlayerInfo inf, PlayerData pd, PlayerDataUpdate pdu)
         {
             knownPlayers[inf.id] = pd;
-            Log.LogWriteLine(Log.StDump( inf, pd, pdu));
+            //Log.LogWriteLine(Log.StDump( inf, pd, pdu));
             
             if(pdu == PlayerDataUpdate.NEW)
                 onNewPlayerDataHook(inf, pd);
@@ -262,13 +262,13 @@ namespace ServerClient
         {
             world.AddPlayer(playerInfo.id, pos);
 
-            Log.LogWriteLine("{0} joined {1} at {2}", playerInfo, world.info, pos);
+            //Log.LogWriteLine("{0} joined {1} at {2}", playerInfo, world.info, pos);
         }
         void OnPlayerLeave(World world, PlayerInfo playerInfo, Point newWorld)
         {
             world.RemovePlayer(playerInfo.id);
 
-            Log.LogWriteLine("{0} left {1} for {2}", playerInfo, world.info, newWorld);
+            //Log.LogWriteLine("{0} left {1} for {2}", playerInfo, world.info, newWorld);
         }
         void OnPlayerMove(World world, PlayerInfo playerInfo, Point newPos, MoveValidity mv)
         {

@@ -202,7 +202,7 @@ namespace ServerClient
         void OnPickupItem()
         {
             ++playerData.inventory.teleport;
-            Log.Dump(info, playerData, "frozen", frozenInventory);
+            //Log.Dump(info, playerData, "frozen", frozenInventory);
             myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_INFO, playerData, PlayerDataUpdate.INVENTORY);
         }
         void OnFreezeItem(Node n)
@@ -213,12 +213,12 @@ namespace ServerClient
             if (playerData.inventory.teleport > frozenInventory.teleport)
             {
                 ++frozenInventory.teleport;
-                Log.Dump("success", info, playerData, "frozen", frozenInventory);
+                //Log.Dump("success", info, playerData, "frozen", frozenInventory);
                 n.SendMessage(MessageType.FREEZE_SUCCESS);
             }
             else
             {
-                Log.Dump("fail", info, playerData, "frozen", frozenInventory);
+                //Log.Dump("fail", info, playerData, "frozen", frozenInventory);
                 n.SendMessage(MessageType.FREEZE_FAIL);
             }
         }
@@ -226,7 +226,7 @@ namespace ServerClient
         {
             --frozenInventory.teleport;
             MyAssert.Assert(frozenInventory.teleport >= 0);
-            Log.Dump(info, playerData, "frozen", frozenInventory);
+            //Log.Dump(info, playerData, "frozen", frozenInventory);
         }
         void OnConsumeFrozen()
         {
@@ -236,7 +236,7 @@ namespace ServerClient
             MyAssert.Assert(playerData.inventory.teleport >= 0);
             MyAssert.Assert(frozenInventory.teleport >= 0);
 
-            Log.Dump(info, playerData, "frozen", frozenInventory);
+            //Log.Dump(info, playerData, "frozen", frozenInventory);
             myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_INFO, playerData, PlayerDataUpdate.INVENTORY);
         }
     }

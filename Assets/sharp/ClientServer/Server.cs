@@ -176,7 +176,8 @@ namespace ServerClient
             WorldInfo info = new WorldInfo(worldPos, validatorHost);
             WorldInitializer init = new WorldInitializer(r.Next());
 
-            if (worldPos == new Point(0,0))//(worldPos.x % 2 == 0) && (worldPos.y % 2 == 0))
+            if (worldPos == new Point(0, 0))
+            //if ((worldPos.x % 2 == 0) && (worldPos.y % 2 == 0))
                 init.hasSpawn = true;
 
             OverlayEndpoint validatorClient = new OverlayEndpoint(validatorHost.addr, Client.hostName);
