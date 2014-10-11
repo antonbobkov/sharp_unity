@@ -17,6 +17,7 @@ namespace ServerClient
     {
         public bool solid = false;
         public bool loot = false;
+        public bool spawn = false;
 
         [XmlIgnoreAttribute]
         public Guid player = Guid.Empty;
@@ -49,15 +50,14 @@ namespace ServerClient
     public class WorldInitializer
     {
         public int seed;
-        public double wallDensity;
-        public double lootDensity;
+        public double wallDensity = .2;
+        public double lootDensity = .05;
+        public bool hasSpawn = false;
 
         public WorldInitializer() { }
-        internal WorldInitializer(int seed_, double wallDensity_ = .5, double lootDensity_ = .05)
+        internal WorldInitializer(int seed_)
         {
             seed = seed_;
-            wallDensity = wallDensity_;
-            lootDensity = lootDensity_;
         }
     }
 
@@ -178,13 +178,32 @@ namespace ServerClient
         }
         public IEnumerable<KeyValuePair<Point, Tile>> GetSpawn()
         {
+            /*
             foreach (Point p in Point.Range(map.Size))
             {
                 Tile t = map[p];
                 if (t.IsEmpty() && t.loot == false)
                     yield return new KeyValuePair<Point, Tile>(p, t);
             }
+            */
+
+            if (spawnPos.HasValue)
+            {
+                foreach (Point delta in Point.SymmetricRange(new Point(1,1)))
+                {
+                    Point p = spawnPos.Value + delta;
+                    
+                    if (!map.InRange(p))
+                        continue;
+                    
+                    Tile t = map[p];
+                    if (t.IsEmpty())
+                        yield return new KeyValuePair<Point, Tile>(p, t);
+                }
+            }
         }
+
+        Point? spawnPos = null;
 
         void Generate(WorldInitializer init)
         {
@@ -202,6 +221,22 @@ namespace ServerClient
                     if (seededRandom.NextDouble() < init.lootDensity)
                         t.loot = true;
                 }
+            }
+
+            if (init.hasSpawn)
+            {
+                var a = (from t in map.GetEnum()
+                         where !t.Value.IsEmpty()
+                         select t).ToList();
+
+                if (!a.Any())
+                    a = map.GetEnum().ToList();
+
+                MyAssert.Assert(a.Any());
+
+                var spawn = a.Random(n => seededRandom.Next(n));
+                spawn.Value.spawn = true;
+                spawnPos = spawn.Key;
             }
 
             /*/ clear spawn points
@@ -395,7 +430,7 @@ namespace ServerClient
             if (remoteName == Client.hostName)
                 return (mt, stm, nd) => { throw new Exception(Log.StDump( n.info, mt, "not expecting messages")); };
             if (remoteName == Server.hostName)
-                return (mt, stm, nd) => { throw new Exception(Log.StDump( n.info, mt, "not expecting messages")); };
+                return ProcessServerMessage;
             
             NodeRole role = gameInfo.GetRoleOfHost(n.info.remote);
 
@@ -460,9 +495,7 @@ namespace ServerClient
         }
         void ProcessPlayerMessage(MessageType mt, Stream stm, Node n, PlayerInfo inf)
         {
-            if (mt == MessageType.SPAWN_REQUEST)
-                sync.Invoke(() => OnSpawnRequest(inf));
-            else if (mt == MessageType.MOVE)
+            if (mt == MessageType.MOVE)
             {
                 Point newPos = Serializer.Deserialize<Point>(stm);
                 sync.Invoke(() => OnMoveValidate(inf, newPos));
@@ -479,6 +512,16 @@ namespace ServerClient
             }
             else
                 throw new Exception("WorldValidator.ProcessClientMessage bad message type " + mt.ToString());
+        }
+        void ProcessServerMessage(MessageType mt, Stream stm, Node n)
+        {
+            if (mt == MessageType.SPAWN_REQUEST)
+            {
+                Guid playerId = Serializer.Deserialize<Guid>(stm);
+                sync.Invoke(() => OnSpawnRequest(gameInfo.GetPlayerById(playerId)));
+            }
+            else
+                throw new Exception(Log.StDump("unexpected", world.info, mt));
         }
 
         void AddPlayer(PlayerInfo player, Point newPos)
@@ -510,7 +553,11 @@ namespace ServerClient
                         var spawn = world.GetSpawn().ToList();
 
                         if (!spawn.Any())
-                            throw new Exception(Log.StDump( world.info, player, "Spawn failed, no space"));
+                        {
+                            Log.Dump(world.info, player, "Spawn failed, no space");
+                            myHost.ConnectSendMessage(player.validatorHost, MessageType.SPAWN_FAIL);
+                            return;
+                        }
 
                         Point spawnPos = spawn.Random((n) => rand.Next(n)).Key;
 

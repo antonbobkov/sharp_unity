@@ -50,7 +50,10 @@ class WorldDraw
 				walls [pos] = wall;
 				
 				wall.transform.position = minecraft.GetPositionAtGrid(w, pos);
-				wall.renderer.material.color = new Color(.3f, .3f, .3f);
+				if(!t.spawn)
+                    wall.renderer.material.color = new Color(.3f, .3f, .3f);
+                else
+                    wall.renderer.material.color = Color.yellow;
 			}
 			else if(t.loot)
 			{
@@ -221,7 +224,7 @@ public class minecraft : MonoBehaviour {
             if (pd.connected)
                 return false;
 
-            pa.Spawn(new Point(0, 0));
+            pa.Spawn();
 
             return true;
         }

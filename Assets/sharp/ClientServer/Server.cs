@@ -25,6 +25,7 @@ namespace ServerClient
 
         GameInfo gameInfo = new GameInfo();
         List<IPEndPoint> validatorPool = new List<IPEndPoint>();
+        List<Point> spawnWorlds = new List<Point>();
 
         Action<Action> sync;
         OverlayHost myHost;
@@ -73,7 +74,13 @@ namespace ServerClient
             if (role == NodeRole.WORLD_VALIDATOR)
                 return ProcessWorldMessage;
 
-            throw new InvalidOperationException("Client.AssignProcessor unexpected connection " + n.info.remote + " " + role);
+            if (role == NodeRole.PLAYER)
+            {
+                PlayerInfo inf = gameInfo.GetPlayerByHost(n.info.remote);
+                return (mt, stm, nd) => ProcessPlayerMessage(mt, stm, nd, inf);
+            }
+
+            throw new InvalidOperationException("Server.AssignProcessor unexpected connection " + n.info.remote + " " + role);
         }
         void ProcessClientMessage(MessageType mt, Stream stm, Node n)
         {
@@ -108,6 +115,13 @@ namespace ServerClient
             }
             else
                 throw new Exception("Client.ProcessWorldMessage bad message type " + mt.ToString());
+        }
+        void ProcessPlayerMessage(MessageType mt, Stream stm, Node n, PlayerInfo inf)
+        {
+            if (mt == MessageType.SPAWN_REQUEST)
+                sync.Invoke(() => OnSpawnRequest(inf));
+            else
+                throw new Exception(Log.StDump("unexpected", mt));
         }
 
         void ProcessNewConnection(Node n)
@@ -153,11 +167,17 @@ namespace ServerClient
         
         void OnNewWorldRequest(Point worldPos)
         {
+            if (gameInfo.TryGetWorldByPos(worldPos) != null)
+                return;
+            
             Guid validatorId = Guid.NewGuid();
             OverlayEndpoint validatorHost = new OverlayEndpoint(validatorPool.Random(n => r.Next(n)), new OverlayHostName(validatorId.ToString()));
 
             WorldInfo info = new WorldInfo(worldPos, validatorHost);
-            WorldInitializer init = new WorldInitializer(r.Next(), .2, .05);
+            WorldInitializer init = new WorldInitializer(r.Next());
+
+            if (worldPos == new Point(0,0))//(worldPos.x % 2 == 0) && (worldPos.y % 2 == 0))
+                init.hasSpawn = true;
 
             OverlayEndpoint validatorClient = new OverlayEndpoint(validatorHost.addr, Client.hostName);
             myHost.SendMessage(validatorClient, MessageType.WORLD_VALIDATOR_ASSIGN, validatorId, info, init);
@@ -167,6 +187,9 @@ namespace ServerClient
                 ep = validatorClient,
                 a = () =>
                 {
+                    if (init.hasSpawn == true)
+                        spawnWorlds.Add(worldPos);
+
                     gameInfo.AddWorld(info);
                     myHost.BroadcastGroup(Client.hostName, MessageType.NEW_WORLD, info);
                 }
@@ -174,6 +197,21 @@ namespace ServerClient
 
             delayedActions.Add(validatorId, da);
 
+        }
+
+        void OnSpawnRequest(PlayerInfo inf)
+        {
+            if (!spawnWorlds.Any())
+            {
+                Log.Dump("No spawn worlds", inf);
+                return;
+            }
+
+            Point spawnWorldPos = spawnWorlds.Random(n => r.Next(n));
+
+            WorldInfo spawnWorld = gameInfo.GetWorldByPos(spawnWorldPos);
+
+            myHost.ConnectSendMessage(spawnWorld.host, MessageType.SPAWN_REQUEST, inf.id);
         }
 
         void OnAccept(Guid id, OverlayEndpoint remote)

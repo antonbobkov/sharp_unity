@@ -134,6 +134,8 @@ namespace ServerClient
         {
             if (mt == MessageType.SPAWN_REQUEST)
                 sync.Invoke(() => OnSpawnRequest(inf, n));
+            else if (mt == MessageType.SPAWN_FAIL)
+                sync.Invoke(OnSpawnFail);
             else if (mt == MessageType.PLAYER_JOIN)
                 sync.Invoke(() => OnPlayerNewRealm(inf));
             else if (mt == MessageType.PLAYER_LEAVE)
@@ -164,6 +166,11 @@ namespace ServerClient
                 frozenSpawn = true;
                 n.SendMessage(MessageType.SPAWN_SUCCESS);
             }
+        }
+        void OnSpawnFail()
+        {
+            MyAssert.Assert(frozenSpawn);
+            frozenSpawn = false;
         }
 
         void RealmUpdate(Point newWorld)
@@ -240,14 +247,16 @@ namespace ServerClient
         OverlayHost myHost;
 
         GameInfo gameInfo;
+        OverlayEndpoint serverHost;
 
         public PlayerInfo info;
 
-        public PlayerAgent(PlayerInfo info_, Action<Action> sync_, GlobalHost globalHost, GameInfo gameInfo_)
+        public PlayerAgent(PlayerInfo info_, Action<Action> sync_, GlobalHost globalHost, GameInfo gameInfo_, OverlayEndpoint serverHost_)
         {
             info = info_;
             sync = sync_;
             gameInfo = gameInfo_;
+            serverHost = serverHost_;
 
             myHost = globalHost.NewHost(info.playerHost.hostname, AssignProcessor);
 
@@ -273,10 +282,9 @@ namespace ServerClient
             */
         }
 
-        public void Spawn(Point worldPos)
+        public void Spawn()
         {
-            WorldInfo w = gameInfo.GetWorldByPos(worldPos);
-            myHost.ConnectSendMessage(w.host, MessageType.SPAWN_REQUEST);
+            myHost.ConnectSendMessage(serverHost, MessageType.SPAWN_REQUEST);
         }
         
         public void Move(WorldInfo worldInfo, Point newPos, MessageType mt)

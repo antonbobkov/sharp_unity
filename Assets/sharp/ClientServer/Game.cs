@@ -66,8 +66,13 @@ namespace ServerClient
             if(!InRange(x, y))
                 throw new IndexOutOfRangeException(new StringBuilder().AppendFormat("Plane<{0}>{1} w/ size {2}", typeof(T).Name, new Point(x, y), Size).ToString());
         }
-        
-        bool InRange(int x, int y)
+
+        public bool InRange(Point p)
+        {
+            return InRange(p.x, p.y);
+        }
+
+        public bool InRange(int x, int y)
         {
             if (x < 0 || x >= Size.x)
                 return false;

@@ -24,6 +24,9 @@ namespace ServerClient
 
         static PlayerMove PlayerRandomMove(World world, Guid player)
         {
+            if (!world.playerPositions.ContainsKey(player))
+                return null;
+            
             Point currPos = world.playerPositions.GetValue(player);
 
             Point[] moves = {
@@ -67,7 +70,7 @@ namespace ServerClient
             if (!playerData.connected)
             {
                 if(myClient.knownWorlds.ContainsKey(new Point(0,0)))
-                    pa.Spawn(new Point(0,0));
+                    pa.Spawn();
 
                 return longSleep;
             }
@@ -266,7 +269,7 @@ namespace ServerClient
                 all.myClient.Validate();
                 if (all.host.MyAddress.Port != GlobalHost.nStartPort)
                 {
-                    for (int i = 0; i < 3; ++i)
+                    for (int i = 0; i < 100; ++i)
                         NewAiPlayer(all);
                 }
                 else

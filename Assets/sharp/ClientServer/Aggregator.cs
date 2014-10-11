@@ -835,14 +835,14 @@ namespace ServerClient
         public void AddPlayerAgent(PlayerInfo info)
         {
             MyAssert.Assert(!playerAgents.ContainsKey(info.id));
-            PlayerAgent pa = new PlayerAgent(info, sync.GetAsDelegate(), host, myClient.gameInfo);
+            PlayerAgent pa = new PlayerAgent(info, sync.GetAsDelegate(), host, myClient.gameInfo, myClient.serverHost);
             playerAgents.Add(info.id, pa);
         }
 
         public void SpawnAll()
         {
             foreach (Guid id in myClient.myPlayerAgents)
-                playerAgents.GetValue(id).Spawn(new Point(0, 0));
+                playerAgents.GetValue(id).Spawn();
         }
     }
 }
