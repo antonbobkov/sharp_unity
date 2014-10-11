@@ -70,11 +70,11 @@ namespace ServerClient
         public bool connected = false;
         public Point worldPos = new Point(0,0);
 
-        public Inventory totalInventory = new Inventory(5);
+        public Inventory inventory = new Inventory(5);
 
         public override string ToString()
         {
-            return (connected ? worldPos.ToString() : "[not connected]") + " " + totalInventory;
+            return (connected ? worldPos.ToString() : "[not connected]") + " " + inventory;
         }
     }
 
@@ -170,16 +170,16 @@ namespace ServerClient
         }
         void OnPickupItem()
         {
-            ++playerData.totalInventory.teleport;
+            ++playerData.inventory.teleport;
             Log.Dump(info, playerData, "frozen", frozenInventory);
             myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_INFO, playerData, PlayerDataUpdate.INVENTORY);
         }
         void OnFreezeItem(Node n)
         {
-            MyAssert.Assert(playerData.totalInventory.teleport >= 0);
+            MyAssert.Assert(playerData.inventory.teleport >= 0);
             MyAssert.Assert(frozenInventory.teleport >= 0);
 
-            if (playerData.totalInventory.teleport > frozenInventory.teleport)
+            if (playerData.inventory.teleport > frozenInventory.teleport)
             {
                 ++frozenInventory.teleport;
                 Log.Dump("success", info, playerData, "frozen", frozenInventory);
@@ -200,9 +200,9 @@ namespace ServerClient
         void OnConsumeFrozen()
         {
             --frozenInventory.teleport;
-            --playerData.totalInventory.teleport;
+            --playerData.inventory.teleport;
 
-            MyAssert.Assert(playerData.totalInventory.teleport >= 0);
+            MyAssert.Assert(playerData.inventory.teleport >= 0);
             MyAssert.Assert(frozenInventory.teleport >= 0);
 
             Log.Dump(info, playerData, "frozen", frozenInventory);

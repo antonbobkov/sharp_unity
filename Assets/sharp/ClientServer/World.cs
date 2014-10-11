@@ -115,7 +115,7 @@ namespace ServerClient
     
     class World
     {
-        static readonly Point worldSize = new Point(20, 10);
+        static readonly Point worldSize = new Point(25, 15);
 
         public readonly WorldInfo info;
         public Plane<Tile> map;

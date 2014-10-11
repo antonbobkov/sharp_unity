@@ -74,6 +74,20 @@ namespace ServerClient
             
             World playerWorld = myClient.knownWorlds.GetValue(playerData.worldPos);
 
+            if (playerData.inventory.teleport > 0 && rand.NextDouble() < .01)
+            {
+                var teleportPos = (from t in playerWorld.map.GetEnum()
+                                   where t.Value.IsEmpty()
+                                   select t.Key).ToList();
+                if (teleportPos.Any())
+                {
+                    Point newPos = teleportPos[rand.Next(0, teleportPos.Count)];
+                    pa.Move(playerWorld.info, newPos, MessageType.TELEPORT_MOVE);
+                    
+                    return 750;
+                }
+            }
+
             PlayerMove move = null;
             for (int i = 0; i < 5; ++i)
             {
@@ -187,18 +201,12 @@ namespace ServerClient
                 int sz = a.Count();
 
                 if(sz == 0)
-                {
                     Console.WriteLine("unknown command");
-                }
                 else if (sz == 1)
-                {
                     queueAction(() => commands[a.First()].Invoke(param));
-                }
                 else
-                {
                     foreach (var s in a)
                         Console.WriteLine(s);
-                }
             }
         }
         static public void MeshConnect(Aggregator all)
@@ -225,23 +233,8 @@ namespace ServerClient
                     });
                 }
             }
-            catch (Exception)
-            {
-                //Log.LogWriteLine("Error: {0}", e.Message);
-            }
+            catch (Exception){}
         }
-        
-        /*static public void Ai(Aggregate all)
-        {
-            foreach (var id in all.gameAssignments.GetMyRoles(NodeRole.PLAYER))
-            {
-                Guid idCopy = id;
-                ThreadManager.NewThread(() => RepeatedAction(all.sync.GetAsDelegate(), () => PlayerRandomMove(all, idCopy), rand.Next(300, 700)),
-                    () => { }, "ai for " + id.ToString());
-                //new Thread(() => RepeatedAction(all.sync.GetAsDelegate(), () => PlayerRandomMove(all, idCopy), rand.Next(300, 700))).Start();
-            }
-        }
-        */
 
         public static void GameInfoOut(GameInfo inf)
         {
