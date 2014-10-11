@@ -517,7 +517,7 @@ namespace ServerClient
                         AddPlayer(player, spawnPos);
 
                         myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_JOIN, player.id, spawnPos);
-                        //myHost.ConnectSendMessage(player.validatorHost, MessageType.PLAYER_JOIN);
+                        myHost.ConnectSendMessage(player.validatorHost, MessageType.PLAYER_JOIN);
                     }
                     else
                         throw new Exception(Log.StDump( world.info, mt, "unexpected"));
@@ -551,7 +551,6 @@ namespace ServerClient
             world.Move(inf.id, newPos, MoveValidity.VALID);
 
             myHost.BroadcastGroup(Client.hostName, MessageType.MOVE, inf.id, newPos);
-            //Broadcast(MessageType.MOVE, myId, p.id, newPos);
         }
         void OnValidateRealmMove(PlayerInfo player, Point newPos) { OnValidateRealmMove(player, newPos, false, (mt) => { }); }
         void OnValidateRealmMove(PlayerInfo player, Point newPos, bool teleporting, Action<MessageType> postProcess)
@@ -608,7 +607,8 @@ namespace ServerClient
                         Log.LogWriteLine(Log.StDump(world.info, player, currentRealmPos, targetRealmPos, newPos, "realm move success"));
 
                         world.RemovePlayer(player.id);
-                        myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_LEAVE, player.id);
+                        myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_LEAVE, player.id, targetRealmPos);
+                        myHost.ConnectSendMessage(player.validatorHost, MessageType.PLAYER_LEAVE, targetRealmPos);
                     }
                     else
                         throw new Exception(Log.StDump(world.info, mt, "unexpected"));

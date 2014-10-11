@@ -89,6 +89,7 @@ namespace ServerClient
 
         PlayerData playerData = new PlayerData(); 
         Inventory frozenInventory = new Inventory();
+        bool frozenSpawn = false;
 
         public PlayerValidator(PlayerInfo info_, Action<Action> sync_, GlobalHost globalHost, GameInfo gameInfo_)
         {
@@ -135,6 +136,11 @@ namespace ServerClient
                 sync.Invoke(() => OnSpawnRequest(inf, n));
             else if (mt == MessageType.PLAYER_JOIN)
                 sync.Invoke(() => OnPlayerNewRealm(inf));
+            else if (mt == MessageType.PLAYER_LEAVE)
+            {
+                Point newWorld = Serializer.Deserialize<Point>(stm);
+                sync.Invoke(() => OnPlayerLeave(newWorld));
+            }
             else if (mt == MessageType.PICKUP_ITEM)
                 sync.Invoke(() => OnPickupItem());
             else if (mt == MessageType.FREEZE_ITEM)
@@ -149,24 +155,42 @@ namespace ServerClient
 
         void OnSpawnRequest(WorldInfo inf, Node n)
         {
-            if (playerData.connected)
+            if (playerData.connected || frozenSpawn)
             {
                 n.SendMessage(MessageType.SPAWN_FAIL);
             }
             else
             {
-                playerData.connected = true;
-                playerData.worldPos = inf.worldPos;
-
+                frozenSpawn = true;
                 n.SendMessage(MessageType.SPAWN_SUCCESS);
-                myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_INFO, playerData, PlayerDataUpdate.CONNECT);
             }
         }
+
+        void RealmUpdate(Point newWorld)
+        {
+            bool forceUpdate = false;
+            
+            if (!playerData.connected)
+            {
+                playerData.connected = true;
+                frozenSpawn = false;
+                forceUpdate = true;
+            }
+
+            if ((playerData.worldPos != newWorld) || forceUpdate)
+            {
+                playerData.worldPos = newWorld;
+                myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_INFO, playerData, PlayerDataUpdate.JOIN);
+            }
+        }
+
         void OnPlayerNewRealm(WorldInfo inf)
         {
-            MyAssert.Assert(playerData.connected);
-            playerData.worldPos = inf.worldPos;
-            myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_INFO, playerData, PlayerDataUpdate.MOVE_REALM);
+            RealmUpdate(inf.worldPos);
+        }
+        void OnPlayerLeave(Point newWorld)
+        {
+            RealmUpdate(newWorld);
         }
         void OnPickupItem()
         {

@@ -133,7 +133,8 @@ namespace ServerClient
             else if (mt == MessageType.PLAYER_LEAVE)
             {
                 Guid id = Serializer.Deserialize<Guid>(stm);
-                sync.Invoke(() => OnPlayerLeave(knownWorlds.GetValue(inf.worldPos), gameInfo.GetPlayerById(id)));
+                Point newWorld = Serializer.Deserialize<Point>(stm);
+                sync.Invoke(() => OnPlayerLeave(knownWorlds.GetValue(inf.worldPos), gameInfo.GetPlayerById(id), newWorld));
             }
             else if (mt == MessageType.MOVE)
             {
@@ -238,7 +239,7 @@ namespace ServerClient
             
             if(pdu == PlayerDataUpdate.NEW)
                 onNewPlayerDataHook(inf, pd);
-            else if(pdu == PlayerDataUpdate.MOVE_REALM || pdu == PlayerDataUpdate.CONNECT)
+            else if(pdu == PlayerDataUpdate.JOIN)
                 onPlayerNewRealm(inf, pd);
             else if(pdu != PlayerDataUpdate.INVENTORY)
                 throw new Exception(Log.StDump(pdu, "unexpected"));
@@ -263,11 +264,11 @@ namespace ServerClient
 
             Log.LogWriteLine("{0} joined {1} at {2}", playerInfo, world.info, pos);
         }
-        void OnPlayerLeave(World world, PlayerInfo playerInfo)
+        void OnPlayerLeave(World world, PlayerInfo playerInfo, Point newWorld)
         {
             world.RemovePlayer(playerInfo.id);
 
-            Log.LogWriteLine("{0} left {1}", playerInfo, world.info);
+            Log.LogWriteLine("{0} left {1} for {2}", playerInfo, world.info, newWorld);
         }
         void OnPlayerMove(World world, PlayerInfo playerInfo, Point newPos, MoveValidity mv)
         {
