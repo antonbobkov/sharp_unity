@@ -89,15 +89,12 @@ namespace ServerClient
                 GameInfoSerialized info = Serializer.Deserialize<GameInfoSerialized>(stm);
                 OnGameInfo(info);
             }
-            else if (mt == MessageType.NEW_PLAYER)
+            else if (mt == MessageType.GAME_INFO_CHANGE)
             {
-                PlayerInfo info = Serializer.Deserialize<PlayerInfo>(stm);
-                OnNewPlayer(info);
-            }
-            else if (mt == MessageType.NEW_WORLD)
-            {
-                WorldInfo info = Serializer.Deserialize<WorldInfo>(stm);
-                OnNewWorld(info);
+                MyAssert.Assert(gameInfo != null);
+
+                ForwardFunctionCall ffc = ForwardFunctionCall.Deserialize(stm, typeof(GameInfo));
+                ffc.Apply(gameInfo);
             }
             else if (mt == MessageType.PLAYER_VALIDATOR_ASSIGN)
             {
@@ -193,19 +190,19 @@ namespace ServerClient
         void OnGameInfo(GameInfoSerialized gameStateSer)
         {
             MyAssert.Assert(gameInfo == null);
-            gameInfo = new GameInfo(gameStateSer);
+            gameInfo = new GameInfo();
 
-            foreach (WorldInfo w in gameStateSer.worlds)
-                myHost.ConnectAsync(w.host);
-            foreach (PlayerInfo p in gameStateSer.players)
-                myHost.ConnectAsync(p.validatorHost);
+            gameInfo.onNewPlayer = OnNewPlayer;
+            gameInfo.onNewWorld = OnNewWorld;
+
+            gameInfo.Deserialize(gameStateSer);
 
             Log.LogWriteLine("Recieved game info");
             Program.GameInfoOut(gameInfo);
         }
         void OnNewPlayer(PlayerInfo inf)
         {
-            gameInfo.AddPlayer(inf);
+            //gameInfo.AddPlayer(inf);
             Log.LogWriteLine("New player\n{0}", inf.GetFullInfo());
             myHost.ConnectAsync(inf.validatorHost);
 
@@ -216,7 +213,7 @@ namespace ServerClient
         }
         void OnNewWorld(WorldInfo inf)
         {
-            gameInfo.AddWorld(inf);
+            //gameInfo.AddWorld(inf);
             //Log.LogWriteLine("New world\n{0}", inf.GetFullInfo());
             myHost.ConnectAsync(inf.host);
         }
@@ -280,11 +277,11 @@ namespace ServerClient
         public void NewMyPlayer(Guid id)
         {
             myPlayerAgents.Add(id);
-            server.SendMessage(MessageType.NEW_PLAYER, id);
+            server.SendMessage(MessageType.NEW_PLAYER_REQUEST, id);
         }
         public void NewWorld(Point pos)
         {
-            server.SendMessage(MessageType.NEW_WORLD, pos);
+            server.SendMessage(MessageType.NEW_WORLD_REQUEST, pos);
         }
         public void Validate()
         {

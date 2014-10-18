@@ -214,25 +214,27 @@ namespace ServerClient
 
         Node.MessageProcessor ProcessMessageWrap(Node.MessageProcessor messageProcessor)
         {
-            return (mt, str, n) =>
-                {
-                    try
-                    {
-                        messageProcessor(mt, str, n);
-                    }
-                    catch (Exception e)
-                    {
-                        processQueue.Invoke( () =>
-                        {
-                            Log.LogWriteLine("Error while reading from socket: {0}\nNode {1}\nLast read:{2}", e.ToString(), n.FullDescription(), Serializer.lastRead);
-                            DisconnectNode(n);
-                            throw new Exception("Fatal", e);
-                        });
+            return messageProcessor;
 
-                        throw new IOException("Unhandled error while processing message", e);
-                    }
+            //return (mt, str, n) =>
+            //    {
+            //        try
+            //        {
+            //            messageProcessor(mt, str, n);
+            //        }
+            //        catch (Exception e)
+            //        {
+            //            processQueue.Invoke( () =>
+            //            {
+            //                Log.LogWriteLine("Error while reading from socket: {0}\nNode {1}\nLast read:{2}", e.ToString(), n.FullDescription(), Serializer.lastRead);
+            //                DisconnectNode(n);
+            //                throw new Exception("Fatal", e);
+            //            });
+
+            //            throw new IOException("Unhandled error while processing message", e);
+            //        }
                     
-                };
+            //    };
         }
         
         void Sync_OutgoingConnectionReady(Node n)

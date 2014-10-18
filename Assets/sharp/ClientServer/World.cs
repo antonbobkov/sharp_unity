@@ -814,7 +814,7 @@ namespace ServerClient
                 if (gameInfo.TryGetWorldByPos(newPos) == null)
                 {
                     Log.LogWriteLine(Log.StDump( newPos));
-                    myHost.ConnectSendMessage(serverHost, MessageType.NEW_WORLD, newPos);
+                    myHost.ConnectSendMessage(serverHost, MessageType.NEW_WORLD_REQUEST, newPos);
                 }
             }
         }

@@ -124,7 +124,12 @@ class WorldDraw
 
     public void RemovePlayer(Guid player)
     {
-        MyAssert.Assert(players.ContainsKey(player));
+        if(!players.ContainsKey(player))
+        {
+            // due to syncronization fail, this player may happen
+            return;
+        }
+
 		UnityEngine.Object.Destroy(players.GetValue(player));
 		players.Remove(player);
     }

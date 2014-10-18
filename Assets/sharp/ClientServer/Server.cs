@@ -23,7 +23,7 @@ namespace ServerClient
 
         Random r = new Random();
 
-        GameInfo gameInfo = new GameInfo();
+        GameInfo gameInfo;
         List<IPEndPoint> validatorPool = new List<IPEndPoint>();
         List<Point> spawnWorlds = new List<Point>();
 
@@ -58,6 +58,9 @@ namespace ServerClient
         {
             myHost = globalHost.NewHost(Server.hostName, AssignProcessor);
             myHost.onNewConnectionHook = ProcessNewConnection;
+
+            Action<ForwardFunctionCall> onChange = (ffc) => myHost.BroadcastGroup(Client.hostName, MessageType.GAME_INFO_CHANGE, ffc.Serialize());
+            gameInfo = new ForwardProxy<GameInfo>(new GameInfo(), onChange).Get();
         }
 
         Node.MessageProcessor AssignProcessor(Node n)
@@ -81,12 +84,12 @@ namespace ServerClient
         }
         void ProcessClientMessage(MessageType mt, Stream stm, Node n)
         {
-            if (mt == MessageType.NEW_PLAYER)
+            if (mt == MessageType.NEW_PLAYER_REQUEST)
             {
                 Guid player = Serializer.Deserialize<Guid>(stm);
                 OnNewPlayerRequest(player, n.info.remote);
             }
-            else if (mt == MessageType.NEW_WORLD)
+            else if (mt == MessageType.NEW_WORLD_REQUEST)
             {
                 Point worldPos = Serializer.Deserialize<Point>(stm);
                 OnNewWorldRequest(worldPos);
@@ -105,7 +108,7 @@ namespace ServerClient
         }
         void ProcessWorldMessage(MessageType mt, Stream stm, Node n)
         {
-            if (mt == MessageType.NEW_WORLD)
+            if (mt == MessageType.NEW_WORLD_REQUEST)
             {
                 Point worldPos = Serializer.Deserialize<Point>(stm);
                 OnNewWorldRequest(worldPos);
@@ -150,7 +153,7 @@ namespace ServerClient
                 a = () =>
                 {
                     gameInfo.AddPlayer(info);
-                    myHost.BroadcastGroup(Client.hostName, MessageType.NEW_PLAYER, info);
+                    //myHost.BroadcastGroup(Client.hostName, MessageType.NEW_PLAYER, info);
                 }
             };
 
@@ -189,7 +192,7 @@ namespace ServerClient
                         spawnWorlds.Add(worldPos);
 
                     gameInfo.AddWorld(info);
-                    myHost.BroadcastGroup(Client.hostName, MessageType.NEW_WORLD, info);
+                    //myHost.BroadcastGroup(Client.hostName, MessageType.NEW_WORLD, info);
                 }
             };
 

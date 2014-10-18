@@ -17,7 +17,7 @@ using System.Runtime.Remoting.Messaging;
 namespace ServerClient
 {
     public enum MessageType : byte { HANDSHAKE,
-    SERVER_ADDRESS, GAME_INFO, NEW_VALIDATOR, NEW_PLAYER, NEW_WORLD,
+    SERVER_ADDRESS, GAME_INFO, NEW_VALIDATOR, GAME_INFO_CHANGE, NEW_PLAYER_REQUEST, NEW_WORLD_REQUEST,
     PLAYER_VALIDATOR_ASSIGN, WORLD_VALIDATOR_ASSIGN, ACCEPT,
     WORLD_INIT, PLAYER_JOIN, PLAYER_LEAVE,
     MOVE, REALM_MOVE, REALM_MOVE_SUCCESS, REALM_MOVE_FAIL,
@@ -42,16 +42,54 @@ namespace ServerClient
             MethodInfo mb = typeof(T).GetMethod(functionName);
             mb.Invoke(t, argumemts);
         }
+
+        public object[] Serialize()
+        {
+            object[] arr = new object[argumemts.Length + 1];
+
+            arr[0] = functionName;
+
+            for (int i = 0; i < argumemts.Length; ++i)
+                arr[1 + i] = argumemts[i];
+
+            return arr;
+        }
+
+        public static ForwardFunctionCall Deserialize(Stream stm, Type t)
+        {
+            ForwardFunctionCall ffc = new ForwardFunctionCall();
+
+            ffc.functionName = Serializer.Deserialize<string>(stm);
+
+            MethodInfo mb = t.GetMethod(ffc.functionName);
+            ParameterInfo[] param = mb.GetParameters();
+            ffc.argumemts = new object[param.Length];
+
+            for (int i = 0; i < param.Length; ++i)
+                ffc.argumemts[i] = Serializer.Deserialize(stm, param[i].ParameterType);
+
+            return ffc;
+        }
     }
 
-    class ForwardProxy : RealProxy
+    public class Forward : Attribute { }
+
+    class ForwardProxy<T> : RealProxy
+        where T : MarshalByRefObject
     {
+        T obj; 
         Action<ForwardFunctionCall> onCall;
 
-        public ForwardProxy(Type t, Action<ForwardFunctionCall> onCall_)
-            : base(t)
+        public ForwardProxy(T obj_, Action<ForwardFunctionCall> onCall_)
+            : base(typeof(T))
         {
+            obj = obj_;
             onCall = onCall_;
+        }
+
+        public T Get()
+        {
+            return (T)GetTransparentProxy();
         }
 
         public override IMessage Invoke(IMessage msg)
@@ -66,10 +104,28 @@ namespace ServerClient
 
         IMessage HandleMethodCall(IMethodCallMessage methodCall)
         {
-            ForwardFunctionCall ffc = new ForwardFunctionCall() { functionName = methodCall.MethodName, argumemts = methodCall.InArgs };
-            onCall.Invoke(ffc);
+            if (HasAttribute<Forward>(methodCall.MethodBase))
+            {
+                ForwardFunctionCall ffc = new ForwardFunctionCall() { functionName = methodCall.MethodName, argumemts = methodCall.InArgs };
+                onCall.Invoke(ffc);
+            }
+            
 
-            return new ReturnMessage(null, null, 0, methodCall.LogicalCallContext, methodCall);
+            //try
+            //{
+            var result = methodCall.MethodBase.Invoke(obj, methodCall.InArgs);
+            return new ReturnMessage(result, null, 0, methodCall.LogicalCallContext, methodCall);
+            //}
+            //catch (TargetInvocationException invocationException)
+            //{
+            //    var exception = invocationException.InnerException;
+            //    return new ReturnMessage(exception, methodCall);
+            //}
+        }
+
+        static bool HasAttribute<N>(MethodBase inf)
+        {
+            return inf.GetCustomAttributes(typeof(N), false).Length != 0;
         }
     }
 
@@ -82,20 +138,23 @@ namespace ServerClient
         public GameInfoSerialized() { }
     }
 
-    class GameInfo
+    class GameInfo : MarshalByRefObject
     {
+        public Action<PlayerInfo> onNewPlayer = (inf) => { };
+        public Action<WorldInfo> onNewWorld = (inf) => { };
+
         public GameInfo() { }
-        public GameInfo(GameInfoSerialized info)
+
+        public GameInfoSerialized Serialize()
+        {
+            return new GameInfoSerialized() { players = playerById.Values.ToArray(), worlds = worldByPoint.Values.ToArray() };
+        }
+        public void Deserialize(GameInfoSerialized info)
         {
             foreach (PlayerInfo p in info.players)
                 AddPlayer(p);
             foreach (WorldInfo w in info.worlds)
                 AddWorld(w);
-        }
-
-        public GameInfoSerialized Serialize()
-        {
-            return new GameInfoSerialized() { players = playerById.Values.ToArray(), worlds = worldByPoint.Values.ToArray() };
         }
 
         public NodeRole GetRoleOfHost(OverlayEndpoint host) { return roles.GetValue(host); }
@@ -112,7 +171,7 @@ namespace ServerClient
         public OverlayEndpoint GetPlayerValidatorHost(Guid player) { return playerById.GetValue(player).validatorHost; }
         public OverlayEndpoint GetWorldHost(Point worldPos) { return worldByPoint.GetValue(worldPos).host; }
 
-        public void AddPlayer(PlayerInfo info)
+        [Forward] public void AddPlayer(PlayerInfo info)
         {
             roles.Add(info.playerHost, NodeRole.PLAYER);
             roles.Add(info.validatorHost, NodeRole.PLAYER_VALIDATOR);
@@ -120,13 +179,17 @@ namespace ServerClient
             playerById.Add(info.id, info);
             playerByHost.Add(info.playerHost, info);
             playerByHost.Add(info.validatorHost, info);
+
+            onNewPlayer.Invoke(info);
         }
-        public void AddWorld(WorldInfo info)
+        [Forward] public void AddWorld(WorldInfo info)
         {
             roles.Add(info.host, NodeRole.WORLD_VALIDATOR);
 
             worldByPoint.Add(info.worldPos, info);
             worldByHost.Add(info.host, info);
+            
+            onNewWorld.Invoke(info);
         }
 
         Dictionary<OverlayEndpoint, NodeRole> roles = new Dictionary<OverlayEndpoint, NodeRole>();

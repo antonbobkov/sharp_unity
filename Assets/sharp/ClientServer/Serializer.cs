@@ -92,6 +92,14 @@ namespace ServerClient
 
             return chunk;
         }
+        public static object Deserialize(Stream input, Type t)
+        {
+            int size = ReadSize(input);
+            MemoryStream chunk = ReadChunk(input, size);
+
+            XmlSerializer ser = new XmlSerializer(t);
+            return ser.Deserialize(chunk);
+        }
 
         public static T Deserialize<T>(Stream input)
         {
@@ -120,11 +128,7 @@ namespace ServerClient
             MemoryStream ms = new MemoryStream(data);
             */
 
-            int size = ReadSize(input);
-            MemoryStream chunk = ReadChunk(input, size);
-
-            XmlSerializer ser = new XmlSerializer(typeof(T));
-            return (T)ser.Deserialize(chunk);
+            return (T)Deserialize(input, typeof(T));
         }
         
         public static void SendStream(Stream network, Stream message)
