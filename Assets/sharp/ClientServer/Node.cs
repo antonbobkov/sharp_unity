@@ -12,7 +12,7 @@ namespace ServerClient
     [Serializable]
     public class IPEndPointSer
     {
-        public byte[] ipAddr;
+        public string ipAddr;
         public int port;
 
         public IPEndPointSer() { }
@@ -21,8 +21,8 @@ namespace ServerClient
         [XmlIgnoreAttribute]
         public IPEndPoint Addr
         {
-            get { return new IPEndPoint(new IPAddress(ipAddr), port); }
-            set { ipAddr = value.Address.GetAddressBytes(); port = value.Port; }
+            get { return new IPEndPoint(IPAddress.Parse(ipAddr), port); }
+            set { ipAddr = value.Address.ToString(); port = value.Port; }
         }        
     }
 

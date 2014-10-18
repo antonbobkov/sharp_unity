@@ -46,6 +46,7 @@ namespace ServerClient
             ms.WriteByte((byte)mt);
 
             Serializer.Serialize(ms, messages);
+            Serializer.lastWrite = new ChunkDebug(ms, true);
 
             ms.Position = 0;
 

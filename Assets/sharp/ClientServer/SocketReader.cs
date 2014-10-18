@@ -53,7 +53,7 @@ namespace ServerClient
                             throw new IOException("End of stream");
 
                         //Console.WriteLine("Message received: {0}", (MessageType)bt);
-
+                       
                         messageProcessor(Serializer.DeserializeChunk(readStream), (MessageType)bt);
                     }
                 }

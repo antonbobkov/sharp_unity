@@ -138,14 +138,16 @@ namespace ServerClient
 
         void OnNewPlayerRequest(Guid playerId, OverlayEndpoint playerHost)
         {
-            Guid validatorId = Guid.NewGuid();
-            OverlayEndpoint validatorHost = new OverlayEndpoint(validatorPool.Random(n => r.Next(n)), new OverlayHostName(validatorId.ToString()));
+            Guid actionId = Guid.NewGuid();
+            string name = PlayerNameMap(playerCounter++);
+            
+            OverlayEndpoint validatorHost = new OverlayEndpoint(validatorPool.Random(n => r.Next(n)), new OverlayHostName("validator player " + name));
 
-            OverlayEndpoint playerNewHost = new OverlayEndpoint(playerHost.addr, new OverlayHostName(playerId.ToString()));
-            PlayerInfo info = new PlayerInfo(playerId, playerNewHost, validatorHost, PlayerNameMap(playerCounter++));
+            OverlayEndpoint playerNewHost = new OverlayEndpoint(playerHost.addr, new OverlayHostName("agent player " + name));
+            PlayerInfo info = new PlayerInfo(playerId, playerNewHost, validatorHost, name);
 
             OverlayEndpoint validatorClient = new OverlayEndpoint(validatorHost.addr, Client.hostName);
-            myHost.SendMessage(validatorClient, MessageType.PLAYER_VALIDATOR_ASSIGN, validatorId, info);
+            myHost.SendMessage(validatorClient, MessageType.PLAYER_VALIDATOR_ASSIGN, actionId, info);
 
             DelayedAction da = new DelayedAction()
             {
@@ -157,7 +159,7 @@ namespace ServerClient
                 }
             };
 
-            delayedActions.Add(validatorId, da);
+            delayedActions.Add(actionId, da);
         }
         void OnNewValidator(IPEndPoint ip)
         {
@@ -171,13 +173,13 @@ namespace ServerClient
                 return;
             
             Guid validatorId = Guid.NewGuid();
-            OverlayEndpoint validatorHost = new OverlayEndpoint(validatorPool.Random(n => r.Next(n)), new OverlayHostName(validatorId.ToString()));
+            OverlayEndpoint validatorHost = new OverlayEndpoint(validatorPool.Random(n => r.Next(n)), new OverlayHostName("host world " + worldPos));
 
             WorldInfo info = new WorldInfo(worldPos, validatorHost);
             WorldInitializer init = new WorldInitializer(r.Next());
 
-            if (worldPos == new Point(0, 0))
-            //if ((worldPos.x % 2 == 0) && (worldPos.y % 2 == 0))
+            //if (worldPos == new Point(0, 0))
+            if ((worldPos.x % 2 == 0) && (worldPos.y % 2 == 0))
                 init.hasSpawn = true;
 
             OverlayEndpoint validatorClient = new OverlayEndpoint(validatorHost.addr, Client.hostName);

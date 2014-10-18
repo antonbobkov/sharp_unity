@@ -1,18 +1,77 @@
 ﻿using ServerClient.Concurrent;
+
 using System.Net.Sockets;
 using System.Threading;
 using System;
+using System.Text;
 using System.IO;
 using System.Runtime.Serialization.Formatters.Binary;
 using System.Runtime.Serialization;
 using System.Xml.Serialization;
 using System.Diagnostics;
 
+using System.Collections.Generic;
+
 namespace ServerClient
 {
+    class ChunkDebug
+    {
+        MemoryStream ms = null;
+        bool ignorefirst = false;
+        string visual = "";
+
+        public ChunkDebug() { }
+        public ChunkDebug(MemoryStream ms_, bool ignorefirst_)
+        {
+            ms = ms_;
+            ignorefirst = ignorefirst_;
+            //GetData();
+        }
+        public string GetData()
+        {
+            if (visual == "")
+                visual = CleanUpForDebug();
+
+            return visual;
+        }
+
+        string CleanUpForDebug()
+        {
+            if (ms == null)
+                return "";
+            
+            MemoryStream chunk = new MemoryStream(ms.ToArray());
+
+            if (ignorefirst)
+                ++chunk.Position;
+            
+            List<int> pos = new List<int>();
+            while (chunk.Position < chunk.Length)
+            {
+                pos.Add((int)chunk.Position);
+                int sz = Serializer.ReadSize(chunk);
+                chunk.Position += sz;
+            }
+
+            chunk.Position = 0;
+
+            StringBuilder sb = new StringBuilder(System.Text.Encoding.Default.GetString(chunk.ToArray()));
+
+            if (ignorefirst)
+                sb[0] = '\n';
+            
+            foreach (int l in pos)
+                for (int i = 0; i < Serializer.SizeSize; ++i)
+                    sb[l + i] = '\n';
+
+            return sb.ToString();
+        }
+    }
+    
     class Serializer
     {
-        public static string lastRead = "";
+        public static ChunkDebug lastRead = new ChunkDebug();
+        public static ChunkDebug lastWrite = new ChunkDebug();
 
         public const int SizeSize = 4;
 
@@ -81,13 +140,14 @@ namespace ServerClient
             return new MemoryStream(data);
         }
 
+
         public static MemoryStream DeserializeChunk(Stream input)
         {
             int size = ReadSize(input);
 
             MemoryStream chunk = ReadChunk(input, size);
 
-            lastRead = System.Text.Encoding.Default.GetString(chunk.ToArray());
+            lastRead = new ChunkDebug(chunk, false);
             //Log.LogWriteLine("Received XML:\n{0}", System.Text.Encoding.Default.GetString(data));
 
             return chunk;
@@ -157,7 +217,7 @@ namespace ServerClient
             output.Write(intBytes, 0, intBytes.Length);
         }
 
-        static int ReadSize(Stream input)
+        static internal int ReadSize(Stream input)
         {
             byte[] intBytes = new byte[sizeof(int)];
             int c = input.Read(intBytes, 0, intBytes.Length);
