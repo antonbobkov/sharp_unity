@@ -779,7 +779,7 @@ namespace ServerClient
             lock (sync.syncLock)
             {
                 host = new GlobalHost(sync.GetAsDelegate());
-                myClient = new Client(sync.GetAsDelegate(), host, this);
+                myClient = new Client(host, this);
             }
         }
 
@@ -818,24 +818,24 @@ namespace ServerClient
         public void StartServer()
         {
             MyAssert.Assert(myServer == null);
-            myServer = new Server(sync.GetAsDelegate(), host);
+            myServer = new Server(host);
             myClient.OnServerAddress(myServer.Address);
         }
 
         public void AddWorldValidator(WorldInfo info, WorldInitializer init)
         {
             MyAssert.Assert(!worldValidators.ContainsKey(info.worldPos));
-            worldValidators.Add(info.worldPos, new WorldValidator(info, init, sync.GetAsDelegate(), host, myClient.gameInfo, myClient.serverHost));
+            worldValidators.Add(info.worldPos, new WorldValidator(info, init, host, myClient.gameInfo, myClient.serverHost));
         }
         public void AddPlayerValidator(PlayerInfo info)
         {
             MyAssert.Assert(!playerValidators.ContainsKey(info.id));
-            playerValidators.Add(info.id, new PlayerValidator(info, sync.GetAsDelegate(), host, myClient.gameInfo));
+            playerValidators.Add(info.id, new PlayerValidator(info, host, myClient.gameInfo));
         }
         public void AddPlayerAgent(PlayerInfo info)
         {
             MyAssert.Assert(!playerAgents.ContainsKey(info.id));
-            PlayerAgent pa = new PlayerAgent(info, sync.GetAsDelegate(), host, myClient.gameInfo, myClient.serverHost);
+            PlayerAgent pa = new PlayerAgent(info, host, myClient.gameInfo, myClient.serverHost);
             playerAgents.Add(info.id, pa);
         }
 

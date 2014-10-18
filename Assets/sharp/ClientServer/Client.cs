@@ -19,7 +19,6 @@ namespace ServerClient
         public OverlayEndpoint serverHost = null;
         Node server = null;
 
-        Action<Action> sync;
         OverlayHost myHost;
 
         Aggregator all;
@@ -36,9 +35,8 @@ namespace ServerClient
         public Action<PlayerInfo, PlayerData> onNewPlayerDataHook = (a, b) => { };
         public Action<PlayerInfo, PlayerData> onPlayerNewRealm = (a, b) => { };
 
-        public Client(Action<Action> sync_, GlobalHost globalHost, Aggregator all_)
+        public Client(GlobalHost globalHost, Aggregator all_)
         {
-            sync = sync_;
             all = all_;
 
             myHost = globalHost.NewHost(Client.hostName, AssignProcessor);
@@ -79,7 +77,7 @@ namespace ServerClient
             if (mt == MessageType.SERVER_ADDRESS)
             {
                 OverlayEndpoint host = Serializer.Deserialize<OverlayEndpoint>(stm);
-                sync.Invoke(() => OnServerAddress(host));
+                OnServerAddress(host);
             }
             else
                 throw new Exception("Client.ProcessClientMessage bad message type " + mt.ToString());
@@ -89,30 +87,30 @@ namespace ServerClient
             if (mt == MessageType.GAME_INFO)
             {
                 GameInfoSerialized info = Serializer.Deserialize<GameInfoSerialized>(stm);
-                sync.Invoke(() => OnGameInfo(info));
+                OnGameInfo(info);
             }
             else if (mt == MessageType.NEW_PLAYER)
             {
                 PlayerInfo info = Serializer.Deserialize<PlayerInfo>(stm);
-                sync.Invoke(() => OnNewPlayer(info));
+                OnNewPlayer(info);
             }
             else if (mt == MessageType.NEW_WORLD)
             {
                 WorldInfo info = Serializer.Deserialize<WorldInfo>(stm);
-                sync.Invoke(() => OnNewWorld(info));
+                OnNewWorld(info);
             }
             else if (mt == MessageType.PLAYER_VALIDATOR_ASSIGN)
             {
                 Guid actionId = Serializer.Deserialize<Guid>(stm);
                 PlayerInfo info = Serializer.Deserialize<PlayerInfo>(stm);
-                sync.Invoke(() => OnPlayerValidateRequest(actionId, info));
+                OnPlayerValidateRequest(actionId, info);
             }
             else if (mt == MessageType.WORLD_VALIDATOR_ASSIGN)
             {
                 Guid actionId = Serializer.Deserialize<Guid>(stm);
                 WorldInfo info = Serializer.Deserialize<WorldInfo>(stm);
                 WorldInitializer init = Serializer.Deserialize<WorldInitializer>(stm);
-                sync.Invoke(() => OnWorldValidateRequest(actionId, info, init));
+                OnWorldValidateRequest(actionId, info, init);
             }
             else
                 throw new Exception("Client.ProcessServerMessage bad message type " + mt.ToString());
@@ -122,31 +120,31 @@ namespace ServerClient
             if (mt == MessageType.WORLD_INIT)
             {
                 WorldSerialized wrld = Serializer.Deserialize<WorldSerialized>(stm);
-                sync.Invoke(() => OnNewWorld(new World(wrld, gameInfo)));
+                OnNewWorld(new World(wrld, gameInfo));
             }
             else if (mt == MessageType.PLAYER_JOIN)
             {
                 Guid id = Serializer.Deserialize<Guid>(stm);
                 Point pos = Serializer.Deserialize<Point>(stm);
-                sync.Invoke(() => OnPlayerJoin(knownWorlds.GetValue(inf.worldPos), gameInfo.GetPlayerById(id), pos));
+                OnPlayerJoin(knownWorlds.GetValue(inf.worldPos), gameInfo.GetPlayerById(id), pos);
             }
             else if (mt == MessageType.PLAYER_LEAVE)
             {
                 Guid id = Serializer.Deserialize<Guid>(stm);
                 Point newWorld = Serializer.Deserialize<Point>(stm);
-                sync.Invoke(() => OnPlayerLeave(knownWorlds.GetValue(inf.worldPos), gameInfo.GetPlayerById(id), newWorld));
+                OnPlayerLeave(knownWorlds.GetValue(inf.worldPos), gameInfo.GetPlayerById(id), newWorld);
             }
             else if (mt == MessageType.MOVE)
             {
                 Guid id = Serializer.Deserialize<Guid>(stm);
                 Point pos = Serializer.Deserialize<Point>(stm);
-                sync.Invoke(() => OnPlayerMove(knownWorlds.GetValue(inf.worldPos), gameInfo.GetPlayerById(id), pos, MoveValidity.VALID));
+                OnPlayerMove(knownWorlds.GetValue(inf.worldPos), gameInfo.GetPlayerById(id), pos, MoveValidity.VALID);
             }
             else if (mt == MessageType.TELEPORT_MOVE)
             {
                 Guid id = Serializer.Deserialize<Guid>(stm);
                 Point pos = Serializer.Deserialize<Point>(stm);
-                sync.Invoke(() => OnPlayerMove(knownWorlds.GetValue(inf.worldPos), gameInfo.GetPlayerById(id), pos, MoveValidity.TELEPORT));
+                OnPlayerMove(knownWorlds.GetValue(inf.worldPos), gameInfo.GetPlayerById(id), pos, MoveValidity.TELEPORT);
             }
             else
                 throw new Exception(Log.StDump( mt, "unexpected"));
@@ -157,7 +155,7 @@ namespace ServerClient
             {
                 PlayerData pd = Serializer.Deserialize<PlayerData>(stm);
                 PlayerDataUpdate pdu = Serializer.Deserialize<PlayerDataUpdate>(stm);
-                sync.Invoke(() => OnPlayerData(inf, pd, pdu));
+                OnPlayerData(inf, pd, pdu);
             }
             else
                 throw new Exception("Client.ProcessPlayerValidatorMessage bad message type " + mt.ToString());

@@ -174,12 +174,13 @@ namespace ServerClient
                 if (readerStatus != ReadStatus.READY)
                     throw new NodeException("AcceptConnection: reader is aready initialized " + FullDescription());
 
-                reader = new SocketReader((stm, mtp) => messageProcessor(mtp, stm, this),
-                                            (ioex) => actionQueue(() =>
-                                            {
-                                                readerStatus = ReadStatus.DISCONNECTED;
-                                                Close(ioex, DisconnectType.READ);
-                                            }),
+                reader = new SocketReader(
+                    (stm, mtp) => actionQueue(() => messageProcessor(mtp, stm, this)),
+                    (ioex) => actionQueue(() =>
+                    {
+                        readerStatus = ReadStatus.DISCONNECTED;
+                        Close(ioex, DisconnectType.READ);
+                    }),
 
                 readingSocket);
 

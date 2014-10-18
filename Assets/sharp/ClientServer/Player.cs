@@ -80,7 +80,6 @@ namespace ServerClient
 
     class PlayerValidator
     {
-        Action<Action> sync;
         OverlayHost myHost;
 
         GameInfo gameInfo;
@@ -91,10 +90,9 @@ namespace ServerClient
         Inventory frozenInventory = new Inventory();
         bool frozenSpawn = false;
 
-        public PlayerValidator(PlayerInfo info_, Action<Action> sync_, GlobalHost globalHost, GameInfo gameInfo_)
+        public PlayerValidator(PlayerInfo info_, GlobalHost globalHost, GameInfo gameInfo_)
         {
             info = info_;
-            sync = sync_;
             gameInfo = gameInfo_;
 
             myHost = globalHost.NewHost(info.validatorHost.hostname, AssignProcessor);
@@ -133,24 +131,24 @@ namespace ServerClient
         void ProcessWorldMessage(MessageType mt, Stream stm, Node n, WorldInfo inf)
         {
             if (mt == MessageType.SPAWN_REQUEST)
-                sync.Invoke(() => OnSpawnRequest(inf, n));
+                OnSpawnRequest(inf, n);
             else if (mt == MessageType.SPAWN_FAIL)
-                sync.Invoke(OnSpawnFail);
+                OnSpawnFail();
             else if (mt == MessageType.PLAYER_JOIN)
-                sync.Invoke(() => OnPlayerNewRealm(inf));
+                OnPlayerNewRealm(inf);
             else if (mt == MessageType.PLAYER_LEAVE)
             {
                 Point newWorld = Serializer.Deserialize<Point>(stm);
-                sync.Invoke(() => OnPlayerLeave(newWorld));
+                OnPlayerLeave(newWorld);
             }
             else if (mt == MessageType.PICKUP_ITEM)
-                sync.Invoke(() => OnPickupItem());
+                OnPickupItem();
             else if (mt == MessageType.FREEZE_ITEM)
-                sync.Invoke(() => OnFreezeItem(n));
+                OnFreezeItem(n);
             else if (mt == MessageType.UNFREEZE_ITEM)
-                sync.Invoke(() => OnUnfreezeItem());
+                OnUnfreezeItem();
             else if (mt == MessageType.CONSUME_FROZEN_ITEM)
-                sync.Invoke(() => OnConsumeFrozen());
+                OnConsumeFrozen();
             else
                 throw new Exception(Log.StDump(info, inf, mt, "unexpected message"));
         }
@@ -243,7 +241,6 @@ namespace ServerClient
 
     class PlayerAgent
     {
-        Action<Action> sync;
         OverlayHost myHost;
 
         GameInfo gameInfo;
@@ -251,10 +248,9 @@ namespace ServerClient
 
         public PlayerInfo info;
 
-        public PlayerAgent(PlayerInfo info_, Action<Action> sync_, GlobalHost globalHost, GameInfo gameInfo_, OverlayEndpoint serverHost_)
+        public PlayerAgent(PlayerInfo info_, GlobalHost globalHost, GameInfo gameInfo_, OverlayEndpoint serverHost_)
         {
             info = info_;
-            sync = sync_;
             gameInfo = gameInfo_;
             serverHost = serverHost_;
 

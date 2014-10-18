@@ -269,7 +269,7 @@ namespace ServerClient
                 all.myClient.Validate();
                 if (all.host.MyAddress.Port != GlobalHost.nStartPort)
                 {
-                    for (int i = 0; i < 62; ++i)
+                    for (int i = 0; i < 10; ++i)
                         NewAiPlayer(all);
                 }
                 else

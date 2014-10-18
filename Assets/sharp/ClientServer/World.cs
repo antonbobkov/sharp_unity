@@ -394,7 +394,6 @@ namespace ServerClient
         Random rand = new Random();
 
         World world;
-        Action<Action> sync;
         OverlayHost myHost;
 
         GameInfo gameInfo;
@@ -410,10 +409,9 @@ namespace ServerClient
             act.Invoke(mt);
         }
 
-        public WorldValidator(WorldInfo info, WorldInitializer init, Action<Action> sync_, GlobalHost globalHost, GameInfo gameInfo_, OverlayEndpoint serverHost_)
+        public WorldValidator(WorldInfo info, WorldInitializer init, GlobalHost globalHost, GameInfo gameInfo_, OverlayEndpoint serverHost_)
         {
             gameInfo = gameInfo_;
-            sync = sync_;
             serverHost = serverHost_;
 
             world = new World(info, init, gameInfo);
@@ -471,9 +469,9 @@ namespace ServerClient
         void ProcessPlayerValidatorMessage(MessageType mt, Stream stm, Node n, PlayerInfo inf)
         {
             if (mt == MessageType.SPAWN_FAIL || mt == MessageType.SPAWN_SUCCESS)
-                sync.Invoke(() => FinishLock(inf.id, mt));
+                FinishLock(inf.id, mt);
             else if(mt == MessageType.FREEZE_FAIL || mt == MessageType.FREEZE_SUCCESS)
-                sync.Invoke(() => FinishLock(inf.id, mt));
+                FinishLock(inf.id, mt);
             else
                 throw new Exception("WorldValidator.ProcessClientMessage bad message type " + mt.ToString());
         }
@@ -482,13 +480,13 @@ namespace ServerClient
             if (mt == MessageType.REALM_MOVE_FAIL || mt == MessageType.REALM_MOVE_SUCCESS)
             {
                 Guid id = Serializer.Deserialize<Guid>(stm);
-                sync.Invoke(() => FinishLock(id, mt));
+                FinishLock(id, mt);
             }
             else if (mt == MessageType.REALM_MOVE)
             {
                 Guid player = Serializer.Deserialize<Guid>(stm);
                 Point newPos = Serializer.Deserialize<Point>(stm);
-                sync.Invoke(() => OnRealmMove(gameInfo.GetPlayerById(player), newPos, n));
+                OnRealmMove(gameInfo.GetPlayerById(player), newPos, n);
             }
             else
                 throw new Exception(Log.StDump( mt, "bad message type"));
@@ -498,17 +496,17 @@ namespace ServerClient
             if (mt == MessageType.MOVE)
             {
                 Point newPos = Serializer.Deserialize<Point>(stm);
-                sync.Invoke(() => OnMoveValidate(inf, newPos));
+                OnMoveValidate(inf, newPos);
             }
             else if (mt == MessageType.REALM_MOVE)
             {
                 Point newPos = Serializer.Deserialize<Point>(stm);
-                sync.Invoke(() => OnValidateRealmMove(inf, newPos));
+                OnValidateRealmMove(inf, newPos);
             }
             else if (mt == MessageType.TELEPORT_MOVE)
             {
                 Point newPos = Serializer.Deserialize<Point>(stm);
-                sync.Invoke(() => OnValidateTeleport(inf, newPos));
+                OnValidateTeleport(inf, newPos);
             }
             else
                 throw new Exception("WorldValidator.ProcessClientMessage bad message type " + mt.ToString());
@@ -518,7 +516,7 @@ namespace ServerClient
             if (mt == MessageType.SPAWN_REQUEST)
             {
                 Guid playerId = Serializer.Deserialize<Guid>(stm);
-                sync.Invoke(() => OnSpawnRequest(gameInfo.GetPlayerById(playerId)));
+                OnSpawnRequest(gameInfo.GetPlayerById(playerId));
             }
             else
                 throw new Exception(Log.StDump("unexpected", world.info, mt));

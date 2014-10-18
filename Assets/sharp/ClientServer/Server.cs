@@ -27,7 +27,6 @@ namespace ServerClient
         List<IPEndPoint> validatorPool = new List<IPEndPoint>();
         List<Point> spawnWorlds = new List<Point>();
 
-        Action<Action> sync;
         OverlayHost myHost;
 
         int playerCounter = 1;
@@ -55,10 +54,8 @@ namespace ServerClient
 
         public OverlayEndpoint Address { get { return myHost.Address; } }
 
-        public Server(Action<Action> sync_, GlobalHost globalHost)
+        public Server(GlobalHost globalHost)
         {
-            sync = sync_;
-
             myHost = globalHost.NewHost(Server.hostName, AssignProcessor);
             myHost.onNewConnectionHook = ProcessNewConnection;
         }
@@ -87,21 +84,21 @@ namespace ServerClient
             if (mt == MessageType.NEW_PLAYER)
             {
                 Guid player = Serializer.Deserialize<Guid>(stm);
-                sync.Invoke(() => OnNewPlayerRequest(player, n.info.remote));
+                OnNewPlayerRequest(player, n.info.remote);
             }
             else if (mt == MessageType.NEW_WORLD)
             {
                 Point worldPos = Serializer.Deserialize<Point>(stm);
-                sync.Invoke(() => OnNewWorldRequest(worldPos));
+                OnNewWorldRequest(worldPos);
             }
             else if (mt == MessageType.NEW_VALIDATOR)
             {
-                sync.Invoke(() => OnNewValidator(n.info.remote.addr));
+                OnNewValidator(n.info.remote.addr);
             }
             else if (mt == MessageType.ACCEPT)
             {
                 Guid actionId = Serializer.Deserialize<Guid>(stm);
-                sync.Invoke(() => OnAccept(actionId, n.info.remote));
+                OnAccept(actionId, n.info.remote);
             }
             else
                 throw new Exception("Client.ProcessClientMessage bad message type " + mt.ToString());
@@ -111,7 +108,7 @@ namespace ServerClient
             if (mt == MessageType.NEW_WORLD)
             {
                 Point worldPos = Serializer.Deserialize<Point>(stm);
-                sync.Invoke(() => OnNewWorldRequest(worldPos));
+                OnNewWorldRequest(worldPos);
             }
             else
                 throw new Exception("Client.ProcessWorldMessage bad message type " + mt.ToString());
@@ -119,7 +116,7 @@ namespace ServerClient
         void ProcessPlayerMessage(MessageType mt, Stream stm, Node n, PlayerInfo inf)
         {
             if (mt == MessageType.SPAWN_REQUEST)
-                sync.Invoke(() => OnSpawnRequest(inf));
+                OnSpawnRequest(inf);
             else
                 throw new Exception(Log.StDump("unexpected", mt));
         }
