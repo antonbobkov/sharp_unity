@@ -9,6 +9,10 @@ using System.Threading;
 using System.IO;
 using System.Diagnostics;
 
+using System.Reflection;
+using System.Runtime.Remoting.Proxies;
+using System.Runtime.Remoting.Messaging;
+
 
 namespace ServerClient
 {
@@ -43,6 +47,48 @@ namespace ServerClient
 
     public enum PlayerDataUpdate { NEW, JOIN, INVENTORY };
 
+    [Serializable]
+    public class ForwardFunctionCall
+    {
+        public string functionName;
+        public object[] argumemts;
+
+        public void Apply<T>(T t)
+        {
+            MethodInfo mb = typeof(T).GetMethod(functionName);
+            mb.Invoke(t, argumemts);
+        }
+    }
+
+    class ForwardProxy : RealProxy
+    {
+        Action<ForwardFunctionCall> onCall;
+
+        public ForwardProxy(Type t, Action<ForwardFunctionCall> onCall_)
+            : base(t)
+        {
+            onCall = onCall_;
+        }
+
+        public override IMessage Invoke(IMessage msg)
+        {
+            var methodCall = msg as IMethodCallMessage;
+
+            if (methodCall != null)
+                return HandleMethodCall(methodCall);
+
+            return null;
+        }
+
+        IMessage HandleMethodCall(IMethodCallMessage methodCall)
+        {
+            ForwardFunctionCall ffc = new ForwardFunctionCall() { functionName = methodCall.MethodName, argumemts = methodCall.InArgs };
+            onCall.Invoke(ffc);
+
+            return new ReturnMessage(null, null, 0, methodCall.LogicalCallContext, methodCall);
+        }
+    }
+    
     /*abstract class MessageReceiver
     {
         public abstract void ProcessMessage(MessageType mt, Guid sender, Guid receiver, Stream stm, Action<Action> syncronizer);
