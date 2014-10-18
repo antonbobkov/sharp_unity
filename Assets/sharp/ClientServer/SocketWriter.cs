@@ -45,8 +45,7 @@ namespace ServerClient
             
             ms.WriteByte((byte)mt);
 
-            foreach(object m in messages)
-                Serializer.Serialize(ms, m);
+            Serializer.Serialize(ms, messages);
 
             ms.Position = 0;
 

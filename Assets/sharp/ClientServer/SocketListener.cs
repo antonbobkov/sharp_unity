@@ -90,7 +90,7 @@ namespace ServerClient
                         throw new Exception("Invalid incoming connection message (expecting handshake): type " + nTp + " " + (MessageType)nTp);
                     }
 
-                    Handshake info = Serializer.Deserialize<Handshake>(connectionStream);
+                    Handshake info = Serializer.Deserialize<Handshake>(Serializer.DeserializeChunk(connectionStream));
 
                     processConnection(new Handshake(info.remote, info.local), sckRead);
                 }

@@ -54,7 +54,7 @@ namespace ServerClient
 
                         //Console.WriteLine("Message received: {0}", (MessageType)bt);
 
-                        messageProcessor(readStream, (MessageType)bt);
+                        messageProcessor(Serializer.DeserializeChunk(readStream), (MessageType)bt);
                     }
                 }
             }

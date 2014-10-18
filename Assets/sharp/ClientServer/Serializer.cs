@@ -13,22 +13,84 @@ namespace ServerClient
     class Serializer
     {
         public static string lastRead = "";
-        public static void Serialize(Stream output, object obj)
+
+        public const int SizeSize = 4;
+
+        public static void Serialize(MemoryStream output, params object[] objs)
+        {
+            long initialPosition = output.Position;
+            
+            WriteSize(output, 0);   // empty bytes
+
+            foreach (object m in objs)
+            {
+                long initialPos = output.Position;
+                WriteSize(output, 0);   // empty bytes
+                SerializeOne(output, m);
+                long finalPos = output.Position;
+
+                long objectSize = finalPos - initialPos - SizeSize;
+                MyAssert.Assert(objectSize > 0);
+
+                output.Position = initialPos;
+                WriteSize(output, (int)objectSize);
+                output.Position = finalPos;
+            }
+
+            long finalPosition = output.Position;
+            long totalSize = finalPosition - initialPosition - SizeSize;
+
+            output.Position = initialPosition;
+            MyAssert.Assert(totalSize >= 0);
+            if (objs.Length > 0)
+                MyAssert.Assert(totalSize > 0);
+            WriteSize(output, (int)totalSize);
+
+            output.Position = finalPosition;
+        }
+
+        static void SerializeOne(Stream output, object obj)
         {
             //IFormatter formatter = new BinaryFormatter();
             //formatter.Serialize(stm, obj);
 
-            MemoryStream ms = new MemoryStream();
-
             XmlSerializer ser = new XmlSerializer(obj.GetType());
-            ser.Serialize(ms, obj);
+            ser.Serialize(output, obj);
+        }
 
-            //Log.LogWriteLine("Send XML of size {1}:\n{0}", System.Text.Encoding.Default.GetString(ms.ToArray()), ms.Length);
+        static MemoryStream ReadChunk(Stream input, int size)
+        {
+            if (size == 0)
+                return new MemoryStream();
 
-            WriteSize(output, (int)ms.Length);
+            byte[] data = new byte[size];
+            int total = 0;
+            while (true)
+            {
+                int bytesRead = input.Read(data, total, size - total);
 
-            ms.Position = 0;
-            CopyStream(ms, output);
+                total += bytesRead;
+
+                if (bytesRead == 0)
+                    throw new IOException("End of stream");
+
+                if (size == total)
+                    break;
+            }
+
+            return new MemoryStream(data);
+        }
+
+        public static MemoryStream DeserializeChunk(Stream input)
+        {
+            int size = ReadSize(input);
+
+            MemoryStream chunk = ReadChunk(input, size);
+
+            lastRead = System.Text.Encoding.Default.GetString(chunk.ToArray());
+            //Log.LogWriteLine("Received XML:\n{0}", System.Text.Encoding.Default.GetString(data));
+
+            return chunk;
         }
 
         public static T Deserialize<T>(Stream input)
@@ -36,6 +98,7 @@ namespace ServerClient
             //IFormatter formatter = new BinaryFormatter();
             //return (T)formatter.Deserialize(stm);
 
+            /*
             int size = ReadSize(input);
             byte[] data = new byte[size];
             int total = 0;
@@ -50,23 +113,18 @@ namespace ServerClient
                 if (size == total)
                     break;
             }
-            /*
-            for (int i = 0; i < size; ++i)
-            {
-                input.Read(data, i, 1);
-                Console.Write((char)data[i]);
-            }
-            */
-
-
 
             lastRead = System.Text.Encoding.Default.GetString(data);
             //Log.LogWriteLine("Received XML:\n{0}", System.Text.Encoding.Default.GetString(data));
 
             MemoryStream ms = new MemoryStream(data);
+            */
+
+            int size = ReadSize(input);
+            MemoryStream chunk = ReadChunk(input, size);
 
             XmlSerializer ser = new XmlSerializer(typeof(T));
-            return (T)ser.Deserialize(ms);
+            return (T)ser.Deserialize(chunk);
         }
         
         public static void SendStream(Stream network, Stream message)
@@ -77,12 +135,10 @@ namespace ServerClient
 
         public static void CopyStream(Stream input, Stream output)
         {
-            byte[] buffer = new byte[32768];
+            byte[] buffer = new byte[1000];
             int read;
             while ((read = input.Read(buffer, 0, buffer.Length)) > 0)
-            {
                 output.Write(buffer, 0, read);
-            }
         }
 
         static void WriteSize(Stream output, int size)
