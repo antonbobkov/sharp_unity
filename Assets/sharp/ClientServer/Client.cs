@@ -28,10 +28,14 @@ namespace ServerClient
 
         public HashSet<Guid> myPlayerAgents = new HashSet<Guid>();
 
-        public Action hookServerReady = () => { };
-        public Action<World, PlayerInfo, MoveType> onMoveHook = (a, b, c) => { };
+        public Action onServerReadyHook = () => { };
+
         public Action<World> onNewWorldHook = (a) => { };
         public Action<PlayerInfo> onNewPlayerHook = (a) => { };
+
+        public Action<World, PlayerInfo, Point, MoveValidity> onMoveHook = (a, b, c, d) => { };
+        public Action<World, PlayerInfo> onPlayerLeaveHook = (a, b) => { };
+        
         public Action<PlayerInfo, PlayerData> onNewPlayerDataHook = (a, b) => { };
         public Action<PlayerInfo, PlayerData> onPlayerNewRealm = (a, b) => { };
 
@@ -84,12 +88,12 @@ namespace ServerClient
         }
         void ProcessServerMessage(MessageType mt, Stream stm, Node n)
         {
-            if (mt == MessageType.GAME_INFO)
+            if (mt == MessageType.GAME_INFO_VAR_INIT)
             {
                 GameInfoSerialized info = Serializer.Deserialize<GameInfoSerialized>(stm);
                 OnGameInfo(info);
             }
-            else if (mt == MessageType.GAME_INFO_CHANGE)
+            else if (mt == MessageType.GAME_INFO_VAR_CHANGE)
             {
                 MyAssert.Assert(gameInfo != null);
 
@@ -114,41 +118,22 @@ namespace ServerClient
         }
         void ProcessWorldMessage(MessageType mt, Stream stm, Node n, WorldInfo inf)
         {
-            if (mt == MessageType.WORLD_INIT)
+            if (mt == MessageType.WORLD_VAR_INIT)
             {
                 WorldSerialized wrld = Serializer.Deserialize<WorldSerialized>(stm);
-                OnNewWorld(new World(wrld, gameInfo));
+                OnNewWorldVar(new World(wrld, gameInfo));
             }
-            else if (mt == MessageType.PLAYER_JOIN)
+            else if (mt == MessageType.WORLD_VAR_CHANGE)
             {
-                Guid id = Serializer.Deserialize<Guid>(stm);
-                Point pos = Serializer.Deserialize<Point>(stm);
-                OnPlayerJoin(knownWorlds.GetValue(inf.worldPos), gameInfo.GetPlayerById(id), pos);
-            }
-            else if (mt == MessageType.PLAYER_LEAVE)
-            {
-                Guid id = Serializer.Deserialize<Guid>(stm);
-                Point newWorld = Serializer.Deserialize<Point>(stm);
-                OnPlayerLeave(knownWorlds.GetValue(inf.worldPos), gameInfo.GetPlayerById(id), newWorld);
-            }
-            else if (mt == MessageType.MOVE)
-            {
-                Guid id = Serializer.Deserialize<Guid>(stm);
-                Point pos = Serializer.Deserialize<Point>(stm);
-                OnPlayerMove(knownWorlds.GetValue(inf.worldPos), gameInfo.GetPlayerById(id), pos, MoveValidity.VALID);
-            }
-            else if (mt == MessageType.TELEPORT_MOVE)
-            {
-                Guid id = Serializer.Deserialize<Guid>(stm);
-                Point pos = Serializer.Deserialize<Point>(stm);
-                OnPlayerMove(knownWorlds.GetValue(inf.worldPos), gameInfo.GetPlayerById(id), pos, MoveValidity.TELEPORT);
+                ForwardFunctionCall ffc = ForwardFunctionCall.Deserialize(stm, typeof(World));
+                ffc.Apply(knownWorlds.GetValue(inf.worldPos));
             }
             else
-                throw new Exception(Log.StDump( mt, "unexpected"));
+                throw new Exception(Log.StDump(mt, inf, "unexpected"));
         }
         void ProcessPlayerValidatorMessage(MessageType mt, Stream stm, Node n, PlayerInfo inf)
         {
-            if (mt == MessageType.PLAYER_INFO)
+            if (mt == MessageType.PLAYER_INFO_VAR)
             {
                 PlayerData pd = Serializer.Deserialize<PlayerData>(stm);
                 PlayerDataUpdate pdu = Serializer.Deserialize<PlayerDataUpdate>(stm);
@@ -182,7 +167,7 @@ namespace ServerClient
                 server = myHost.ConnectAsync(serverHost);
                 myHost.BroadcastGroup(Client.hostName, MessageType.SERVER_ADDRESS, serverHost);
 
-                hookServerReady();
+                onServerReadyHook();
             }
             else
                 MyAssert.Assert(serverHost == serverHost_);
@@ -217,10 +202,11 @@ namespace ServerClient
             //Log.LogWriteLine("New world\n{0}", inf.GetFullInfo());
             myHost.ConnectAsync(inf.host);
         }
-        void OnNewWorld(World w)
+        void OnNewWorldVar(World w)
         {
             knownWorlds.Add(w.Position, w);
-            w.onMoveHook = (player, mv) => OnMove(w, player, mv);
+            w.onMoveHook = (player, pos, mv) => OnMove(w, player, pos, mv);
+            w.onPlayerLeaveHook = (player) => onPlayerLeaveHook(w, player);
 
             onNewWorldHook(w);
 
@@ -232,11 +218,11 @@ namespace ServerClient
             knownPlayers[inf.id] = pd;
             //Log.LogWriteLine(Log.StDump( inf, pd, pdu));
             
-            if(pdu == PlayerDataUpdate.NEW)
+            if(pdu == PlayerDataUpdate.INIT)
                 onNewPlayerDataHook(inf, pd);
-            else if(pdu == PlayerDataUpdate.JOIN)
+            else if(pdu == PlayerDataUpdate.JOIN_WORLD)
                 onPlayerNewRealm(inf, pd);
-            else if(pdu != PlayerDataUpdate.INVENTORY)
+            else if(pdu != PlayerDataUpdate.INVENTORY_CHANGE)
                 throw new Exception(Log.StDump(pdu, "unexpected"));
         }
 
@@ -251,23 +237,6 @@ namespace ServerClient
             all.AddWorldValidator(info, init);
             Log.LogWriteLine("Validating for world {0}", info.worldPos);
             server.SendMessage(MessageType.ACCEPT, actionId);
-        }
-
-        void OnPlayerJoin(World world, PlayerInfo playerInfo, Point pos)
-        {
-            world.AddPlayer(playerInfo.id, pos);
-
-            //Log.LogWriteLine("{0} joined {1} at {2}", playerInfo, world.info, pos);
-        }
-        void OnPlayerLeave(World world, PlayerInfo playerInfo, Point newWorld)
-        {
-            world.RemovePlayer(playerInfo.id);
-
-            //Log.LogWriteLine("{0} left {1} for {2}", playerInfo, world.info, newWorld);
-        }
-        void OnPlayerMove(World world, PlayerInfo playerInfo, Point newPos, MoveValidity mv)
-        {
-            world.Move(playerInfo.id, newPos, mv);
         }
 
         public bool TryConnect(IPEndPoint ep)
@@ -288,9 +257,13 @@ namespace ServerClient
             server.SendMessage(MessageType.NEW_VALIDATOR);
         }
 
-        void OnMove(World w, PlayerInfo player, MoveType mv)
+        void OnMove(World w, PlayerInfo player, Point newPos, MoveValidity mv)
         {
-            onMoveHook.Invoke(w, player, mv);
+            onMoveHook.Invoke(w, player, newPos, mv);
+        }
+        void OnPlayerLeave(World w, PlayerInfo player)
+        {
+            onPlayerLeaveHook.Invoke(w, player);
         }
     }
 }

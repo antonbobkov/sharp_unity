@@ -124,7 +124,7 @@ namespace ServerClient
         }
         void OnNewClient(Node n)
         {
-            n.SendMessage(MessageType.PLAYER_INFO, playerData, PlayerDataUpdate.NEW);
+            n.SendMessage(MessageType.PLAYER_INFO_VAR, playerData, PlayerDataUpdate.INIT);
         }
 
         void ProcessWorldMessage(MessageType mt, Stream stm, Node n, WorldInfo inf)
@@ -133,12 +133,17 @@ namespace ServerClient
                 OnSpawnRequest(inf, n);
             else if (mt == MessageType.SPAWN_FAIL)
                 OnSpawnFail();
-            else if (mt == MessageType.PLAYER_JOIN)
-                OnPlayerNewRealm(inf);
-            else if (mt == MessageType.PLAYER_LEAVE)
+            else if (mt == MessageType.PLAYER_WORLD_MOVE)
             {
-                Point newWorld = Serializer.Deserialize<Point>(stm);
-                OnPlayerLeave(newWorld);
+                WorldMove wm = Serializer.Deserialize<WorldMove>(stm);
+
+                if (wm == WorldMove.LEAVE)
+                {
+                    Point newWorld = Serializer.Deserialize<Point>(stm);
+                    OnPlayerLeave(newWorld);
+                }
+                else
+                    OnPlayerNewRealm(inf);
             }
             else if (mt == MessageType.PICKUP_ITEM)
                 OnPickupItem();
@@ -184,7 +189,7 @@ namespace ServerClient
             if ((playerData.worldPos != newWorld) || forceUpdate)
             {
                 playerData.worldPos = newWorld;
-                myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_INFO, playerData, PlayerDataUpdate.JOIN);
+                myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_INFO_VAR, playerData, PlayerDataUpdate.JOIN_WORLD);
             }
         }
 
@@ -200,7 +205,7 @@ namespace ServerClient
         {
             ++playerData.inventory.teleport;
             //Log.Dump(info, playerData, "frozen", frozenInventory);
-            myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_INFO, playerData, PlayerDataUpdate.INVENTORY);
+            myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_INFO_VAR, playerData, PlayerDataUpdate.INVENTORY_CHANGE);
         }
         void OnFreezeItem(Node n)
         {
@@ -234,7 +239,7 @@ namespace ServerClient
             MyAssert.Assert(frozenInventory.teleport >= 0);
 
             //Log.Dump(info, playerData, "frozen", frozenInventory);
-            myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_INFO, playerData, PlayerDataUpdate.INVENTORY);
+            myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_INFO_VAR, playerData, PlayerDataUpdate.INVENTORY_CHANGE);
         }
     }
 
@@ -280,9 +285,9 @@ namespace ServerClient
             myHost.ConnectSendMessage(serverHost, MessageType.SPAWN_REQUEST);
         }
         
-        public void Move(WorldInfo worldInfo, Point newPos, MessageType mt)
+        public void Move(WorldInfo worldInfo, Point newPos, MoveValidity mv)
         {
-            myHost.ConnectSendMessage(worldInfo.host, mt, newPos);
+            myHost.ConnectSendMessage(worldInfo.host, MessageType.MOVE_REQUEST, newPos, mv);
         }
     }
 }

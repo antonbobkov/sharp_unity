@@ -150,8 +150,16 @@ public class minecraft : MonoBehaviour {
 
     static internal Vector3 GetPositionAtGrid(World w, Point pos)
     {
-        Point worldPos = new Point(w.Position.x * w.Size.x, w.Position.y * w.Size.y);
-		return new Vector3(worldPos.x + pos.x, worldPos.y + pos.y, 0);
+        Point worldPos = w.Position;
+        Point worldSize = w.Size;
+
+        Point cornerPos = new Point(worldPos.x * worldSize.x, worldPos.y * worldSize.y);
+        return new Vector3(cornerPos.x + pos.x, cornerPos.y + pos.y, 0);
+    }
+    static internal Vector3 GetPositionAtGrid(Point worldPos, Point worldSize, Point pos)
+    {
+        Point cornerPos = new Point(worldPos.x * worldSize.x, worldPos.y * worldSize.y);
+        return new Vector3(cornerPos.x + pos.x, cornerPos.y + pos.y, 0);
     }
 	static internal Point GetPositionAtMap(World w, Point pos)
 	{
@@ -169,7 +177,7 @@ public class minecraft : MonoBehaviour {
 
         Program.MeshConnect(all);
 
-        all.myClient.hookServerReady = () =>
+        all.myClient.onServerReadyHook = () =>
         {
             if (all.host.MyAddress.Port == GlobalHost.nStartPort)
             {
@@ -195,7 +203,9 @@ public class minecraft : MonoBehaviour {
 				TrySpawn();
 		};
 
-        all.myClient.onMoveHook = (w, pl, mt) => bufferedActions.Enqueue(() => OnMove(w, pl, mt));
+        all.myClient.onMoveHook = (w, pl, pos, mt) => bufferedActions.Enqueue(() => OnMove(w, pl, pos, mt));
+        all.myClient.onPlayerLeaveHook = (w, pl) => bufferedActions.Enqueue(() => OnPlayerLeave(w.Position, pl));
+        
         all.myClient.onNewWorldHook = (w) => bufferedActions.Enqueue(() => OnNewWorld(w));
 		all.myClient.onPlayerNewRealm = (inf, pd) => bufferedActions.Enqueue(() => 
 		{
@@ -292,17 +302,16 @@ public class minecraft : MonoBehaviour {
             TrySpawn();
     }
 
-    void OnMove(World w, PlayerInfo player, MoveType mv)
+    void OnPlayerLeave(Point worldPos, PlayerInfo player)
+    {
+        WorldDraw worldDraw = worlds.TryGetValue(worldPos);
+        if (worldDraw != null)
+            worldDraw.RemovePlayer(player.id);
+    }
+
+    void OnMove(World w, PlayerInfo player, Point newPos, MoveValidity mv)
 	{
 		//Log.LogWriteLine(Log.Dump(this, w.info, player, player.id, mv));
-
-		if (mv == MoveType.LEAVE)
-        {
-            WorldDraw worldDraw = worlds.TryGetValue(w.Position);
-            if (worldDraw != null)
-                worldDraw.RemovePlayer(player.id);
-            return;
-        }
 
         //if (mv == MoveType.JOIN && player.id == me)
         //    UpdateWorlds(w.Position);
@@ -312,22 +321,20 @@ public class minecraft : MonoBehaviour {
 
         WorldDraw wd = worlds.GetValue(w.Position);
 
-        if (mv == MoveType.JOIN)
+        if (mv == MoveValidity.NEW)
             wd.AddPlayer(player.id);
 
-        Point pos = w.GetPlayerPosition(player.id);
-
-		GameObject obj = wd.loots[pos];
+        GameObject obj = wd.loots[newPos];
 		if (obj != null)
 		{
 			Destroy(obj);
-			wd.loots[pos] = null;
+            wd.loots[newPos] = null;
 		}
 
         MyAssert.Assert(wd.players.ContainsKey(player.id));
 
         GameObject movedPlayer = wd.players.GetValue(player.id);
-		movedPlayer.transform.position = GetPositionAtGrid(w, pos);
+        movedPlayer.transform.position = GetPositionAtGrid(w, newPos);
 
         if (player.id == me)
             UpdateCamera(movedPlayer);
@@ -373,10 +380,10 @@ public class minecraft : MonoBehaviour {
             Point oldPos = w.GetPlayerPosition(me);
 			Point newPos = oldPos + p;
 
-			if (w.CheckValidMove(me, newPos) == MoveValidity.VALID)
-				pa.Move(w.Info, newPos, MessageType.MOVE);
-            else if (w.CheckValidMove(me, newPos) == MoveValidity.BOUNDARY)
-            	pa.Move(w.Info, newPos, MessageType.REALM_MOVE);
+            MoveValidity mv = w.CheckValidMove(me, newPos);
+            
+            if (mv == MoveValidity.VALID || mv == MoveValidity.BOUNDARY)
+				pa.Move(w.Info, newPos, mv);
         }
         else if (teleport)
         {
@@ -388,7 +395,7 @@ public class minecraft : MonoBehaviour {
             Point pos = new Point(Convert.ToInt32(tile.x), Convert.ToInt32(tile.y));
 			pos = GetPositionAtMap(w, pos);
             Log.LogWriteLine("Teleporting to {0}", pos);
-            pa.Move(w.Info, pos, MessageType.TELEPORT_MOVE);
+            pa.Move(w.Info, pos, MoveValidity.TELEPORT);
         }
     }
 	

@@ -52,6 +52,7 @@ namespace ServerClient
         static int PlayerAiMove(Aggregator all, Guid playerId)
         {
             int longSleep = 1000 * 2;
+            int shortSleep = 750;
 
             Client myClient = all.myClient;
 
@@ -85,9 +86,9 @@ namespace ServerClient
                 if (teleportPos.Any())
                 {
                     Point newPos = teleportPos[rand.Next(0, teleportPos.Count)];
-                    pa.Move(playerWorld.Info, newPos, MessageType.TELEPORT_MOVE);
-                    
-                    return 750;
+                    pa.Move(playerWorld.Info, newPos, MoveValidity.TELEPORT);
+
+                    return shortSleep;
                 }
             }
 
@@ -101,16 +102,13 @@ namespace ServerClient
 
             if (move != null)
             {
-                if (move.mv == MoveValidity.VALID)
-                    pa.Move(playerWorld.Info, move.newPos, MessageType.MOVE);
-                else if (move.mv == MoveValidity.BOUNDARY)
-                    pa.Move(playerWorld.Info, move.newPos, MessageType.REALM_MOVE);
+                if (move.mv == MoveValidity.VALID || move.mv == MoveValidity.BOUNDARY)
+                    pa.Move(playerWorld.Info, move.newPos, move.mv);
                 else
                     throw new Exception(Log.StDump(move.mv, move.newPos, "unexpected move"));
             }
 
-
-            return 750;
+            return shortSleep;
         }
         
         public static void StartPlayerAiThread(Aggregator all, Guid playerId)
@@ -215,7 +213,7 @@ namespace ServerClient
 
             MeshConnect(all);
 
-            all.myClient.hookServerReady = () =>
+            all.myClient.onServerReadyHook = () =>
             {
                 all.myClient.Validate();
                 if (all.host.MyAddress.Port != GlobalHost.nStartPort)

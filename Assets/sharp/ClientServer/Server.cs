@@ -24,6 +24,8 @@ namespace ServerClient
         Random r = new Random();
 
         GameInfo gameInfo;
+        HashSet<Point> worldsInProgress = new HashSet<Point>();
+
         List<IPEndPoint> validatorPool = new List<IPEndPoint>();
         List<Point> spawnWorlds = new List<Point>();
 
@@ -59,8 +61,8 @@ namespace ServerClient
             myHost = globalHost.NewHost(Server.hostName, AssignProcessor);
             myHost.onNewConnectionHook = ProcessNewConnection;
 
-            Action<ForwardFunctionCall> onChange = (ffc) => myHost.BroadcastGroup(Client.hostName, MessageType.GAME_INFO_CHANGE, ffc.Serialize());
-            gameInfo = new ForwardProxy<GameInfo>(new GameInfo(), onChange).Get();
+            Action<ForwardFunctionCall> onChange = (ffc) => myHost.BroadcastGroup(Client.hostName, MessageType.GAME_INFO_VAR_CHANGE, ffc.Serialize());
+            gameInfo = new ForwardProxy<GameInfo>(new GameInfo(), onChange).GetProxy();
         }
 
         Node.MessageProcessor AssignProcessor(Node n)
@@ -133,11 +135,13 @@ namespace ServerClient
         }
         void OnNewClient(Node n)
         {
-            n.SendMessage(MessageType.GAME_INFO, gameInfo.Serialize());
+            n.SendMessage(MessageType.GAME_INFO_VAR_INIT, gameInfo.Serialize());
         }
 
         void OnNewPlayerRequest(Guid playerId, OverlayEndpoint playerHost)
         {
+            // ! Worry about non-atomicity. Two similar requests at once? See OnNewWorldRequest
+            
             Guid actionId = Guid.NewGuid();
             string name = PlayerNameMap(playerCounter++);
             
@@ -154,7 +158,7 @@ namespace ServerClient
                 ep = validatorClient,
                 a = () =>
                 {
-                    gameInfo.AddPlayer(info);
+                    gameInfo.NET_AddPlayer(info);
                     //myHost.BroadcastGroup(Client.hostName, MessageType.NEW_PLAYER, info);
                 }
             };
@@ -171,6 +175,9 @@ namespace ServerClient
         {
             if (gameInfo.TryGetWorldByPos(worldPos) != null)
                 return;
+            if (worldsInProgress.Contains(worldPos))
+                return;
+            worldsInProgress.Add(worldPos);
             
             Guid validatorId = Guid.NewGuid();
             OverlayEndpoint validatorHost = new OverlayEndpoint(validatorPool.Random(n => r.Next(n)), new OverlayHostName("host world " + worldPos));
@@ -193,7 +200,9 @@ namespace ServerClient
                     if (init.hasSpawn == true)
                         spawnWorlds.Add(worldPos);
 
-                    gameInfo.AddWorld(info);
+                    worldsInProgress.Remove(worldPos);
+
+                    gameInfo.NET_AddWorld(info);
                     //myHost.BroadcastGroup(Client.hostName, MessageType.NEW_WORLD, info);
                 }
             };

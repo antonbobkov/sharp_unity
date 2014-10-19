@@ -17,19 +17,19 @@ using System.Runtime.Remoting.Messaging;
 namespace ServerClient
 {
     public enum MessageType : byte { HANDSHAKE,
-    SERVER_ADDRESS, GAME_INFO, NEW_VALIDATOR, GAME_INFO_CHANGE, NEW_PLAYER_REQUEST, NEW_WORLD_REQUEST,
+    SERVER_ADDRESS, GAME_INFO_VAR_INIT, GAME_INFO_VAR_CHANGE, NEW_VALIDATOR, NEW_PLAYER_REQUEST, NEW_WORLD_REQUEST,
     PLAYER_VALIDATOR_ASSIGN, WORLD_VALIDATOR_ASSIGN, ACCEPT,
-    WORLD_INIT, PLAYER_JOIN, PLAYER_LEAVE,
-    MOVE, REALM_MOVE, REALM_MOVE_SUCCESS, REALM_MOVE_FAIL,
-    PICKUP_ITEM, FREEZE_ITEM, FREEZE_SUCCESS, FREEZE_FAIL, UNFREEZE_ITEM, CONSUME_FROZEN_ITEM, TELEPORT_MOVE,
-    PLAYER_INFO,
+    WORLD_VAR_INIT, WORLD_VAR_CHANGE, PLAYER_WORLD_MOVE,
+    MOVE_REQUEST, REALM_MOVE, REALM_MOVE_SUCCESS, REALM_MOVE_FAIL,
+    PICKUP_ITEM, FREEZE_ITEM, FREEZE_SUCCESS, FREEZE_FAIL, UNFREEZE_ITEM, CONSUME_FROZEN_ITEM,
+    PLAYER_INFO_VAR,
     SPAWN_REQUEST, SPAWN_SUCCESS, SPAWN_FAIL};
     
     public enum NodeRole { PLAYER, PLAYER_VALIDATOR, WORLD_VALIDATOR };
 
-    public enum MoveType { MOVE, LEAVE, JOIN };
+    public enum WorldMove { LEAVE, JOIN };
 
-    public enum PlayerDataUpdate { NEW, JOIN, INVENTORY };
+    public enum PlayerDataUpdate { INIT, JOIN_WORLD, INVENTORY_CHANGE };
 
     [Serializable]
     public class ForwardFunctionCall
@@ -87,7 +87,7 @@ namespace ServerClient
             onCall = onCall_;
         }
 
-        public T Get()
+        public T GetProxy()
         {
             return (T)GetTransparentProxy();
         }
@@ -150,9 +150,9 @@ namespace ServerClient
         public void Deserialize(GameInfoSerialized info)
         {
             foreach (PlayerInfo p in info.players)
-                AddPlayer(p);
+                NET_AddPlayer(p);
             foreach (WorldInfo w in info.worlds)
-                AddWorld(w);
+                NET_AddWorld(w);
         }
 
         // ----- read only infromation -----
@@ -177,7 +177,7 @@ namespace ServerClient
         public OverlayEndpoint GetWorldHost(Point worldPos) { return worldByPoint.GetValue(worldPos).host; }
 
         // ----- modifiers -----
-        [Forward] public void AddPlayer(PlayerInfo info)
+        [Forward] public void NET_AddPlayer(PlayerInfo info)
         {
             roles.Add(info.playerHost, NodeRole.PLAYER);
             roles.Add(info.validatorHost, NodeRole.PLAYER_VALIDATOR);
@@ -188,7 +188,7 @@ namespace ServerClient
 
             onNewPlayer.Invoke(info);
         }
-        [Forward] public void AddWorld(WorldInfo info)
+        [Forward] public void NET_AddWorld(WorldInfo info)
         {
             roles.Add(info.host, NodeRole.WORLD_VALIDATOR);
 

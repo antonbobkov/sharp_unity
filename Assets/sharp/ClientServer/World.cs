@@ -125,12 +125,6 @@ namespace ServerClient
         public WorldInfo myInfo;
     }
 
-    class WorldMove
-    {
-        public Point newWorld;
-        public Point newPosition;
-    }
-    
     class World : MarshalByRefObject
     {
         // ----- constructors -----
@@ -240,12 +234,12 @@ namespace ServerClient
         }
 
         // ----- modifiers -----
-        [Forward] public void AddPlayer(Guid player, Point pos)
+        [Forward] public void NET_AddPlayer(Guid player, Point pos)
         {
             MyAssert.Assert(!playerPositions.ContainsKey(player));
-            Move(player, pos, MoveValidity.NEW);
+            NET_Move(player, pos, MoveValidity.NEW);
         }
-        [Forward] public void RemovePlayer(Guid player)
+        [Forward] public void NET_RemovePlayer(Guid player)
         {
             Point pos = playerPositions.GetValue(player);
             MyAssert.Assert(map[pos].PlayerId == player);
@@ -253,9 +247,9 @@ namespace ServerClient
 
             playerPositions.Remove(player);
 
-            onMoveHook(gameInfo.GetPlayerById(player), MoveType.LEAVE);
+            onPlayerLeaveHook(gameInfo.GetPlayerById(player));
         }
-        [Forward] public void Move(Guid player, Point newPos, MoveValidity mv)
+        [Forward] public void NET_Move(Guid player, Point newPos, MoveValidity mv)
         {
             PlayerInfo p = gameInfo.GetPlayerById(player);
 
@@ -283,14 +277,13 @@ namespace ServerClient
             tile.PlayerId = player;
             tile.Loot = false;
 
-            MoveType mt = mv == MoveValidity.NEW ? MoveType.JOIN : MoveType.MOVE;
-            
-            onMoveHook(p, mt);
+            onMoveHook(p, newPos, mv);
         }
 
         // ----- hooks -----
         public Action<PlayerInfo> onLootHook = (info) => { };
-        public Action<PlayerInfo, MoveType> onMoveHook = (a, b) => { };
+        public Action<PlayerInfo, Point, MoveValidity> onMoveHook = (a, b, c) => { };
+        public Action<PlayerInfo> onPlayerLeaveHook = (a) => { };
 
         // ----- generating -----
         static public World Generate(WorldInfo myInfo_, WorldInitializer init, GameInfo info_)
@@ -369,6 +362,12 @@ namespace ServerClient
         GameInfo gameInfo;
     }
 
+    class RealmMove
+    {
+        public Point newWorld;
+        public Point newPosition;
+    }
+
     static class WorldTools
     {
         static int BoundaryMove(ref int p, int sz)
@@ -389,7 +388,7 @@ namespace ServerClient
 
             return ret;
         }
-        static public WorldMove BoundaryMove(Point p, World w)
+        static public RealmMove BoundaryMove(Point p, World w)
         {
             int px = p.x;
             int py = p.y;
@@ -398,7 +397,7 @@ namespace ServerClient
 
             p = new Point(px, py);
 
-            return new WorldMove() { newPosition = p, newWorld = ret + w.Position };
+            return new RealmMove() { newPosition = p, newWorld = ret + w.Position };
         }
         static public void ConsoleOut(World w, GameInfo gameInfo)
         {
@@ -471,12 +470,16 @@ namespace ServerClient
             gameInfo = gameInfo_;
             serverHost = serverHost_;
 
-            world = World.Generate(info, init, gameInfo);
+            World newWorld = World.Generate(info, init, gameInfo);
+
+            Action<ForwardFunctionCall> onChange = (ffc) => myHost.BroadcastGroup(Client.hostName, MessageType.WORLD_VAR_CHANGE, ffc.Serialize());
+            world = new ForwardProxy<World>(newWorld, onChange).GetProxy();
 
             myHost = globalHost.NewHost(info.host.hostname, AssignProcessor);
             myHost.onNewConnectionHook = ProcessNewConnection;
 
             world.onLootHook = OnLootPickup;
+            world.onMoveHook = OnMoveHook;
         }
         
         Node.MessageProcessor AssignProcessor(Node n)
@@ -520,7 +523,7 @@ namespace ServerClient
 
         void OnNewClient(Node n)
         {
-            n.SendMessage(MessageType.WORLD_INIT, world.Serialize());
+            n.SendMessage(MessageType.WORLD_VAR_INIT, world.Serialize());
         }
 
         void ProcessPlayerValidatorMessage(MessageType mt, Stream stm, Node n, PlayerInfo inf)
@@ -550,23 +553,22 @@ namespace ServerClient
         }
         void ProcessPlayerMessage(MessageType mt, Stream stm, Node n, PlayerInfo inf)
         {
-            if (mt == MessageType.MOVE)
+            if (mt == MessageType.MOVE_REQUEST)
             {
                 Point newPos = Serializer.Deserialize<Point>(stm);
-                OnMoveValidate(inf, newPos);
-            }
-            else if (mt == MessageType.REALM_MOVE)
-            {
-                Point newPos = Serializer.Deserialize<Point>(stm);
-                OnValidateRealmMove(inf, newPos);
-            }
-            else if (mt == MessageType.TELEPORT_MOVE)
-            {
-                Point newPos = Serializer.Deserialize<Point>(stm);
-                OnValidateTeleport(inf, newPos);
+                MoveValidity mv = Serializer.Deserialize<MoveValidity>(stm);
+
+                if(mv == MoveValidity.VALID)
+                    OnMoveValidate(inf, newPos);
+                else if(mv == MoveValidity.BOUNDARY)
+                    OnValidateRealmMove(inf, newPos);
+                else if(mv == MoveValidity.TELEPORT)
+                    OnValidateTeleport(inf, newPos);
+                else
+                    throw new Exception(Log.StDump(mt, inf, newPos, mv, "unexpected move request"));
             }
             else
-                throw new Exception("WorldValidator.ProcessClientMessage bad message type " + mt.ToString());
+                throw new Exception(Log.StDump(mt, inf, "unexpected message"));
         }
         void ProcessServerMessage(MessageType mt, Stream stm, Node n)
         {
@@ -579,12 +581,12 @@ namespace ServerClient
                 throw new Exception(Log.StDump("unexpected", world.Info, mt));
         }
 
-        void AddPlayer(PlayerInfo player, Point newPos)
+        void OnMoveHook(PlayerInfo inf, Point newPos, MoveValidity mv)
         {
-            if (!world.GetAllPlayerPositions().Any())   // on first spawn
+            if (mv == MoveValidity.NEW)
+            {
                 BoundaryRequest();
-
-            world.AddPlayer(player.id, newPos);        
+            }
         }
 
         void OnSpawnRequest(PlayerInfo player)
@@ -601,7 +603,7 @@ namespace ServerClient
                 {
                     if (mt == MessageType.SPAWN_FAIL)
                     {
-                        Log.LogWriteLine(Log.StDump( world.Info, player, "Spawn failed, SPAWN_FAIL"));
+                        Log.LogWriteLine(Log.StDump( world.Info, player, "Spawn failed, rejected"));
                     }
                     else if (mt == MessageType.SPAWN_SUCCESS)
                     {
@@ -616,10 +618,9 @@ namespace ServerClient
 
                         Point spawnPos = spawn.Random((n) => rand.Next(n));
 
-                        AddPlayer(player, spawnPos);
-
-                        myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_JOIN, player.id, spawnPos);
-                        myHost.ConnectSendMessage(player.validatorHost, MessageType.PLAYER_JOIN);
+                        world.NET_AddPlayer(player.id, spawnPos);
+                        //myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_JOIN, player.id, spawnPos);
+                        myHost.ConnectSendMessage(player.validatorHost, MessageType.PLAYER_WORLD_MOVE, WorldMove.JOIN);
                     }
                     else
                         throw new Exception(Log.StDump( world.Info, mt, "unexpected"));
@@ -650,9 +651,8 @@ namespace ServerClient
                 return;
             }
 
-            world.Move(inf.id, newPos, MoveValidity.VALID);
-
-            myHost.BroadcastGroup(Client.hostName, MessageType.MOVE, inf.id, newPos);
+            world.NET_Move(inf.id, newPos, MoveValidity.VALID);
+            //myHost.BroadcastGroup(Client.hostName, MessageType.MOVE, inf.id, newPos);
         }
         void OnValidateRealmMove(PlayerInfo player, Point newPos) { OnValidateRealmMove(player, newPos, false, (mt) => { }); }
         void OnValidateRealmMove(PlayerInfo player, Point newPos, bool teleporting, Action<MessageType> postProcess)
@@ -688,7 +688,7 @@ namespace ServerClient
 
                 Point currentRealmPos = world.Position;
 
-                WorldMove wm = WorldTools.BoundaryMove(newPos, world);
+                RealmMove wm = WorldTools.BoundaryMove(newPos, world);
                 newPos = wm.newPosition;
                 Point targetRealmPos = wm.newWorld;
 
@@ -714,9 +714,9 @@ namespace ServerClient
                     {
                         //Log.LogWriteLine(Log.StDump(world.info, player, currentRealmPos, targetRealmPos, newPos, "realm move success"));
 
-                        world.RemovePlayer(player.id);
-                        myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_LEAVE, player.id, targetRealmPos);
-                        myHost.ConnectSendMessage(player.validatorHost, MessageType.PLAYER_LEAVE, targetRealmPos);
+                        world.NET_RemovePlayer(player.id);
+                        //myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_LEAVE, player.id, targetRealmPos);
+                        myHost.ConnectSendMessage(player.validatorHost, MessageType.PLAYER_WORLD_MOVE, WorldMove.LEAVE, targetRealmPos);
                     }
                     else
                         throw new Exception(Log.StDump(world.Info, mt, "unexpected"));
@@ -764,9 +764,9 @@ namespace ServerClient
 
             n.SendMessage(MessageType.REALM_MOVE_SUCCESS, player.id);
 
-            AddPlayer(player, newPos);
-            myHost.ConnectSendMessage(player.validatorHost, MessageType.PLAYER_JOIN);
-            myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_JOIN, player.id, newPos);
+            world.NET_AddPlayer(player.id, newPos);
+            //myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_JOIN, player.id, newPos);
+            myHost.ConnectSendMessage(player.validatorHost, MessageType.PLAYER_WORLD_MOVE, WorldMove.JOIN);
         }
 
         void OnValidateTeleport(PlayerInfo player, Point newPos)
@@ -849,10 +849,10 @@ namespace ServerClient
             else // teleporting success
             {
                 //Log.Dump("Teleported", world.info, player, currPos, newPos);
-                world.Move(player.id, newPos, MoveValidity.TELEPORT);
+                world.NET_Move(player.id, newPos, MoveValidity.TELEPORT);
+                //myHost.BroadcastGroup(Client.hostName, MessageType.TELEPORT_MOVE, player.id, newPos);
 
                 myHost.ConnectSendMessage(player.validatorHost, MessageType.CONSUME_FROZEN_ITEM);
-                myHost.BroadcastGroup(Client.hostName, MessageType.TELEPORT_MOVE, player.id, newPos);
             }
         }
 
