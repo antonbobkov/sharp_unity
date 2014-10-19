@@ -67,6 +67,12 @@ namespace ServerClient
             return sb.ToString();
         }
     }
+
+    class XmlSerializerException : Exception
+    {
+        public XmlSerializerException(Exception e)
+            : base("XML serialization failed", e) { }
+    }
     
     class Serializer
     {
@@ -157,8 +163,15 @@ namespace ServerClient
             int size = ReadSize(input);
             MemoryStream chunk = ReadChunk(input, size);
 
-            XmlSerializer ser = new XmlSerializer(t);
-            return ser.Deserialize(chunk);
+            try
+            {
+                XmlSerializer ser = new XmlSerializer(t);
+                return ser.Deserialize(chunk);
+            }
+            catch (Exception e)
+            {
+                throw new XmlSerializerException(e);
+            }
         }
 
         public static T Deserialize<T>(Stream input)

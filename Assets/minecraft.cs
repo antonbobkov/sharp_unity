@@ -16,7 +16,7 @@ public class RotateSlowly : MonoBehaviour {
 
 class WorldDraw
 {
-    static public bool continuousBackground = true;
+    static public bool continuousBackground = false;
 
     World w;
 
@@ -331,7 +331,11 @@ public class minecraft : MonoBehaviour {
             wd.loots[newPos] = null;
 		}
 
-        MyAssert.Assert(wd.players.ContainsKey(player.id));
+        if (!wd.players.ContainsKey(player.id))
+        {
+            // due to lack of sync this might be possible
+            return;
+        }
 
         GameObject movedPlayer = wd.players.GetValue(player.id);
         movedPlayer.transform.position = GetPositionAtGrid(w, newPos);
