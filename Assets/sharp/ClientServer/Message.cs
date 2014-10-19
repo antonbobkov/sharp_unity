@@ -23,7 +23,8 @@ namespace ServerClient
     MOVE_REQUEST, REALM_MOVE, REALM_MOVE_SUCCESS, REALM_MOVE_FAIL,
     PICKUP_ITEM, FREEZE_ITEM, FREEZE_SUCCESS, FREEZE_FAIL, UNFREEZE_ITEM, CONSUME_FROZEN_ITEM,
     PLAYER_INFO_VAR,
-    SPAWN_REQUEST, SPAWN_SUCCESS, SPAWN_FAIL};
+    SPAWN_REQUEST, SPAWN_SUCCESS, SPAWN_FAIL,
+    RESPONSE};
     
     public enum NodeRole { PLAYER, PLAYER_VALIDATOR, WORLD_VALIDATOR };
 
@@ -208,5 +209,110 @@ namespace ServerClient
         Dictionary<OverlayEndpoint, PlayerInfo> playerByHost = new Dictionary<OverlayEndpoint, PlayerInfo>();
         Dictionary<Point, WorldInfo> worldByPoint = new Dictionary<Point, WorldInfo>();
         Dictionary<OverlayEndpoint, WorldInfo> worldByHost = new Dictionary<OverlayEndpoint, WorldInfo>();
+    }
+
+    interface IManualLock
+    {
+        bool Locked { get; }
+        void Unlock();
+    }
+
+    class ManualLock<T>: IManualLock
+    {
+        Action unlock = () => { throw new Exception("not locked"); };
+        
+        public bool Locked { get; private set; }
+
+        public ManualLock(HashSet<T> locks, T t)
+        {
+            if (locks.Contains(t))
+                Locked = false;
+            else
+            {
+                locks.Add(t);
+                unlock = () => locks.Remove(t);
+                Locked = true;
+            }
+        }
+
+        public void Unlock()
+        {
+            unlock.Invoke();
+        }
+    }
+
+    public enum Response { SUCCESS, FAIL }
+
+    class RemoteAction
+    {
+        Guid id = Guid.Empty;
+        OverlayEndpoint remoteHost = new OverlayEndpoint();
+        IManualLock l = null;
+
+        Action<Response, Stream> followUp;
+
+        // questionable design choices for sake of smoother application
+
+        public void Respond(Dictionary<Guid, RemoteAction> remotes, IManualLock l_, Action<Response, Stream> followUp_)
+        {
+            l = l_;
+            followUp = followUp_;
+
+            if (l != null && !l.Locked)
+                throw new Exception("Cannot remote unlocked object");
+
+            remotes.Add(id, this);
+        }
+
+        static public RemoteAction Send(OverlayHost myHost, OverlayEndpoint remoteHost, MessageType mt, params object[] args)
+        {
+            RemoteAction ra = new RemoteAction();
+
+            ra.remoteHost = remoteHost;
+
+            List<object> lst = new List<object>();
+            lst.Add(ra.id);
+            lst.AddRange(args);
+
+            myHost.ConnectSendMessage(remoteHost, mt, lst.ToArray());
+
+            return ra;
+        }
+
+        RemoteAction()
+        {
+            id = Guid.NewGuid();
+        }
+
+        void FollowUp(Node n, Stream st, Response r)
+        {
+            MyAssert.Assert(n.info.remote == remoteHost);
+
+            if (l != null)
+                l.Unlock();
+
+            followUp.Invoke(r, st);
+
+        }
+
+        static public void Process(Dictionary<Guid, RemoteAction> remotes, Node n, Stream st)
+        {
+            Response r = Serializer.Deserialize<Response>(st);
+            Guid id = Serializer.Deserialize<Guid>(st);
+
+            MyAssert.Assert(remotes.ContainsKey(id));
+            
+            remotes[id].FollowUp(n, st, r);
+
+            remotes.Remove(id);
+        }
+        static public void Sucess(Node n, Guid id)
+        {
+            n.SendMessage(MessageType.RESPONSE, Response.SUCCESS, id);
+        }
+        static public void Fail(Node n, Guid id)
+        {
+            n.SendMessage(MessageType.RESPONSE, Response.FAIL, id);
+        }
     }
 }

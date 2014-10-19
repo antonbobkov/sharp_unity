@@ -54,15 +54,7 @@ namespace ServerClient
 
                         //Console.WriteLine("Message received: {0}", (MessageType)bt);
 
-                        try
-                        {
-                            messageProcessor(Serializer.DeserializeChunk(readStream), (MessageType)bt);
-                        }
-                        catch (XmlSerializerException e)
-                        {
-                            Log.LogWriteLine("Error while reading from socket:\n{0}\n\nMessage {1}\nLast read:{2}", e, (MessageType)bt, Serializer.lastRead.GetData());
-                            throw new Exception("Fatal");
-                        }
+                        messageProcessor(Serializer.DeserializeChunk(readStream), (MessageType)bt);
                     }
                 }
             }

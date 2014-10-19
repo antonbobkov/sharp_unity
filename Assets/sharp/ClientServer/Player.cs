@@ -130,7 +130,10 @@ namespace ServerClient
         void ProcessWorldMessage(MessageType mt, Stream stm, Node n, WorldInfo inf)
         {
             if (mt == MessageType.SPAWN_REQUEST)
-                OnSpawnRequest(inf, n);
+            {
+                Guid remoteActionId = Serializer.Deserialize<Guid>(stm);
+                OnSpawnRequest(inf, n, remoteActionId);
+            }
             else if (mt == MessageType.SPAWN_FAIL)
                 OnSpawnFail();
             else if (mt == MessageType.PLAYER_WORLD_MOVE)
@@ -148,7 +151,10 @@ namespace ServerClient
             else if (mt == MessageType.PICKUP_ITEM)
                 OnPickupItem();
             else if (mt == MessageType.FREEZE_ITEM)
-                OnFreezeItem(n);
+            {
+                Guid remoteActionId = Serializer.Deserialize<Guid>(stm);
+                OnFreezeItem(n, remoteActionId);
+            }
             else if (mt == MessageType.UNFREEZE_ITEM)
                 OnUnfreezeItem();
             else if (mt == MessageType.CONSUME_FROZEN_ITEM)
@@ -157,16 +163,16 @@ namespace ServerClient
                 throw new Exception(Log.StDump(info, inf, mt, "unexpected message"));
         }
 
-        void OnSpawnRequest(WorldInfo inf, Node n)
+        void OnSpawnRequest(WorldInfo inf, Node n, Guid remoteActionId)
         {
             if (playerData.connected || frozenSpawn)
             {
-                n.SendMessage(MessageType.SPAWN_FAIL);
+                RemoteAction.Fail(n, remoteActionId);
             }
             else
             {
                 frozenSpawn = true;
-                n.SendMessage(MessageType.SPAWN_SUCCESS);
+                RemoteAction.Sucess(n, remoteActionId);
             }
         }
         void OnSpawnFail()
@@ -207,7 +213,7 @@ namespace ServerClient
             //Log.Dump(info, playerData, "frozen", frozenInventory);
             myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_INFO_VAR, playerData, PlayerDataUpdate.INVENTORY_CHANGE);
         }
-        void OnFreezeItem(Node n)
+        void OnFreezeItem(Node n, Guid remoteActionId)
         {
             MyAssert.Assert(playerData.inventory.teleport >= 0);
             MyAssert.Assert(frozenInventory.teleport >= 0);
@@ -216,12 +222,12 @@ namespace ServerClient
             {
                 ++frozenInventory.teleport;
                 //Log.Dump("success", info, playerData, "frozen", frozenInventory);
-                n.SendMessage(MessageType.FREEZE_SUCCESS);
+                RemoteAction.Sucess(n, remoteActionId);
             }
             else
             {
-                //Log.Dump("fail", info, playerData, "frozen", frozenInventory);
-                n.SendMessage(MessageType.FREEZE_FAIL);
+                Log.Dump("fail", info, playerData, "frozen", frozenInventory);
+                RemoteAction.Fail(n, remoteActionId);
             }
         }
         void OnUnfreezeItem()
