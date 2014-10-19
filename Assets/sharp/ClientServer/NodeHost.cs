@@ -124,7 +124,7 @@ namespace ServerClient
             OverlayHost host = new OverlayHost(hostName, MyAddress, processQueue, messageProcessor);
             hosts.Add(hostName, host);
 
-            Log.LogWriteLine("New host: {0}", hostName);
+            //Log.LogWriteLine("New host: {0}", hostName);
             
             return host;
         }

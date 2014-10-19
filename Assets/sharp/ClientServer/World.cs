@@ -590,29 +590,54 @@ namespace ServerClient
             }
 
             RemoteAction
-                .Send(myHost, player.validatorHost, MessageType.SPAWN_REQUEST)
+                .Send(myHost, player.validatorHost, MessageType.LOCK_VAR)
                 .Respond(remoteActions, lck, (res, stm) =>
                 {
                     if (res == Response.SUCCESS)
                     {
-                        var spawn = world.GetSpawn().ToList();
+                        bool spawnSuccess = false;
+                        
+                        Guid remoteLockId = Serializer.Deserialize<Guid>(stm);
+                        PlayerData pd = Serializer.Deserialize<PlayerData>(stm);
 
-                        if (!spawn.Any())
+                        try
                         {
-                            Log.Dump(world.Info, player, "Spawn failed, no space");
-                            myHost.ConnectSendMessage(player.validatorHost, MessageType.SPAWN_FAIL);
-                            return;
+                            if (pd.connected == true)
+                            {
+                                Log.Dump(world.Info, player, "Spawn failed, already spawned");
+                                return;
+                            }
+
+                            var spawn = world.GetSpawn().ToList();
+
+                            if (!spawn.Any())
+                            {
+                                Log.Dump(world.Info, player, "Spawn failed, no space");
+                                return;
+                            }
+
+                            Point spawnPos = spawn.Random((n) => rand.Next(n));
+
+                            world.NET_AddPlayer(player.id, spawnPos);
+                            //myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_JOIN, player.id, spawnPos);
+                            //myHost.ConnectSendMessage(player.validatorHost, MessageType.PLAYER_WORLD_MOVE, WorldMove.JOIN);
+
+                            pd.connected = true;
+                            pd.worldPos = world.Position;
+
+                            spawnSuccess = true;
                         }
-
-                        Point spawnPos = spawn.Random((n) => rand.Next(n));
-
-                        world.NET_AddPlayer(player.id, spawnPos);
-                        //myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_JOIN, player.id, spawnPos);
-                        myHost.ConnectSendMessage(player.validatorHost, MessageType.PLAYER_WORLD_MOVE, WorldMove.JOIN);
+                        finally
+                        {
+                            if(!spawnSuccess)
+                                myHost.ConnectSendMessage(player.validatorHost, MessageType.UNLOCK_VAR, Response.FAIL, remoteLockId);
+                            else
+                                myHost.ConnectSendMessage(player.validatorHost, MessageType.UNLOCK_VAR, Response.SUCCESS, remoteLockId, PlayerDataUpdate.SPAWN, pd);
+                        }
                     }
                     else
                     {
-                        Log.LogWriteLine(Log.StDump(world.Info, player, "Spawn failed, rejected"));
+                        Log.LogWriteLine(Log.StDump(world.Info, player, "Spawn failed, remote lock rejected"));
                     }
                 });
         }
@@ -788,21 +813,46 @@ namespace ServerClient
             ManualLock<Guid> lck = new ManualLock<Guid>(playerLocks, player.id);
 
             RemoteAction
-                .Send(myHost, player.validatorHost, MessageType.FREEZE_ITEM)
+                .Send(myHost, player.validatorHost, MessageType.LOCK_VAR)
                 .Respond(remoteActions, lck, (res, stm) =>
                 {
                     if (res == Response.SUCCESS)
                     {
-                        Teleport(player, currPos, newPos);
+                        Guid remoteLockId = Serializer.Deserialize<Guid>(stm);
+                        PlayerData pd = Serializer.Deserialize<PlayerData>(stm);
+
+                        Action<Response> postProcess = (rs) =>
+                        {
+                            if (rs == Response.SUCCESS)
+                            {
+                                --pd.inventory.teleport;
+                                MyAssert.Assert(pd.inventory.teleport >= 0);
+
+                                myHost.ConnectSendMessage(player.validatorHost, MessageType.UNLOCK_VAR, Response.SUCCESS, remoteLockId,
+                                    PlayerDataUpdate.INVENTORY_CHANGE, pd);
+                            }
+                            else
+                                myHost.ConnectSendMessage(player.validatorHost, MessageType.UNLOCK_VAR, Response.FAIL, remoteLockId);
+                        };
+
+                        MyAssert.Assert(pd.inventory.teleport >= 0);
+                        if (pd.inventory.teleport == 0)
+                        {
+                            Log.Dump("Teleport failed, not enough items", world.Info, player, currPos, newPos);
+                            postProcess.Invoke(Response.FAIL);
+                            return;
+                        }
+
+                        Teleport(player, currPos, newPos, pd, postProcess);
                     }
                     else
                     {
-                        Log.Dump("Invalid teleport, freeze failed", world.Info, player, currPos, newPos);
+                        Log.Dump("Teleport failed, remote lock rejected", world.Info, player, currPos, newPos);
                     }
                 });
         }
 
-        void Teleport(PlayerInfo player, Point currPos, Point newPos)
+        void Teleport(PlayerInfo player, Point currPos, Point newPos, PlayerData pd, Action<Response> postProcess)
         {
             MoveValidity v = world.CheckValidMove(player.id, newPos) & ~(MoveValidity.TELEPORT);
 
@@ -817,12 +867,12 @@ namespace ServerClient
                         if (res == Response.SUCCESS)
                         {
                             Log.Dump("Realm teleport success", world.Info, player, v, currPos, newPos);
-                            myHost.ConnectSendMessage(player.validatorHost, MessageType.CONSUME_FROZEN_ITEM);
+                            postProcess.Invoke(Response.SUCCESS);
                         }
                         else
                         {
                             Log.Dump("Realm teleport fail", world.Info, player, v, currPos, newPos);
-                            myHost.ConnectSendMessage(player.validatorHost, MessageType.UNFREEZE_ITEM);
+                            postProcess.Invoke(Response.FAIL);
                         }
                     });
                 }
@@ -830,7 +880,7 @@ namespace ServerClient
                 {
                     // teleporting fail
                     Log.Dump("Invalid teleport (check 2)", world.Info, player, v, currPos, newPos);
-                    myHost.ConnectSendMessage(player.validatorHost, MessageType.UNFREEZE_ITEM);
+                    postProcess.Invoke(Response.FAIL);
                 }
             }
             else // teleporting success
@@ -839,7 +889,7 @@ namespace ServerClient
                 world.NET_Move(player.id, newPos, MoveValidity.TELEPORT);
                 //myHost.BroadcastGroup(Client.hostName, MessageType.TELEPORT_MOVE, player.id, newPos);
 
-                myHost.ConnectSendMessage(player.validatorHost, MessageType.CONSUME_FROZEN_ITEM);
+                postProcess.Invoke(Response.SUCCESS);
             }
         }
 
@@ -857,7 +907,7 @@ namespace ServerClient
 
                 if (gameInfo.TryGetWorldByPos(newPos) == null)
                 {
-                    Log.LogWriteLine(Log.StDump( newPos));
+                    //Log.Dump(newPos));
                     myHost.ConnectSendMessage(serverHost, MessageType.NEW_WORLD_REQUEST, newPos);
                 }
             }

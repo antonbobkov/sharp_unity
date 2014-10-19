@@ -215,12 +215,12 @@ namespace ServerClient
         }
         void OnPlayerData(PlayerInfo inf, PlayerData pd, PlayerDataUpdate pdu)
         {
-            knownPlayers[inf.id] = pd;
+            knownPlayers[inf.id] = pd; 
             //Log.LogWriteLine(Log.StDump( inf, pd, pdu));
             
             if(pdu == PlayerDataUpdate.INIT)
                 onNewPlayerDataHook(inf, pd);
-            else if(pdu == PlayerDataUpdate.JOIN_WORLD)
+            else if (pdu == PlayerDataUpdate.JOIN_WORLD || pdu == PlayerDataUpdate.SPAWN)
                 onPlayerNewRealm(inf, pd);
             else if(pdu != PlayerDataUpdate.INVENTORY_CHANGE)
                 throw new Exception(Log.StDump(pdu, "unexpected"));
@@ -229,13 +229,13 @@ namespace ServerClient
         void OnPlayerValidateRequest(Guid actionId, PlayerInfo info)
         {
             all.AddPlayerValidator(info);
-            Log.LogWriteLine("Validating for {0}", info);
+            //Log.LogWriteLine("Validating for {0}", info);
             server.SendMessage(MessageType.ACCEPT, actionId);
         }
         void OnWorldValidateRequest(Guid actionId, WorldInfo info, WorldInitializer init)
         {
             all.AddWorldValidator(info, init);
-            Log.LogWriteLine("Validating for world {0}", info.worldPos);
+            //Log.LogWriteLine("Validating for world {0}", info.worldPos);
             server.SendMessage(MessageType.ACCEPT, actionId);
         }
 

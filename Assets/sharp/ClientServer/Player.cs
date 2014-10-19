@@ -86,8 +86,22 @@ namespace ServerClient
         PlayerInfo info;
 
         PlayerData playerData = new PlayerData(); 
-        Inventory frozenInventory = new Inventory();
-        bool frozenSpawn = false;
+
+        RemoteAction locked = null;
+        Queue<Action> delayedActions = new Queue<Action>();
+
+        void ProcessOrDelay(Action a)
+        {
+            if (locked == null)
+                a.Invoke();
+            else
+                delayedActions.Enqueue(a);
+        }
+        void ExecuteDelayedActions()
+        {
+            while (delayedActions.Any())
+                delayedActions.Dequeue().Invoke();
+        }
 
         public PlayerValidator(PlayerInfo info_, GlobalHost globalHost, GameInfo gameInfo_)
         {
@@ -129,58 +143,62 @@ namespace ServerClient
 
         void ProcessWorldMessage(MessageType mt, Stream stm, Node n, WorldInfo inf)
         {
-            if (mt == MessageType.SPAWN_REQUEST)
+            if (mt == MessageType.LOCK_VAR)
             {
                 Guid remoteActionId = Serializer.Deserialize<Guid>(stm);
-                OnSpawnRequest(inf, n, remoteActionId);
+                OnLock(n, remoteActionId);
             }
-            else if (mt == MessageType.SPAWN_FAIL)
-                OnSpawnFail();
+            else if (mt == MessageType.UNLOCK_VAR)
+            {
+                RemoteAction.Process(ref locked, n, stm);
+            }
             else if (mt == MessageType.PLAYER_WORLD_MOVE)
             {
                 WorldMove wm = Serializer.Deserialize<WorldMove>(stm);
+                Point newWorld = inf.worldPos;
 
                 if (wm == WorldMove.LEAVE)
-                {
-                    Point newWorld = Serializer.Deserialize<Point>(stm);
-                    OnPlayerLeave(newWorld);
-                }
-                else
-                    OnPlayerNewRealm(inf);
+                    newWorld = Serializer.Deserialize<Point>(stm);
+
+                ProcessOrDelay(() => RealmUpdate(newWorld));
             }
             else if (mt == MessageType.PICKUP_ITEM)
-                OnPickupItem();
-            else if (mt == MessageType.FREEZE_ITEM)
-            {
-                Guid remoteActionId = Serializer.Deserialize<Guid>(stm);
-                OnFreezeItem(n, remoteActionId);
-            }
-            else if (mt == MessageType.UNFREEZE_ITEM)
-                OnUnfreezeItem();
-            else if (mt == MessageType.CONSUME_FROZEN_ITEM)
-                OnConsumeFrozen();
+                ProcessOrDelay(() => OnPickupItem());
             else
                 throw new Exception(Log.StDump(info, inf, mt, "unexpected message"));
         }
 
-        void OnSpawnRequest(WorldInfo inf, Node n, Guid remoteActionId)
+        void OnLock(Node n, Guid remoteActionId)
         {
-            if (playerData.connected || frozenSpawn)
+            //Log.Dump();
+            
+            if (locked != null)
             {
+                //Log.Dump(info, "already locked");
                 RemoteAction.Fail(n, remoteActionId);
+                return;
             }
-            else
-            {
-                frozenSpawn = true;
-                RemoteAction.Sucess(n, remoteActionId);
-            }
-        }
-        void OnSpawnFail()
-        {
-            MyAssert.Assert(frozenSpawn);
-            frozenSpawn = false;
-        }
 
+            RemoteAction
+                .Send(myHost, n.info.remote, MessageType.RESPONSE, Response.SUCCESS, remoteActionId, new RemoteActionIdInject(), playerData)
+                .Respond(ref locked, (res, str) =>
+                {
+                    //Log.Dump("unlocking", res);
+
+                    if (res == Response.SUCCESS)
+                    {
+                        PlayerDataUpdate pdu = Serializer.Deserialize<PlayerDataUpdate>(str);
+                        PlayerData modifiedData = Serializer.Deserialize<PlayerData>(str);
+
+                        playerData = modifiedData;
+                        //Log.Dump("unlocking got new data", pdu);
+                        myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_INFO_VAR, playerData, pdu);
+                    }
+
+                    ExecuteDelayedActions();
+                });
+        }
+        
         void RealmUpdate(Point newWorld)
         {
             bool forceUpdate = false;
@@ -188,7 +206,6 @@ namespace ServerClient
             if (!playerData.connected)
             {
                 playerData.connected = true;
-                frozenSpawn = false;
                 forceUpdate = true;
             }
 
@@ -199,51 +216,9 @@ namespace ServerClient
             }
         }
 
-        void OnPlayerNewRealm(WorldInfo inf)
-        {
-            RealmUpdate(inf.worldPos);
-        }
-        void OnPlayerLeave(Point newWorld)
-        {
-            RealmUpdate(newWorld);
-        }
         void OnPickupItem()
         {
             ++playerData.inventory.teleport;
-            //Log.Dump(info, playerData, "frozen", frozenInventory);
-            myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_INFO_VAR, playerData, PlayerDataUpdate.INVENTORY_CHANGE);
-        }
-        void OnFreezeItem(Node n, Guid remoteActionId)
-        {
-            MyAssert.Assert(playerData.inventory.teleport >= 0);
-            MyAssert.Assert(frozenInventory.teleport >= 0);
-
-            if (playerData.inventory.teleport > frozenInventory.teleport)
-            {
-                ++frozenInventory.teleport;
-                //Log.Dump("success", info, playerData, "frozen", frozenInventory);
-                RemoteAction.Sucess(n, remoteActionId);
-            }
-            else
-            {
-                Log.Dump("fail", info, playerData, "frozen", frozenInventory);
-                RemoteAction.Fail(n, remoteActionId);
-            }
-        }
-        void OnUnfreezeItem()
-        {
-            --frozenInventory.teleport;
-            MyAssert.Assert(frozenInventory.teleport >= 0);
-            //Log.Dump(info, playerData, "frozen", frozenInventory);
-        }
-        void OnConsumeFrozen()
-        {
-            --frozenInventory.teleport;
-            --playerData.inventory.teleport;
-
-            MyAssert.Assert(playerData.inventory.teleport >= 0);
-            MyAssert.Assert(frozenInventory.teleport >= 0);
-
             //Log.Dump(info, playerData, "frozen", frozenInventory);
             myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_INFO_VAR, playerData, PlayerDataUpdate.INVENTORY_CHANGE);
         }

@@ -21,16 +21,16 @@ namespace ServerClient
     PLAYER_VALIDATOR_ASSIGN, WORLD_VALIDATOR_ASSIGN, ACCEPT,
     WORLD_VAR_INIT, WORLD_VAR_CHANGE, PLAYER_WORLD_MOVE,
     MOVE_REQUEST, REALM_MOVE,
-    PICKUP_ITEM, FREEZE_ITEM, UNFREEZE_ITEM, CONSUME_FROZEN_ITEM,
+    PICKUP_ITEM,
     PLAYER_INFO_VAR,
-    SPAWN_REQUEST, SPAWN_FAIL,
-    RESPONSE};
+    SPAWN_REQUEST,
+    RESPONSE, LOCK_VAR, UNLOCK_VAR};
     
     public enum NodeRole { PLAYER, PLAYER_VALIDATOR, WORLD_VALIDATOR };
 
     public enum WorldMove { LEAVE, JOIN };
 
-    public enum PlayerDataUpdate { INIT, JOIN_WORLD, INVENTORY_CHANGE };
+    public enum PlayerDataUpdate { INIT, SPAWN, JOIN_WORLD, INVENTORY_CHANGE };
 
     [Serializable]
     public class ForwardFunctionCall
@@ -243,6 +243,8 @@ namespace ServerClient
 
     public enum Response { SUCCESS, FAIL }
 
+    class RemoteActionIdInject { }
+
     class RemoteAction
     {
         Guid id = Guid.Empty;
@@ -253,6 +255,13 @@ namespace ServerClient
 
         // questionable design choices for sake of smoother application
 
+        public void Respond(ref RemoteAction ra, Action<Response, Stream> followUp_)
+        {
+            followUp = followUp_;
+
+            MyAssert.Assert(ra == null);
+            ra = this;
+        }
         public void Respond(Dictionary<Guid, RemoteAction> remotes, IManualLock l_, Action<Response, Stream> followUp_)
         {
             l = l_;
@@ -270,11 +279,26 @@ namespace ServerClient
 
             ra.remoteHost = remoteHost;
 
-            List<object> lst = new List<object>();
-            lst.Add(ra.id);
-            lst.AddRange(args);
+            bool assigned = false;
+            for (int i = 0; i < args.Length; ++i)
+            {
+                if (args[i].GetType() == typeof(RemoteActionIdInject))
+                {
+                    args[i] = ra.id;        // id is injected at first RemoteActionIdInject argument
+                    assigned = true;
+                    break;
+                }
+            }
 
-            myHost.ConnectSendMessage(remoteHost, mt, lst.ToArray());
+            if (!assigned)
+            {
+                List<object> lst = new List<object>();
+                lst.Add(ra.id);             // or in front if there isn't one
+                lst.AddRange(args);
+                args = lst.ToArray();
+            }
+
+            myHost.ConnectSendMessage(remoteHost, mt, args);
 
             return ra;
         }
@@ -295,6 +319,17 @@ namespace ServerClient
 
         }
 
+        static public void Process(ref RemoteAction ra, Node n, Stream st)
+        {
+            Response r = Serializer.Deserialize<Response>(st);
+            Guid id = Serializer.Deserialize<Guid>(st);
+
+            MyAssert.Assert(ra.id == id);
+
+            ra.FollowUp(n, st, r);
+
+            ra = null;
+        }
         static public void Process(Dictionary<Guid, RemoteAction> remotes, Node n, Stream st)
         {
             Response r = Serializer.Deserialize<Response>(st);
@@ -306,13 +341,24 @@ namespace ServerClient
 
             remotes.Remove(id);
         }
-        static public void Sucess(Node n, Guid id)
+
+        static void Respond(Node n, bool success, Guid id, object[] args)
         {
-            n.SendMessage(MessageType.RESPONSE, Response.SUCCESS, id);
+            List<object> lst = new List<object>();
+            lst.Add(success ? Response.SUCCESS : Response.FAIL);
+            lst.Add(id);
+            lst.AddRange(args);
+
+            n.SendMessage(MessageType.RESPONSE, lst.ToArray());
         }
-        static public void Fail(Node n, Guid id)
+
+        static public void Sucess(Node n, Guid id, params object[] args)
         {
-            n.SendMessage(MessageType.RESPONSE, Response.FAIL, id);
+            Respond(n, true, id, args);
+        }
+        static public void Fail(Node n, Guid id, params object[] args)
+        {
+            Respond(n, false, id, args);
         }
     }
 }
