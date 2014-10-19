@@ -13,14 +13,13 @@ using System.Xml.Serialization;
 namespace ServerClient
 {
     [Serializable]
-    public class PlayerInfo
+    public struct PlayerInfo
     {
         public Guid id;
         public OverlayEndpoint playerHost;
         public OverlayEndpoint validatorHost;
         public string name;
 
-        public PlayerInfo() { }
         public PlayerInfo(Guid id_, OverlayEndpoint playerHost_, OverlayEndpoint validatorHost_, string name_)
         {
             id = id_;
@@ -243,15 +242,13 @@ namespace ServerClient
     {
         OverlayHost myHost;
 
-        GameInfo gameInfo;
         OverlayEndpoint serverHost;
 
         public PlayerInfo info;
 
-        public PlayerAgent(PlayerInfo info_, GlobalHost globalHost, GameInfo gameInfo_, OverlayEndpoint serverHost_)
+        public PlayerAgent(PlayerInfo info_, GlobalHost globalHost, OverlayEndpoint serverHost_)
         {
             info = info_;
-            gameInfo = gameInfo_;
             serverHost = serverHost_;
 
             myHost = globalHost.NewHost(info.playerHost.hostname, AssignProcessor);

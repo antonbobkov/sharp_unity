@@ -140,9 +140,7 @@ namespace ServerClient
 
     class GameInfo : MarshalByRefObject
     {
-        public Action<PlayerInfo> onNewPlayer = (inf) => { };
-        public Action<WorldInfo> onNewWorld = (inf) => { };
-
+        // ----- constructors -----
         public GameInfo() { }
 
         public GameInfoSerialized Serialize()
@@ -157,6 +155,7 @@ namespace ServerClient
                 AddWorld(w);
         }
 
+        // ----- read only infromation -----
         public NodeRole GetRoleOfHost(OverlayEndpoint host) { return roles.GetValue(host); }
 
         public PlayerInfo GetPlayerByHost(OverlayEndpoint host) { return playerByHost.GetValue(host); }
@@ -165,12 +164,19 @@ namespace ServerClient
         public PlayerInfo GetPlayerById(Guid player) { return playerById.GetValue(player); }
         public WorldInfo GetWorldByPos(Point pos) { return worldByPoint.GetValue(pos); }
 
-        public WorldInfo TryGetWorldByPos(Point pos) { return worldByPoint.TryGetValue(pos); }
+        public WorldInfo? TryGetWorldByPos(Point pos)
+        {
+            if (worldByPoint.ContainsKey(pos))
+                return worldByPoint[pos];
+            else
+                return null;
+        }
 
         public OverlayEndpoint GetPlayerHost(Guid player) { return playerById.GetValue(player).playerHost; }
         public OverlayEndpoint GetPlayerValidatorHost(Guid player) { return playerById.GetValue(player).validatorHost; }
         public OverlayEndpoint GetWorldHost(Point worldPos) { return worldByPoint.GetValue(worldPos).host; }
 
+        // ----- modifiers -----
         [Forward] public void AddPlayer(PlayerInfo info)
         {
             roles.Add(info.playerHost, NodeRole.PLAYER);
@@ -192,11 +198,14 @@ namespace ServerClient
             onNewWorld.Invoke(info);
         }
 
-        Dictionary<OverlayEndpoint, NodeRole> roles = new Dictionary<OverlayEndpoint, NodeRole>();
+        // ----- hooks -----
+        public Action<PlayerInfo> onNewPlayer = (inf) => { };
+        public Action<WorldInfo> onNewWorld = (inf) => { };
 
+        // ----- private data -----
+        Dictionary<OverlayEndpoint, NodeRole> roles = new Dictionary<OverlayEndpoint, NodeRole>();
         Dictionary<Guid, PlayerInfo> playerById = new Dictionary<Guid, PlayerInfo>();
         Dictionary<OverlayEndpoint, PlayerInfo> playerByHost = new Dictionary<OverlayEndpoint, PlayerInfo>();
-
         Dictionary<Point, WorldInfo> worldByPoint = new Dictionary<Point, WorldInfo>();
         Dictionary<OverlayEndpoint, WorldInfo> worldByHost = new Dictionary<OverlayEndpoint, WorldInfo>();
     }

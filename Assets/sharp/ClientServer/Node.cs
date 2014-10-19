@@ -34,10 +34,7 @@ namespace ServerClient
         public OverlayHostName() { }
         public OverlayHostName(string id_) { id = id_; }
 
-        public override string ToString()
-        {
-            return id;
-        }
+        public override string ToString(){ return id; }
 
         public override bool Equals(object comparand) { return this.ToString().Equals(comparand.ToString());  }
         public override int GetHashCode() { return this.ToString().GetHashCode(); }

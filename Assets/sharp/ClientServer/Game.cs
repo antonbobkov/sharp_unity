@@ -17,17 +17,13 @@ namespace ServerClient
         public Point(int x_, int y_) { x = x_; y = y_; }
         public override string ToString()
         {
-            StringBuilder sb = new StringBuilder();
-            sb.AppendFormat("[{0}, {1}]", x, y);
-            return sb.ToString();
+            return "[" + x + ", " + y + "]";
         }
 
         public static Point operator +(Point p1, Point p2) { return new Point(p1.x + p2.x, p1.y + p2.y); }
         public static Point operator -(Point p1) { return new Point(-p1.x, -p1.y); }
-        //public static bool operator ==(Point p1, Point p2) { return (p1.x == p2.x) && (p1.y == p2.y); }
 
         public static Point operator -(Point p1, Point p2) { return p1 + -p2; }
-        //public static bool operator !=(Point p1, Point p2) { return !(p1 == p2); }
 
         public override bool Equals(object comparand) { return this.ToString().Equals(comparand.ToString()); }
         public override int GetHashCode() { return this.ToString().GetHashCode(); }

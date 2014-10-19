@@ -85,7 +85,7 @@ namespace ServerClient
         public void AddPlayerAgent(PlayerInfo info)
         {
             MyAssert.Assert(!playerAgents.ContainsKey(info.id));
-            PlayerAgent pa = new PlayerAgent(info, host, myClient.gameInfo, myClient.serverHost);
+            PlayerAgent pa = new PlayerAgent(info, host, myClient.serverHost);
             playerAgents.Add(info.id, pa);
         }
 

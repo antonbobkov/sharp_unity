@@ -36,26 +36,26 @@ class WorldDraw
     public WorldDraw(World w_)
 	{
 		w = w_;
-        sz = w.map.Size;
+        sz = w.Size;
 
 		walls = new Plane<GameObject>(sz);
 		loots = new Plane<GameObject>(sz);
 		
 		foreach(Point pos in Point.Range(sz))
 		{
-			Tile t = w.map[pos];
-			if (t.solid)
+			ITile t = w[pos];
+			if (t.Solid)
 			{
 				GameObject wall = GameObject.CreatePrimitive(PrimitiveType.Cube);
 				walls [pos] = wall;
 				
 				wall.transform.position = minecraft.GetPositionAtGrid(w, pos);
-				if(!t.spawn)
+				if(!t.Spawn)
                     wall.renderer.material.color = new Color(.3f, .3f, .3f);
                 else
                     wall.renderer.material.color = Color.yellow;
 			}
-			else if(t.loot)
+			else if(t.Loot)
 			{
 				GameObject loot = GameObject.CreatePrimitive(PrimitiveType.Quad);
 				loots [pos] = loot;
@@ -76,9 +76,9 @@ class WorldDraw
         if (!continuousBackground)
             MessBackground();
         
-        foreach (Guid id in w.playerPositions.Keys)
+        foreach (Guid id in w.GetAllPlayers())
 		{
-			Log.Dump(w.info, id);
+			Log.Dump(w.Info, id);
 			AddPlayer(id);
 		}
     }
@@ -106,8 +106,8 @@ class WorldDraw
 			return;
 		}
 
-		MyAssert.Assert(w.playerPositions.ContainsKey(player));
-        Point pos = w.playerPositions.GetValue(player);
+		//MyAssert.Assert(w.playerPositions.ContainsKey(player));
+        Point pos = w.GetPlayerPosition(player);
 
         var avatar = GameObject.CreatePrimitive(PrimitiveType.Sphere);
 
@@ -130,7 +130,8 @@ class WorldDraw
             return;
         }
 
-		UnityEngine.Object.Destroy(players.GetValue(player));
+        //MyAssert.Assert(w.playerPositions.ContainsKey(player));
+        UnityEngine.Object.Destroy(players.GetValue(player));
 		players.Remove(player);
     }
 }
@@ -149,12 +150,12 @@ public class minecraft : MonoBehaviour {
 
     static internal Vector3 GetPositionAtGrid(World w, Point pos)
     {
-        Point worldPos = new Point(w.Position.x * w.map.Size.x, w.Position.y * w.map.Size.y);
+        Point worldPos = new Point(w.Position.x * w.Size.x, w.Position.y * w.Size.y);
 		return new Vector3(worldPos.x + pos.x, worldPos.y + pos.y, 0);
     }
 	static internal Point GetPositionAtMap(World w, Point pos)
 	{
-        Point worldPos = new Point(w.Position.x * w.map.Size.x, w.Position.y * w.map.Size.y);
+        Point worldPos = new Point(w.Position.x * w.Size.x, w.Position.y * w.Size.y);
 		return pos - worldPos;
 	}
 
@@ -314,7 +315,7 @@ public class minecraft : MonoBehaviour {
         if (mv == MoveType.JOIN)
             wd.AddPlayer(player.id);
 
-        Point pos = w.playerPositions.GetValue(player.id);
+        Point pos = w.GetPlayerPosition(player.id);
 
 		GameObject obj = wd.loots[pos];
 		if (obj != null)
@@ -366,16 +367,16 @@ public class minecraft : MonoBehaviour {
 
         if (move)
         {
-			if(!w.playerPositions.ContainsKey(me))
+			if(!w.HasPlayer(me))
 				return;
 
-            Point oldPos = w.playerPositions.GetValue(me);
+            Point oldPos = w.GetPlayerPosition(me);
 			Point newPos = oldPos + p;
 
 			if (w.CheckValidMove(me, newPos) == MoveValidity.VALID)
-				pa.Move(w.info, newPos, MessageType.MOVE);
+				pa.Move(w.Info, newPos, MessageType.MOVE);
             else if (w.CheckValidMove(me, newPos) == MoveValidity.BOUNDARY)
-            	pa.Move(w.info, newPos, MessageType.REALM_MOVE);
+            	pa.Move(w.Info, newPos, MessageType.REALM_MOVE);
         }
         else if (teleport)
         {
@@ -387,7 +388,7 @@ public class minecraft : MonoBehaviour {
             Point pos = new Point(Convert.ToInt32(tile.x), Convert.ToInt32(tile.y));
 			pos = GetPositionAtMap(w, pos);
             Log.LogWriteLine("Teleporting to {0}", pos);
-            pa.Move(w.info, pos, MessageType.TELEPORT_MOVE);
+            pa.Move(w.Info, pos, MessageType.TELEPORT_MOVE);
         }
     }
 	

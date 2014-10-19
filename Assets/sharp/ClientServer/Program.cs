@@ -24,10 +24,10 @@ namespace ServerClient
 
         static PlayerMove PlayerRandomMove(World world, Guid player)
         {
-            if (!world.playerPositions.ContainsKey(player))
+            if (!world.HasPlayer(player))
                 return null;
             
-            Point currPos = world.playerPositions.GetValue(player);
+            Point currPos = world.GetPlayerPosition(player);
 
             Point[] moves = {
                                 new Point(-1, 0),
@@ -79,13 +79,13 @@ namespace ServerClient
 
             if (playerData.inventory.teleport > 0 && rand.NextDouble() < .01)
             {
-                var teleportPos = (from t in playerWorld.map.GetEnum()
-                                   where t.Value.IsEmpty()
-                                   select t.Key).ToList();
+                var teleportPos = (from t in playerWorld.GetAllTiles()
+                                   where t.IsEmpty()
+                                   select t.Position).ToList();
                 if (teleportPos.Any())
                 {
                     Point newPos = teleportPos[rand.Next(0, teleportPos.Count)];
-                    pa.Move(playerWorld.info, newPos, MessageType.TELEPORT_MOVE);
+                    pa.Move(playerWorld.Info, newPos, MessageType.TELEPORT_MOVE);
                     
                     return 750;
                 }
@@ -102,9 +102,9 @@ namespace ServerClient
             if (move != null)
             {
                 if (move.mv == MoveValidity.VALID)
-                    pa.Move(playerWorld.info, move.newPos, MessageType.MOVE);
+                    pa.Move(playerWorld.Info, move.newPos, MessageType.MOVE);
                 else if (move.mv == MoveValidity.BOUNDARY)
-                    pa.Move(playerWorld.info, move.newPos, MessageType.REALM_MOVE);
+                    pa.Move(playerWorld.Info, move.newPos, MessageType.REALM_MOVE);
                 else
                     throw new Exception(Log.StDump(move.mv, move.newPos, "unexpected move"));
             }
@@ -266,7 +266,8 @@ namespace ServerClient
             inputProc.commands.Add("draw", (param) =>
             {
                 World w = all.myClient.knownWorlds.GetValue(new Point(0,0));
-                ThreadManager.NewThread(() => RepeatedAction(all.sync.GetAsDelegate(), () => w.ConsoleOut(), 500),
+                ThreadManager.NewThread(() => RepeatedAction(all.sync.GetAsDelegate(),
+                    () => WorldTools.ConsoleOut(w, all.myClient.gameInfo), 500),
                     () => { }, "console drawer");
             });
 

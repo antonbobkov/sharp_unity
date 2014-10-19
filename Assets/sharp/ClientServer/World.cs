@@ -12,38 +12,57 @@ using System.Xml.Serialization;
 
 namespace ServerClient
 {
-    [Serializable]
-    public class Tile
+    interface ITile
     {
-        public bool solid = false;
-        public bool loot = false;
-        public bool spawn = false;
+        Point Position { get; }
 
-        [XmlIgnoreAttribute]
-        public Guid player = Guid.Empty;
+        bool Solid { get; }
+        bool Loot { get; }
+        bool Spawn { get; }
 
-        public string PlayerGuid
-        {
-            get
-            {
-                if (player != Guid.Empty)
-                    return player.ToString();
-                else
-                    return "";
-            }
+        Guid PlayerId { get; }
 
-            set
-            {
-                if (value != "")
-                    player = new Guid(value);
-                else
-                    player = Guid.Empty;
-            }
-        }
+        bool IsEmpty();
+    }
 
-        public bool IsEmpty() { return (player == Guid.Empty) && !solid; }
+    [Serializable]
+    public class Tile : ITile
+    {
+        public Point Position { get; set; }
+
+        public bool Solid { get; set; }
+        public bool Loot { get; set; }
+        public bool Spawn { get; set; }
+
+        public Guid PlayerId { get; set; }
+
+        public bool IsEmpty() { return (PlayerId == Guid.Empty) && !Solid; }
 
         public Tile() { }
+        public Tile(Point pos)
+        {
+            PlayerId = Guid.Empty;
+            Position = pos;
+        }
+
+        //public string PlayerGuid
+        //{
+        //    get
+        //    {
+        //        if (PlayerId != Guid.Empty)
+        //            return PlayerId.ToString();
+        //        else
+        //            return "";
+        //    }
+
+        //    set
+        //    {
+        //        if (value != "")
+        //            PlayerId = new Guid(value);
+        //        else
+        //            PlayerId = Guid.Empty;
+        //    }
+        //}
     }
 
     [Serializable]
@@ -62,12 +81,11 @@ namespace ServerClient
     }
 
     [Serializable]
-    public class WorldInfo
+    public struct WorldInfo
     {
         public Point worldPos;
         public OverlayEndpoint host;
 
-        public WorldInfo() { }
         public WorldInfo(Point worldPos_, OverlayEndpoint host_)
         {
             worldPos = worldPos_;
@@ -113,70 +131,29 @@ namespace ServerClient
         public Point newPosition;
     }
     
-    class World
+    class World : MarshalByRefObject
     {
-        static readonly Point worldSize = new Point(25, 15);
-
-        public readonly WorldInfo info;
-        public Plane<Tile> map;
-
-        public Point Position { get { return info.worldPos; } }
-
-        public Dictionary<Guid, Point> playerPositions = new Dictionary<Guid,Point>();
-        GameInfo gameInfo;
-
-        public Action<PlayerInfo> onLootHook = (info) => { };
-        public Action<PlayerInfo, MoveType> onMoveHook = (a,b) => { };
-
-        public World(WorldSerialized ws, GameInfo info_)
+        // ----- constructors -----
+        public World(WorldSerialized ws, GameInfo info_) : this(ws.myInfo, info_)
         {
-            info = ws.myInfo;
-            gameInfo = info_;
             map = ws.map;
 
             foreach (Point p in Point.Range(map.Size))
-                if (map[p].player != Guid.Empty)
-                    playerPositions.Add(map[p].player, p);
+                if (map[p].PlayerId != Guid.Empty)
+                    playerPositions.Add(map[p].PlayerId, p);
         }
-        public World(WorldInfo myInfo_, WorldInitializer init, GameInfo info_)
-        {
-            info = myInfo_;
-            gameInfo = info_;
-
-            map = new Plane<Tile>(worldSize);
-
-            foreach (Point p in Point.Range(map.Size))
-                map[p] = new Tile();
-
-            Generate(init);
-        }
-
         public WorldSerialized Serialize()
         {
-            return new WorldSerialized() { map = map, myInfo = info };
+            return new WorldSerialized() { map = map, myInfo = Info };
         }
+        
+        // ----- read only infromation -----
+        public WorldInfo Info { get; private set; }
 
-        public IEnumerable<Point> GetBoundary()
-        {
-            HashSet<Point> bnd = new HashSet<Point>();
+        public Point Position { get { return Info.worldPos; } }
+        public Point Size { get { return map.Size; } }
 
-            for (int x = 0; x < map.Size.x; ++x)
-            {
-                bnd.Add(new Point(x, 0));
-                bnd.Add(new Point(x, map.Size.y - 1));
-            }
-
-            for (int y = 0; y < map.Size.y; ++y)
-            {
-                bnd.Add(new Point(0, y));
-                bnd.Add(new Point(map.Size.x - 1, y));
-            }
-
-            return from p in bnd
-                   orderby p.ToString()
-                   select p;
-        }
-        public IEnumerable<KeyValuePair<Point, Tile>> GetSpawn()
+        public IEnumerable<Point> GetSpawn()
         {
             /*
             foreach (Point p in Point.Range(map.Size))
@@ -198,14 +175,140 @@ namespace ServerClient
                     
                     Tile t = map[p];
                     if (t.IsEmpty())
-                        yield return new KeyValuePair<Point, Tile>(p, t);
+                        //yield return new KeyValuePair<Point, Tile>(p, t);
+                        yield return p;
                 }
             }
         }
+        public IEnumerable<ITile> GetAllTiles()
+        {
+            foreach (Point p in Point.Range(Size))
+                yield return this[p];
+        }
+        public ITile this[Point pos]{ get { return map[pos]; } }
 
-        Point? spawnPos = null;
+        public Point GetPlayerPosition(Guid id) { return playerPositions.GetValue(id); }
+        public Point? TryGetPlayerPosition(Guid id)
+        {
+            if (playerPositions.ContainsKey(id))
+                return playerPositions.GetValue(id);
+            else
+                return null;
+        }
+        public IEnumerable<KeyValuePair<Guid, Point>> GetAllPlayerPositions()
+        {
+            return playerPositions;
+        }
+        public IEnumerable<Guid> GetAllPlayers()
+        {
+            return playerPositions.Keys;
+        }
+        public bool HasPlayer(Guid id) { return playerPositions.ContainsKey(id); }
 
-        void Generate(WorldInitializer init)
+        public MoveValidity CheckValidMove(Guid player, Point newPos)
+        {
+            MoveValidity mv = MoveValidity.VALID;
+
+            Point curPos = playerPositions.GetValue(player);
+
+            Point diff = newPos - curPos;
+            if (Math.Abs(diff.x) > 1)
+                mv |= MoveValidity.TELEPORT;
+            if (Math.Abs(diff.y) > 1)
+                mv |= MoveValidity.TELEPORT;
+
+            Tile tile;
+            try
+            {
+                tile = map[newPos];
+            }
+            catch (IndexOutOfRangeException)
+            {
+                mv |= MoveValidity.BOUNDARY;
+                return mv;
+            }
+
+            if (!tile.IsEmpty())
+            {
+                if (tile.PlayerId != Guid.Empty)
+                    mv |= MoveValidity.OCCUPIED_PLAYER;
+                if (tile.Solid)
+                    mv |= MoveValidity.OCCUPIED_WALL;
+            }
+
+            return mv;
+        }
+
+        // ----- modifiers -----
+        [Forward] public void AddPlayer(Guid player, Point pos)
+        {
+            MyAssert.Assert(!playerPositions.ContainsKey(player));
+            Move(player, pos, MoveValidity.NEW);
+        }
+        [Forward] public void RemovePlayer(Guid player)
+        {
+            Point pos = playerPositions.GetValue(player);
+            MyAssert.Assert(map[pos].PlayerId == player);
+            map[pos].PlayerId = Guid.Empty;
+
+            playerPositions.Remove(player);
+
+            onMoveHook(gameInfo.GetPlayerById(player), MoveType.LEAVE);
+        }
+        [Forward] public void Move(Guid player, Point newPos, MoveValidity mv)
+        {
+            PlayerInfo p = gameInfo.GetPlayerById(player);
+
+            if (mv != MoveValidity.NEW)
+            {
+                Point curPos = playerPositions.GetValue(player);
+
+                MoveValidity v = CheckValidMove(player, newPos) & ~mv;
+                MyAssert.Assert(v == MoveValidity.VALID);
+
+                //if (v != MoveValidity.VALID)
+                    //Log.LogWriteLine("Game.Move Warning: Invalid move {0} from {1} to {2} by {3}", v, curPos, newPos, p.name);
+
+                MyAssert.Assert(map[curPos].PlayerId == player);
+                map[curPos].PlayerId = Guid.Empty;
+            }
+
+            Tile tile = map[newPos];
+            MyAssert.Assert(tile.IsEmpty());
+
+            if (tile.Loot == true)
+                onLootHook(p);
+            
+            playerPositions[player] = newPos;
+            tile.PlayerId = player;
+            tile.Loot = false;
+
+            MoveType mt = mv == MoveValidity.NEW ? MoveType.JOIN : MoveType.MOVE;
+            
+            onMoveHook(p, mt);
+        }
+
+        // ----- hooks -----
+        public Action<PlayerInfo> onLootHook = (info) => { };
+        public Action<PlayerInfo, MoveType> onMoveHook = (a, b) => { };
+
+        // ----- generating -----
+        static public World Generate(WorldInfo myInfo_, WorldInitializer init, GameInfo info_)
+        {
+            World w = new World(myInfo_, info_);
+
+            w.map = new Plane<Tile>(worldSize);
+
+            foreach (Point p in Point.Range(w.map.Size))
+                w.map[p] = new Tile(p);
+
+            w.Generate(init);
+
+            return w;
+        }
+
+        static readonly Point worldSize = new Point(25, 15);
+        private void Generate(WorldInitializer init)
         {
             ServerClient.MyRandom seededRandom = new ServerClient.MyRandom(init.seed);
 
@@ -213,13 +316,13 @@ namespace ServerClient
             foreach (Tile t in map.GetTiles())
             {
                 if (seededRandom.NextDouble() < init.wallDensity)
-                    t.solid = true;
+                    t.Solid = true;
                 else
                 {
-                    t.solid = false;
+                    t.Solid = false;
 
                     if (seededRandom.NextDouble() < init.lootDensity)
-                        t.loot = true;
+                        t.Loot = true;
                 }
             }
 
@@ -235,7 +338,7 @@ namespace ServerClient
                 MyAssert.Assert(a.Any());
 
                 var spawn = a.Random(n => seededRandom.Next(n));
-                spawn.Value.spawn = true;
+                spawn.Value.Spawn = true;
                 spawnPos = spawn.Key;
             }
 
@@ -251,113 +354,24 @@ namespace ServerClient
              */
 
         }
-        public void ConsoleOut()
+
+        // ----- private data -----
+        private World(WorldInfo myInfo_, GameInfo info_)
         {
-            Plane<char> pic = new Plane<char>(map.Size);
-
-            foreach (var kv in map.GetEnum())
-            {
-                Point p = kv.Key;
-                Tile t = kv.Value;
-
-                if (t.solid)
-                    pic[p] = '*';
-                else if (t.player != Guid.Empty)
-                    pic[p] = gameInfo.GetPlayerById(t.player).name[0];
-                else if (t.loot)
-                    pic[p] = '$';
-            }
-
-            for (int y = map.Size.y - 1; y >= 0; --y)
-            {
-                for (int x = 0; x < map.Size.x; ++x)
-                    Console.Write(pic[x, y]);
-                Console.WriteLine();
-            }
-        }
-        
-        public void AddPlayer(Guid player, Point pos)
-        {
-            MyAssert.Assert(!playerPositions.ContainsKey(player));
-            Move(player, pos, MoveValidity.NEW);
-        }
-        public void RemovePlayer(Guid player)
-        {
-            Point pos = playerPositions.GetValue(player);
-            MyAssert.Assert(map[pos].player == player);
-            map[pos].player = Guid.Empty;
-
-            playerPositions.Remove(player);
-
-            onMoveHook(gameInfo.GetPlayerById(player), MoveType.LEAVE);
+            Info = myInfo_;
+            gameInfo = info_;
         }
 
-        public MoveValidity CheckValidMove(Guid player, Point newPos)
-        {
-            MoveValidity mv = MoveValidity.VALID;
-            
-            Point curPos = playerPositions.GetValue(player);
+        Plane<Tile> map;
+        Dictionary<Guid, Point> playerPositions = new Dictionary<Guid, Point>();
+        Point? spawnPos = null;
 
-            Point diff = newPos - curPos;
-            if (Math.Abs(diff.x) > 1)
-                mv |= MoveValidity.TELEPORT;
-            if (Math.Abs(diff.y) > 1)
-                mv |= MoveValidity.TELEPORT; 
-            
-            Tile tile;
-            try
-            {
-                tile = map[newPos];
-            }
-            catch (IndexOutOfRangeException)
-            {
-                mv |= MoveValidity.BOUNDARY;
-                return mv;
-            }
+        GameInfo gameInfo;
+    }
 
-            if (!tile.IsEmpty())
-            {
-                if (tile.player != Guid.Empty)
-                    mv |= MoveValidity.OCCUPIED_PLAYER;
-                if (tile.solid)
-                    mv |= MoveValidity.OCCUPIED_WALL;
-            }
-
-            return mv;
-        }
-        public void Move(Guid player, Point newPos, MoveValidity mv = MoveValidity.VALID)
-        {
-            PlayerInfo p = gameInfo.GetPlayerById(player);
-
-            if (mv != MoveValidity.NEW)
-            {
-                Point curPos = playerPositions.GetValue(player);
-
-                MoveValidity v = CheckValidMove(player, newPos) & ~mv;
-                if (v != MoveValidity.VALID)
-                    Log.LogWriteLine("Game.Move Warning: Invalid move {0} from {1} to {2} by {3}",
-                        v, curPos, newPos, p.name);
-
-                MyAssert.Assert(map[curPos].player == player);
-                map[curPos].player = Guid.Empty;
-            }
-
-            Tile tile = map[newPos];
-            MyAssert.Assert(tile.IsEmpty());
-
-            if (tile.loot == true)
-                onLootHook(p);
-            
-            playerPositions[player] = newPos;
-            tile.player = player;
-            tile.loot = false;
-
-            MoveType mt = mv == MoveValidity.NEW ? MoveType.JOIN : MoveType.MOVE;
-            
-            onMoveHook(p, mt);
-        }
-
-        int BoundaryMove(ref int p, int sz)
+    static class WorldTools
+    {
+        static int BoundaryMove(ref int p, int sz)
         {
             int ret = 0;
 
@@ -366,8 +380,8 @@ namespace ServerClient
                 p += sz;
                 ret--;
             }
-            
-            while(p >= sz)
+
+            while (p >= sz)
             {
                 p -= sz;
                 ret++;
@@ -375,18 +389,61 @@ namespace ServerClient
 
             return ret;
         }
-        public WorldMove BoundaryMove(Point p)
+        static public WorldMove BoundaryMove(Point p, World w)
         {
             int px = p.x;
             int py = p.y;
 
-            Point ret = new Point(BoundaryMove(ref px, map.Size.x), BoundaryMove(ref py, map.Size.y));
+            Point ret = new Point(BoundaryMove(ref px, w.Size.x), BoundaryMove(ref py, w.Size.y));
 
             p = new Point(px, py);
 
-            return new WorldMove() { newPosition = p, newWorld = ret + Position };
+            return new WorldMove() { newPosition = p, newWorld = ret + w.Position };
         }
-        
+        static public void ConsoleOut(World w, GameInfo gameInfo)
+        {
+            Plane<char> pic = new Plane<char>(w.Size);
+
+            foreach (ITile t in w.GetAllTiles())
+            {
+                Point p = t.Position;
+
+                if (t.Solid)
+                    pic[p] = '*';
+                else if (t.PlayerId != Guid.Empty)
+                    pic[p] = gameInfo.GetPlayerById(t.PlayerId).name[0];
+                else if (t.Loot)
+                    pic[p] = '$';
+            }
+
+            for (int y = w.Size.y - 1; y >= 0; --y)
+            {
+                for (int x = 0; x < w.Size.x; ++x)
+                    Console.Write(pic[x, y]);
+                Console.WriteLine();
+            }
+        }
+
+        //public IEnumerable<Point> GetBoundary()
+        //{
+        //    HashSet<Point> bnd = new HashSet<Point>();
+
+        //    for (int x = 0; x < map.Size.x; ++x)
+        //    {
+        //        bnd.Add(new Point(x, 0));
+        //        bnd.Add(new Point(x, map.Size.y - 1));
+        //    }
+
+        //    for (int y = 0; y < map.Size.y; ++y)
+        //    {
+        //        bnd.Add(new Point(0, y));
+        //        bnd.Add(new Point(map.Size.x - 1, y));
+        //    }
+
+        //    return from p in bnd
+        //           orderby p.ToString()
+        //           select p;
+        //}
     }
 
     class WorldValidator
@@ -414,7 +471,7 @@ namespace ServerClient
             gameInfo = gameInfo_;
             serverHost = serverHost_;
 
-            world = new World(info, init, gameInfo);
+            world = World.Generate(info, init, gameInfo);
 
             myHost = globalHost.NewHost(info.host.hostname, AssignProcessor);
             myHost.onNewConnectionHook = ProcessNewConnection;
@@ -519,12 +576,12 @@ namespace ServerClient
                 OnSpawnRequest(gameInfo.GetPlayerById(playerId));
             }
             else
-                throw new Exception(Log.StDump("unexpected", world.info, mt));
+                throw new Exception(Log.StDump("unexpected", world.Info, mt));
         }
 
         void AddPlayer(PlayerInfo player, Point newPos)
         {
-            if (!world.playerPositions.Any())   // on first spawn
+            if (!world.GetAllPlayerPositions().Any())   // on first spawn
                 BoundaryRequest();
 
             world.AddPlayer(player.id, newPos);        
@@ -534,7 +591,7 @@ namespace ServerClient
         {
             if(playerLocks.ContainsKey(player.id))
             {
-                Log.LogWriteLine(Log.StDump( world.info, player, "Spawn failed, locked"));
+                Log.LogWriteLine(Log.StDump( world.Info, player, "Spawn failed, locked"));
                 return;
             }
             
@@ -544,7 +601,7 @@ namespace ServerClient
                 {
                     if (mt == MessageType.SPAWN_FAIL)
                     {
-                        Log.LogWriteLine(Log.StDump( world.info, player, "Spawn failed, SPAWN_FAIL"));
+                        Log.LogWriteLine(Log.StDump( world.Info, player, "Spawn failed, SPAWN_FAIL"));
                     }
                     else if (mt == MessageType.SPAWN_SUCCESS)
                     {
@@ -552,12 +609,12 @@ namespace ServerClient
 
                         if (!spawn.Any())
                         {
-                            Log.Dump(world.info, player, "Spawn failed, no space");
+                            Log.Dump(world.Info, player, "Spawn failed, no space");
                             myHost.ConnectSendMessage(player.validatorHost, MessageType.SPAWN_FAIL);
                             return;
                         }
 
-                        Point spawnPos = spawn.Random((n) => rand.Next(n)).Key;
+                        Point spawnPos = spawn.Random((n) => rand.Next(n));
 
                         AddPlayer(player, spawnPos);
 
@@ -565,31 +622,31 @@ namespace ServerClient
                         myHost.ConnectSendMessage(player.validatorHost, MessageType.PLAYER_JOIN);
                     }
                     else
-                        throw new Exception(Log.StDump( world.info, mt, "unexpected"));
+                        throw new Exception(Log.StDump( world.Info, mt, "unexpected"));
                 });
         }
         void OnMoveValidate(PlayerInfo inf, Point newPos)
         {
             if (playerLocks.ContainsKey(inf.id))
             {
-                Log.LogWriteLine("World {0}: {1} can't move, locked", world.info.GetShortInfo(), inf.GetShortInfo());
+                Log.LogWriteLine("World {0}: {1} can't move, locked", world.Info.GetShortInfo(), inf.GetShortInfo());
                 return;
             }
 
-            if (!world.playerPositions.ContainsKey(inf.id))
+            if (!world.HasPlayer(inf.id))
             {
                 Log.LogWriteLine("World {0}: Invalid move {1} by {2}: player absent from this world",
-                    world.info.GetShortInfo(), newPos, inf.GetShortInfo());
+                    world.Info.GetShortInfo(), newPos, inf.GetShortInfo());
                 return;
             }
             
-            Point currPos = world.playerPositions.GetValue(inf.id);
+            Point currPos = world.GetPlayerPosition(inf.id);
 
             MoveValidity v = world.CheckValidMove(inf.id, newPos);
             if (v != MoveValidity.VALID)
             {
                 Log.LogWriteLine("World {4}: Invalid move {0} from {1} to {2} by {3}", v,
-                    currPos, newPos, inf.GetShortInfo(), world.info.GetShortInfo());
+                    currPos, newPos, inf.GetShortInfo(), world.Info.GetShortInfo());
                 return;
             }
 
@@ -606,17 +663,17 @@ namespace ServerClient
             {
                 if (playerLocks.ContainsKey(player.id))
                 {
-                    Log.LogWriteLine(Log.StDump(world.info, player, "can't move, locked"));
+                    Log.LogWriteLine(Log.StDump(world.Info, player, "can't move, locked"));
                     return;
                 }
 
-                if (!world.playerPositions.ContainsKey(player.id))
+                if (!world.HasPlayer(player.id))
                 {
-                    Log.LogWriteLine(Log.StDump(world.info, player, "can't move, not in the world"));
+                    Log.LogWriteLine(Log.StDump(world.Info, player, "can't move, not in the world"));
                     return;
                 }
                 
-                Point currPos = world.playerPositions.GetValue(player.id);
+                Point currPos = world.GetPlayerPosition(player.id);
 
                 MoveValidity v = world.CheckValidMove(player.id, newPos);
 
@@ -625,33 +682,33 @@ namespace ServerClient
 
                 if (v != MoveValidity.BOUNDARY)
                 {
-                    Log.LogWriteLine(Log.StDump(world.info, player, v, currPos, newPos, "invalid move"));
+                    Log.LogWriteLine(Log.StDump(world.Info, player, v, currPos, newPos, "invalid move"));
                     return;
                 }
 
                 Point currentRealmPos = world.Position;
 
-                WorldMove wm = world.BoundaryMove(newPos);
+                WorldMove wm = WorldTools.BoundaryMove(newPos, world);
                 newPos = wm.newPosition;
                 Point targetRealmPos = wm.newWorld;
 
                 MyAssert.Assert(currentRealmPos != targetRealmPos);
-                WorldInfo targetRealm = gameInfo.TryGetWorldByPos(targetRealmPos);
+                WorldInfo? targetRealm = gameInfo.TryGetWorldByPos(targetRealmPos);
                 if (targetRealm == null)
                 {
-                    Log.LogWriteLine(Log.StDump(world.info, player, currentRealmPos, targetRealmPos, newPos, "no realm to move in"));
+                    Log.LogWriteLine(Log.StDump(world.Info, player, currentRealmPos, targetRealmPos, newPos, "no realm to move in"));
                     return;
                 }
 
                 //Log.LogWriteLine(Log.StDump(world.info, player, currentRealmPos, targetRealmPos, newPos, "realm request"));
 
-                myHost.ConnectSendMessage(targetRealm.host, MessageType.REALM_MOVE, player.id, newPos);
+                myHost.ConnectSendMessage(targetRealm.Value.host, MessageType.REALM_MOVE, player.id, newPos);
 
                 playerLocks.Add(player.id, (mt) =>
                 {
                     if (mt == MessageType.REALM_MOVE_FAIL)
                     {
-                        Log.LogWriteLine(Log.StDump(world.info, player, currentRealmPos, targetRealmPos, newPos, "realm move fail"));
+                        Log.LogWriteLine(Log.StDump(world.Info, player, currentRealmPos, targetRealmPos, newPos, mt, "remote world refused"));
                     }
                     else if (mt == MessageType.REALM_MOVE_SUCCESS)
                     {
@@ -662,7 +719,7 @@ namespace ServerClient
                         myHost.ConnectSendMessage(player.validatorHost, MessageType.PLAYER_LEAVE, targetRealmPos);
                     }
                     else
-                        throw new Exception(Log.StDump(world.info, mt, "unexpected"));
+                        throw new Exception(Log.StDump(world.Info, mt, "unexpected"));
 
                     postProcess.Invoke(mt);
                 });
@@ -681,24 +738,24 @@ namespace ServerClient
         {
             if (playerLocks.ContainsKey(player.id))
             {
-                Log.LogWriteLine(Log.StDump( world.info, player, "can't join, locked"));
+                Log.LogWriteLine(Log.StDump( world.Info, player, "can't join, locked"));
                 return;
             }
 
-            Tile t = world.map[newPos];
+            ITile t = world[newPos];
 
             if (!t.IsEmpty())
             {
                 MoveValidity mv = MoveValidity.VALID;
 
-                if (t.player != Guid.Empty)
+                if (t.PlayerId != Guid.Empty)
                     mv = MoveValidity.OCCUPIED_PLAYER;
-                else if (t.solid)
+                else if (t.Solid)
                     mv = MoveValidity.OCCUPIED_WALL;
                 else
-                    throw new Exception(Log.StDump( world.info, player, mv, "bad tile status"));
+                    throw new Exception(Log.StDump( world.Info, player, mv, "bad tile status"));
 
-                Log.LogWriteLine(Log.StDump( world.info, player, mv, "can't join, blocked"));
+                Log.LogWriteLine(Log.StDump( world.Info, player, mv, "can't join, blocked"));
 
                 n.SendMessage(MessageType.REALM_MOVE_FAIL, player.id);
 
@@ -716,23 +773,23 @@ namespace ServerClient
         {
             if (playerLocks.ContainsKey(player.id))
             {
-                Log.LogWriteLine(Log.StDump( world.info, player, "can't teleport, locked"));
+                Log.LogWriteLine(Log.StDump( world.Info, player, "can't teleport, locked"));
                 return;
             }
 
-            if (!world.playerPositions.ContainsKey(player.id))
+            if (!world.HasPlayer(player.id))
             {
-                Log.LogWriteLine(Log.StDump(world.info, player, "can't teleport, not in the world"));
+                Log.LogWriteLine(Log.StDump(world.Info, player, "can't teleport, not in the world"));
                 return;
             }
 
-            Point currPos = world.playerPositions.GetValue(player.id);
+            Point currPos = world.GetPlayerPosition(player.id);
             MoveValidity v = world.CheckValidMove(player.id, newPos) & ~(MoveValidity.TELEPORT | MoveValidity.BOUNDARY);
             //MoveValidity v = MoveValidity.VALID;// world.CheckValidMove(player.id, newPos) & ~(MoveValidity.TELEPORT);
 
             if (v != MoveValidity.VALID)
             {
-                Log.Dump("Invalid teleport", world.info, player, v, currPos, newPos);
+                Log.Dump("Invalid teleport", world.Info, player, v, currPos, newPos);
                 return;
             }
 
@@ -744,14 +801,14 @@ namespace ServerClient
             {
                 if (mt == MessageType.FREEZE_FAIL)
                 {
-                    Log.Dump("Invalid teleport, freeze failed", world.info, player, currPos, newPos);
+                    Log.Dump("Invalid teleport, freeze failed", world.Info, player, currPos, newPos);
                 }
                 else if (mt == MessageType.FREEZE_SUCCESS)
                 {
                     Teleport(player, currPos, newPos);
                 }
                 else
-                    throw new Exception(Log.StDump(world.info, mt, "unexpected"));
+                    throw new Exception(Log.StDump(world.Info, mt, "unexpected"));
             });
 
         }
@@ -770,22 +827,22 @@ namespace ServerClient
                     {
                         if (mt == MessageType.REALM_MOVE_FAIL)
                         {
-                            Log.Dump("Realm teleport fail", world.info, player, v, currPos, newPos);
+                            Log.Dump("Realm teleport fail", world.Info, player, v, currPos, newPos);
                             myHost.ConnectSendMessage(player.validatorHost, MessageType.UNFREEZE_ITEM);
                         }
                         else if (mt == MessageType.REALM_MOVE_SUCCESS)
                         {
-                            Log.Dump("Realm teleport success", world.info, player, v, currPos, newPos);
+                            Log.Dump("Realm teleport success", world.Info, player, v, currPos, newPos);
                             myHost.ConnectSendMessage(player.validatorHost, MessageType.CONSUME_FROZEN_ITEM);
                         }
                         else
-                            throw new Exception(Log.StDump(world.info, mt, "unexpected"));
+                            throw new Exception(Log.StDump(world.Info, mt, "unexpected"));
                     });
                 }
                 else
                 {
                     // teleporting fail
-                    Log.Dump("Invalid teleport (check 2)", world.info, player, v, currPos, newPos);
+                    Log.Dump("Invalid teleport (check 2)", world.Info, player, v, currPos, newPos);
                     myHost.ConnectSendMessage(player.validatorHost, MessageType.UNFREEZE_ITEM);
                 }
             }
