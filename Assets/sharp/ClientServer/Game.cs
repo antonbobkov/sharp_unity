@@ -45,6 +45,8 @@ namespace ServerClient
                 for (p.x = -size.x; p.x <= size.x; ++p.x)
                     yield return p;
         }
+
+        public static Point Zero { get { return new Point(0, 0); } }
     }
 
 

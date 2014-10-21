@@ -95,12 +95,18 @@ namespace ServerClient
             if (locked == null)
                 a.Invoke();
             else
+            {
+                //Log.Dump(info, "delayed action");
                 delayedActions.Enqueue(a);
+            }
         }
         void ExecuteDelayedActions()
         {
             while (delayedActions.Any())
+            {
+                //Log.Dump(info, "executed delayed action");
                 delayedActions.Dequeue().Invoke();
+            }
         }
 
         public PlayerValidator(PlayerInfo info_, GlobalHost globalHost, GameInfo gameInfo_)
@@ -174,7 +180,7 @@ namespace ServerClient
             
             if (locked != null)
             {
-                //Log.Dump(info, "already locked");
+                Log.Dump(info, "already locked");
                 RemoteAction.Fail(n, remoteActionId);
                 return;
             }
@@ -191,9 +197,11 @@ namespace ServerClient
                         PlayerData modifiedData = Serializer.Deserialize<PlayerData>(str);
 
                         playerData = modifiedData;
-                        //Log.Dump("unlocking got new data", pdu);
+                        //Log.Dump(info, "unlocking got new data", pdu);
                         myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_INFO_VAR, playerData, pdu);
                     }
+                    //else
+                    //    Log.Dump(info, "unlocking - unchanged");
 
                     ExecuteDelayedActions();
                 });
@@ -201,15 +209,9 @@ namespace ServerClient
         
         void RealmUpdate(Point newWorld)
         {
-            bool forceUpdate = false;
+            //Log.Dump(newWorld);
             
-            if (!playerData.connected)
-            {
-                playerData.connected = true;
-                forceUpdate = true;
-            }
-
-            if ((playerData.worldPos != newWorld) || forceUpdate)
+            if ((playerData.worldPos != newWorld))
             {
                 playerData.worldPos = newWorld;
                 myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_INFO_VAR, playerData, PlayerDataUpdate.JOIN_WORLD);
@@ -218,8 +220,9 @@ namespace ServerClient
 
         void OnPickupItem()
         {
+            //Log.Dump();
+
             ++playerData.inventory.teleport;
-            //Log.Dump(info, playerData, "frozen", frozenInventory);
             myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_INFO_VAR, playerData, PlayerDataUpdate.INVENTORY_CHANGE);
         }
     }

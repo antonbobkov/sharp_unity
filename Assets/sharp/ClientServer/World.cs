@@ -581,11 +581,13 @@ namespace ServerClient
 
         void OnSpawnRequest(PlayerInfo player)
         {
+            //Log.Dump();
+            
             ManualLock<Guid> lck = new ManualLock<Guid>(playerLocks, player.id);
 
             if (!lck.Locked)
             {
-                Log.LogWriteLine(Log.StDump( world.Info, player, "Spawn failed, locked"));
+                Log.Dump(world.Info, player, "Spawn failed, locked");
                 return;
             }
 
@@ -625,6 +627,7 @@ namespace ServerClient
                             pd.connected = true;
                             pd.worldPos = world.Position;
 
+                            //Log.Dump(world.Info, player, "Spawn success");
                             spawnSuccess = true;
                         }
                         finally
@@ -751,37 +754,46 @@ namespace ServerClient
 
         void OnRealmMove(PlayerInfo player, Point newPos, Node n, Guid remoteActionId)
         {
-            if (playerLocks.Contains(player.id))
-            {
-                Log.LogWriteLine(Log.StDump( world.Info, player, "can't join, locked"));
+            bool success = false;
 
-                RemoteAction.Fail(n, remoteActionId);
-                return;
+            try
+            {
+                if (playerLocks.Contains(player.id))
+                {
+                    Log.LogWriteLine(Log.StDump(world.Info, player, "can't join, locked"));
+                    return;
+                }
+
+                ITile t = world[newPos];
+
+                if (!t.IsEmpty())
+                {
+                    MoveValidity mv = MoveValidity.VALID;
+
+                    if (t.PlayerId != Guid.Empty)
+                        mv = MoveValidity.OCCUPIED_PLAYER;
+                    else if (t.Solid)
+                        mv = MoveValidity.OCCUPIED_WALL;
+                    else
+                        throw new Exception(Log.StDump(world.Info, player, mv, "bad tile status"));
+
+                    Log.LogWriteLine(Log.StDump(world.Info, player, mv, "can't join, blocked"));
+
+                    return;
+                }
+
+                world.NET_AddPlayer(player.id, newPos);
+                myHost.ConnectSendMessage(player.validatorHost, MessageType.PLAYER_WORLD_MOVE, WorldMove.JOIN);
+
+                success = true;
             }
-
-            ITile t = world[newPos];
-
-            if (!t.IsEmpty())
+            finally
             {
-                MoveValidity mv = MoveValidity.VALID;
-
-                if (t.PlayerId != Guid.Empty)
-                    mv = MoveValidity.OCCUPIED_PLAYER;
-                else if (t.Solid)
-                    mv = MoveValidity.OCCUPIED_WALL;
+                if(success)
+                    RemoteAction.Sucess(n, remoteActionId);
                 else
-                    throw new Exception(Log.StDump( world.Info, player, mv, "bad tile status"));
-
-                Log.LogWriteLine(Log.StDump( world.Info, player, mv, "can't join, blocked"));
-
-                RemoteAction.Fail(n, remoteActionId);
-                return;
+                    RemoteAction.Fail(n, remoteActionId);
             }
-
-            RemoteAction.Sucess(n, remoteActionId);
-
-            world.NET_AddPlayer(player.id, newPos);
-            myHost.ConnectSendMessage(player.validatorHost, MessageType.PLAYER_WORLD_MOVE, WorldMove.JOIN);
         }
 
         void OnValidateTeleport(PlayerInfo player, Point newPos)
@@ -804,7 +816,7 @@ namespace ServerClient
 
             if (v != MoveValidity.VALID)
             {
-                Log.Dump("Invalid teleport", world.Info, player, v, currPos, newPos);
+                Log.Dump("Invalid teleport (check 1)", world.Info, player, v, currPos, newPos);
                 return;
             }
 
@@ -866,7 +878,7 @@ namespace ServerClient
                     {
                         if (res == Response.SUCCESS)
                         {
-                            Log.Dump("Realm teleport success", world.Info, player, v, currPos, newPos);
+                            //Log.Dump("Realm teleport success", world.Info, player, v, currPos, newPos);
                             postProcess.Invoke(Response.SUCCESS);
                         }
                         else

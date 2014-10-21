@@ -400,40 +400,12 @@ public class minecraft : MonoBehaviour {
 			pos = GetPositionAtMap(w, pos);
             Log.LogWriteLine("Teleporting to {0}", pos);
             pa.Move(w.Info, pos, MoveValidity.TELEPORT);
+            //pa.Move(all.myClient.gameInfo.GetWorldByPos(Point.Zero), pos, MoveValidity.TELEPORT);
         }
     }
 	
 	// Update is called once per frame
 	void Update () {
-
-        /*
-        if (!gameStarted)
-        {
-            lock(all.sync.syncLock)
-            {
-                if (Input.GetKeyDown(KeyCode.G))
-				{
-
-					if(! all.gameAssignments.GetAllRoles().validator.Any ())
-					{
-						Guid valId = Guid.NewGuid();
-
-						Role r = new Role();
-						r.validator.Add(valId);
-						all.AddMyRole(r);
-
-						Log.LogWriteLine("Validator {0}", valId);
-					}
-
-					all.GenerateGame();
-				}
-                if(all.game == null)
-                    return;
-                gameStarted = true;
-                StartGame();
-                Debug.Log("Game started");
-            }
-        }*/
 
         lock (all.sync.syncLock)
         {
@@ -452,6 +424,10 @@ public class minecraft : MonoBehaviour {
                 }
             }
 
+            if (Input.GetKeyDown(KeyCode.S))
+            {
+                TrySpawn();
+            }
             //camera.transform.rotation *= Quaternion.AngleAxis(Time.deltaTime * 1, Vector3.forward);
         }
 	}
