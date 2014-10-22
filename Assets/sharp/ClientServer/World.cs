@@ -573,6 +573,8 @@ namespace ServerClient
 
         void OnMoveHook(PlayerInfo inf, Point newPos, MoveValidity mv)
         {
+            //Log.Dump(inf, newPos, mv);
+            
             if (mv == MoveValidity.NEW)
             {
                 BoundaryRequest();
