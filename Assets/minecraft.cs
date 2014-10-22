@@ -99,12 +99,12 @@ class WorldDraw
 
     public void AddPlayer(Guid player)
     {
-		if(players.ContainsKey(player))
-		{
-			// due to syncronization fail, this player may be already initialized
-			// this happens is world join is really close to world creation
-			return;
-		}
+        //if(players.ContainsKey(player))
+        //{
+        //    // due to syncronization fail, this player may be already initialized
+        //    // this happens is world join is really close to world creation
+        //    return;
+        //}
 
 		//MyAssert.Assert(w.playerPositions.ContainsKey(player));
         Point pos = w.GetPlayerPosition(player);
@@ -124,11 +124,11 @@ class WorldDraw
 
     public void RemovePlayer(Guid player)
     {
-        if(!players.ContainsKey(player))
-        {
-            // due to syncronization fail, this player may happen
-            return;
-        }
+        //if(!players.ContainsKey(player))
+        //{
+        //    // due to syncronization fail, this player may happen
+        //    return;
+        //}
 
         //MyAssert.Assert(w.playerPositions.ContainsKey(player));
         UnityEngine.Object.Destroy(players.GetValue(player));
@@ -145,8 +145,6 @@ public class minecraft : MonoBehaviour {
 	Dictionary<Point, WorldDraw> worlds = new Dictionary<Point, WorldDraw>();
 
 	Guid me;
-
-    Queue<Action> bufferedActions = new Queue<Action>();
 
     static internal Vector3 GetPositionAtGrid(World w, Point pos)
     {
@@ -203,20 +201,20 @@ public class minecraft : MonoBehaviour {
 				TrySpawn();
 		};
 
-        all.myClient.onMoveHook = (w, pl, pos, mt) => bufferedActions.Enqueue(() => OnMove(w, pl, pos, mt));
-        all.myClient.onPlayerLeaveHook = (w, pl) => bufferedActions.Enqueue(() => OnPlayerLeave(w.Position, pl));
+        all.myClient.onMoveHook = (w, pl, pos, mt) => OnMove(w, pl, pos, mt);
+        all.myClient.onPlayerLeaveHook = (w, pl) => OnPlayerLeave(w.Position, pl);
         
-        all.myClient.onNewWorldHook = (w) => bufferedActions.Enqueue(() => OnNewWorld(w));
-		all.onPlayerNewRealm = (inf, pd) => bufferedActions.Enqueue(() => 
+        all.myClient.onNewWorldHook = (w) => OnNewWorld(w);
+		all.onPlayerNewRealm = (inf, pd) =>
 		{
 			if(inf.id == me)
 				UpdateWorlds();
-		});
+		};
 
         if (all.host.MyAddress.Port == GlobalHost.nStartPort)
             all.StartServer();
 
-        all.sync.Start();
+        //all.sync.Start();
 
         var light = gameObject.AddComponent<Light>();
         light.type = LightType.Point;
@@ -401,16 +399,27 @@ public class minecraft : MonoBehaviour {
             //pa.Move(all.myClient.gameInfo.GetWorldByPos(Point.Zero), pos, MoveValidity.TELEPORT);
         }
     }
-	
-	// Update is called once per frame
+
+    void ProcessQueuedMessages()
+    {
+        Queue<Action> actions = all.sync.TakeAll();
+
+        while (actions.Any())
+        {
+            Action a = actions.Dequeue();
+            if (a != null)
+                a.Invoke();
+        }
+    }
+    
+    // Update is called once per frame
 	void Update () {
 
         lock (all.sync.syncLock)
         {
-            ProcessMovement();
+            ProcessQueuedMessages();
 
-            while(bufferedActions.Any())
-                bufferedActions.Dequeue().Invoke();
+            ProcessMovement();
 
             if(Input.GetKeyDown(KeyCode.Alpha1))
             {

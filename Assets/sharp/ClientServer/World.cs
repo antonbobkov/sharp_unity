@@ -277,6 +277,7 @@ namespace ServerClient
             tile.PlayerId = player;
             tile.Loot = false;
 
+            //Log.Dump(player, newPos, mv);
             onMoveHook(p, newPos, mv);
         }
 
@@ -472,8 +473,8 @@ namespace ServerClient
             myHost = globalHost.NewHost(info.host.hostname, AssignProcessor);
             myHost.onNewConnectionHook = ProcessNewConnection;
 
-            world.onLootHook = OnLootPickup;
-            world.onMoveHook = OnMoveHook;
+            newWorld.onLootHook = OnLootPickup;
+            newWorld.onMoveHook = OnMoveHook;
         }
         
         Node.MessageProcessor AssignProcessor(Node n)
@@ -914,6 +915,7 @@ namespace ServerClient
 
         void BoundaryRequest()
         {
+            //Log.Dump();
             Point myPosition = world.Position;
             foreach (Point delta in Point.SymmetricRange(new Point(1, 1)))
             {
@@ -921,7 +923,7 @@ namespace ServerClient
 
                 if (gameInfo.TryGetWorldByPos(newPos) == null)
                 {
-                    //Log.Dump(newPos));
+                    //Log.Dump(newPos);
                     myHost.ConnectSendMessage(serverHost, MessageType.NEW_WORLD_REQUEST, newPos);
                 }
             }

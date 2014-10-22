@@ -29,11 +29,8 @@ namespace ServerClient
         
         public Aggregator()
         {
-            lock (sync.syncLock)
-            {
-                host = new GlobalHost(sync.GetAsDelegate());
-                myClient = new Client(host, this);
-            }
+            host = new GlobalHost(sync.GetAsDelegate());
+            myClient = new Client(host, this);
         }
 
         public static IPEndPoint ParseParamForIP(List<string> param)

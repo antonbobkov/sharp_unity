@@ -30,6 +30,8 @@ namespace ServerClient
         BlockingCollection<Action> msgs = new BlockingCollection<Action>();
 
         public void Add(Action a) { msgs.Add(a); }
+        public Queue<Action> TakeAll() { return msgs.TakeAll(); }
+
         public Action<Action> GetAsDelegate() { return (a) => this.Add(a); }
 
         public void Start()

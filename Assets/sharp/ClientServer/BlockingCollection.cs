@@ -8,12 +8,14 @@ namespace ServerClient.Concurrent
 {
     class BlockingCollection<T>
     {
+        object syncLock = new object();
+        
         Queue<T> q = new Queue<T>();
         ManualResetEvent arrayReady = new ManualResetEvent(false);
 
         public void Add(T t)
         {
-            lock (q)
+            lock (syncLock)
             {
                 q.Enqueue(t);
                 arrayReady.Set();
@@ -23,7 +25,7 @@ namespace ServerClient.Concurrent
         {
             while (true)
             {
-                lock (q)
+                lock (syncLock)
                 {
                     if (q.Any())
                         return q.Dequeue();
@@ -33,6 +35,15 @@ namespace ServerClient.Concurrent
 
                 arrayReady.WaitOne();
             }
+        }
+        public Queue<T> TakeAll()
+        {
+            lock (syncLock)
+            {
+                Queue<T> ret = q;
+                q = new Queue<T>();
+                return ret;
+            }        
         }
     }
 }
