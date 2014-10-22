@@ -158,6 +158,13 @@ namespace ServerClient
 
         // ----- read only infromation -----
         public NodeRole GetRoleOfHost(OverlayEndpoint host) { return roles.GetValue(host); }
+        public NodeRole? TryGetRoleOfHost(OverlayEndpoint host)
+        {
+            if (roles.ContainsKey(host))
+                return roles[host];
+            else
+                return null;
+        }
 
         public PlayerInfo GetPlayerByHost(OverlayEndpoint host) { return playerByHost.GetValue(host); }
         public WorldInfo GetWorldByHost(OverlayEndpoint host) { return worldByHost.GetValue(host); }

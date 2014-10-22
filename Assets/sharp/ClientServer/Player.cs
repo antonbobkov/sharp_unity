@@ -84,6 +84,7 @@ namespace ServerClient
         GameInfo gameInfo;
         
         PlayerInfo info;
+        Node playerAgentNode = null;
 
         PlayerData playerData = new PlayerData(); 
 
@@ -120,10 +121,6 @@ namespace ServerClient
         
         Node.MessageProcessor AssignProcessor(Node n)
         {
-            OverlayHostName remoteName = n.info.remote.hostname;
-            if (remoteName == Client.hostName)
-                return (mt, stm, nd) => { throw new Exception("PlayerValidator not expecting messages from Client." + mt + " " + nd.info); };
-
             NodeRole role = gameInfo.GetRoleOfHost(n.info.remote);
 
             if (role == NodeRole.WORLD_VALIDATOR)
@@ -132,19 +129,29 @@ namespace ServerClient
                 return (mt, stm, nd) => ProcessWorldMessage(mt, stm, nd, inf);
             }
 
+            if (role == NodeRole.PLAYER)
+                return (mt, stm, nd) => { throw new Exception("PlayerValidator not expecting messages from PlayerAgent." + mt + " " + nd.info); };                
+
             throw new InvalidOperationException("WorldValidator.AssignProcessor unexpected connection " + n.info.remote + " " + role);
         }
         
         void ProcessNewConnection(Node n)
         {
-            OverlayHostName remoteName = n.info.remote.hostname;
-
-            if (remoteName == Client.hostName)
-                OnNewClient(n);
+            if (n.info.remote == info.playerHost)
+                OnAgentConnect(n);
         }
-        void OnNewClient(Node n)
+        void OnAgentConnect(Node n)
         {
-            n.SendMessage(MessageType.PLAYER_INFO_VAR, playerData, PlayerDataUpdate.INIT);
+            playerAgentNode = n;
+            MessageToAgent(MessageType.PLAYER_INFO_VAR, playerData, PlayerDataUpdate.INIT);
+        }
+
+        void MessageToAgent(MessageType mt, params object[] args)
+        {
+            if (playerAgentNode == null)
+                return;
+
+            playerAgentNode.SendMessage(mt, args);
         }
 
         void ProcessWorldMessage(MessageType mt, Stream stm, Node n, WorldInfo inf)
@@ -198,7 +205,7 @@ namespace ServerClient
 
                         playerData = modifiedData;
                         //Log.Dump(info, "unlocking got new data", pdu);
-                        myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_INFO_VAR, playerData, pdu);
+                        MessageToAgent(MessageType.PLAYER_INFO_VAR, playerData, pdu);
                     }
                     //else
                     //    Log.Dump(info, "unlocking - unchanged");
@@ -214,7 +221,7 @@ namespace ServerClient
             if ((playerData.worldPos != newWorld))
             {
                 playerData.worldPos = newWorld;
-                myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_INFO_VAR, playerData, PlayerDataUpdate.JOIN_WORLD);
+                MessageToAgent(MessageType.PLAYER_INFO_VAR, playerData, PlayerDataUpdate.JOIN_WORLD);
             }
         }
 
@@ -223,7 +230,7 @@ namespace ServerClient
             //Log.Dump();
 
             ++playerData.inventory.teleport;
-            myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_INFO_VAR, playerData, PlayerDataUpdate.INVENTORY_CHANGE);
+            MessageToAgent(MessageType.PLAYER_INFO_VAR, playerData, PlayerDataUpdate.INVENTORY_CHANGE);
         }
     }
 
@@ -232,43 +239,78 @@ namespace ServerClient
         OverlayHost myHost;
 
         OverlayEndpoint serverHost;
+        public GameInfo gameInfo;
 
-        public PlayerInfo info;
+        public readonly PlayerInfo info;
+        public PlayerData data = null;
 
-        public PlayerAgent(PlayerInfo info_, GlobalHost globalHost, OverlayEndpoint serverHost_)
+        public Action<PlayerData> onNewPlayerDataHook = (a) => { };
+        public Action<PlayerData> onPlayerNewRealm = (a) => { };
+
+        public PlayerAgent(PlayerInfo info_, GameInfo gameInfo_, GlobalHost globalHost, OverlayEndpoint serverHost_)
         {
             info = info_;
             serverHost = serverHost_;
+            gameInfo = gameInfo_;
 
             myHost = globalHost.NewHost(info.playerHost.hostname, AssignProcessor);
+
+            myHost.ConnectAsync(info.validatorHost);
 
             Log.LogWriteLine("Player Agent {0}", info.GetShortInfo());
         }
 
         Node.MessageProcessor AssignProcessor(Node n)
         {
-            return (mt, stm, nd) => { throw new Exception("PlayerAgent is not expecting messages." + mt + " " + nd.info); };
-            /*
-            OverlayHostName remoteName = n.info.remote.hostname;
-            if (remoteName == Client.hostName)
-
+            if (n.info.remote == serverHost)
+                return (mt, stm, nd) => { throw new Exception(Log.StDump(mt, nd.info.remote, "unexpected")); };
+            
+            if (n.info.remote == info.validatorHost)
+                return (mt, stm, nd) => ProcessPlayerValidatorMessage(mt, stm, nd);
+            
             NodeRole role = gameInfo.GetRoleOfHost(n.info.remote);
 
             if (role == NodeRole.WORLD_VALIDATOR)
-            {
-                WorldInfo inf = gameInfo.GetWorldByHost(n.info.remote);
-                return (mt, stm, nd) => ProcessWorldMessage(mt, stm, nd, inf);
-            }
+                return (mt, stm, nd) => { throw new Exception(Log.StDump(mt, nd.info.remote, "unexpected")); };
 
-            throw new InvalidOperationException("WorldValidator.AssignProcessor unexpected connection " + n.info.remote + " " + role);
-            */
+            throw new Exception(Log.StDump(n.info.remote, "unexpected"));
         }
 
+        void ProcessPlayerValidatorMessage(MessageType mt, Stream stm, Node n)
+        {
+            if (mt == MessageType.PLAYER_INFO_VAR)
+            {
+                PlayerData pd = Serializer.Deserialize<PlayerData>(stm);
+                PlayerDataUpdate pdu = Serializer.Deserialize<PlayerDataUpdate>(stm);
+                OnPlayerData(pd, pdu);
+            }
+            else
+                throw new Exception(Log.StDump(mt, "unexpected"));
+        }
+
+        void OnPlayerData(PlayerData pd, PlayerDataUpdate pdu)
+        {
+            if (pdu == PlayerDataUpdate.INIT)
+                MyAssert.Assert(data == null);
+            else
+                MyAssert.Assert(data != null);
+            
+            data = pd;
+            //Log.LogWriteLine(Log.StDump( inf, pd, pdu));
+
+            if (pdu == PlayerDataUpdate.INIT)
+                onNewPlayerDataHook(pd);
+            else if (pdu == PlayerDataUpdate.JOIN_WORLD || pdu == PlayerDataUpdate.SPAWN)
+                onPlayerNewRealm(pd);
+            else if (pdu != PlayerDataUpdate.INVENTORY_CHANGE)
+                throw new Exception(Log.StDump(pdu, "unexpected"));
+        }
+
+        
         public void Spawn()
         {
             myHost.ConnectSendMessage(serverHost, MessageType.SPAWN_REQUEST);
         }
-        
         public void Move(WorldInfo worldInfo, Point newPos, MoveValidity mv)
         {
             myHost.ConnectSendMessage(worldInfo.host, MessageType.MOVE_REQUEST, newPos, mv);

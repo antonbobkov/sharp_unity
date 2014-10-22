@@ -24,6 +24,9 @@ namespace ServerClient
         public Dictionary<Guid, PlayerValidator> playerValidators = new Dictionary<Guid, PlayerValidator>();
         public Dictionary<Guid, PlayerAgent> playerAgents = new Dictionary<Guid, PlayerAgent>();
 
+        public Action<PlayerInfo, PlayerData> onNewPlayerDataHook = (a, b) => { };
+        public Action<PlayerInfo, PlayerData> onPlayerNewRealm = (a, b) => { };
+        
         public Aggregator()
         {
             lock (sync.syncLock)
@@ -85,7 +88,12 @@ namespace ServerClient
         public void AddPlayerAgent(PlayerInfo info)
         {
             MyAssert.Assert(!playerAgents.ContainsKey(info.id));
-            PlayerAgent pa = new PlayerAgent(info, host, myClient.serverHost);
+
+            PlayerAgent pa = new PlayerAgent(info, myClient.gameInfo, host, myClient.serverHost);
+
+            pa.onNewPlayerDataHook = (pd) => onNewPlayerDataHook(pa.info, pd);
+            pa.onPlayerNewRealm = (pd) => onPlayerNewRealm(pa.info, pd);
+            
             playerAgents.Add(info.id, pa);
         }
 

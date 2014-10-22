@@ -24,7 +24,6 @@ namespace ServerClient
         Aggregator all;
 
         public Dictionary<Point, World> knownWorlds = new Dictionary<Point, World>();
-        public Dictionary<Guid, PlayerData> knownPlayers = new Dictionary<Guid, PlayerData>();
 
         public HashSet<Guid> myPlayerAgents = new HashSet<Guid>();
 
@@ -36,9 +35,6 @@ namespace ServerClient
         public Action<World, PlayerInfo, Point, MoveValidity> onMoveHook = (a, b, c, d) => { };
         public Action<World, PlayerInfo> onPlayerLeaveHook = (a, b) => { };
         
-        public Action<PlayerInfo, PlayerData> onNewPlayerDataHook = (a, b) => { };
-        public Action<PlayerInfo, PlayerData> onPlayerNewRealm = (a, b) => { };
-
         public Client(GlobalHost globalHost, Aggregator all_)
         {
             all = all_;
@@ -66,12 +62,6 @@ namespace ServerClient
             {
                 WorldInfo inf = gameInfo.GetWorldByHost(n.info.remote);
                 return (mt, stm, nd) => ProcessWorldMessage(mt, stm, nd, inf);
-            }
-
-            if (role == NodeRole.PLAYER_VALIDATOR)
-            {
-                PlayerInfo inf = gameInfo.GetPlayerByHost(n.info.remote);
-                return (mt, stm, nd) => ProcessPlayerValidatorMessage(mt, stm, nd, inf);
             }
 
             throw new InvalidOperationException("Client.AssignProcessor unexpected connection " + n.info.remote + " " + role);
@@ -131,17 +121,6 @@ namespace ServerClient
             else
                 throw new Exception(Log.StDump(mt, inf, "unexpected"));
         }
-        void ProcessPlayerValidatorMessage(MessageType mt, Stream stm, Node n, PlayerInfo inf)
-        {
-            if (mt == MessageType.PLAYER_INFO_VAR)
-            {
-                PlayerData pd = Serializer.Deserialize<PlayerData>(stm);
-                PlayerDataUpdate pdu = Serializer.Deserialize<PlayerDataUpdate>(stm);
-                OnPlayerData(inf, pd, pdu);
-            }
-            else
-                throw new Exception("Client.ProcessPlayerValidatorMessage bad message type " + mt.ToString());
-        }
 
         void ProcessNewConnection(Node n)
         {
@@ -189,7 +168,6 @@ namespace ServerClient
         {
             //gameInfo.AddPlayer(inf);
             Log.LogWriteLine("New player\n{0}", inf.GetFullInfo());
-            myHost.ConnectAsync(inf.validatorHost);
 
             if (myPlayerAgents.Contains(inf.id))
                 all.AddPlayerAgent(inf);
@@ -205,25 +183,13 @@ namespace ServerClient
         void OnNewWorldVar(World w)
         {
             knownWorlds.Add(w.Position, w);
-            w.onMoveHook = (player, pos, mv) => OnMove(w, player, pos, mv);
+            w.onMoveHook = (player, pos, mv) => onMoveHook(w, player, pos, mv);
             w.onPlayerLeaveHook = (player) => onPlayerLeaveHook(w, player);
 
             onNewWorldHook(w);
 
             //Log.LogWriteLine("New world {0}", w.Position);
             //w.ConsoleOut();
-        }
-        void OnPlayerData(PlayerInfo inf, PlayerData pd, PlayerDataUpdate pdu)
-        {
-            knownPlayers[inf.id] = pd; 
-            //Log.LogWriteLine(Log.StDump( inf, pd, pdu));
-            
-            if(pdu == PlayerDataUpdate.INIT)
-                onNewPlayerDataHook(inf, pd);
-            else if (pdu == PlayerDataUpdate.JOIN_WORLD || pdu == PlayerDataUpdate.SPAWN)
-                onPlayerNewRealm(inf, pd);
-            else if(pdu != PlayerDataUpdate.INVENTORY_CHANGE)
-                throw new Exception(Log.StDump(pdu, "unexpected"));
         }
 
         void OnPlayerValidateRequest(Guid actionId, PlayerInfo info)
@@ -255,15 +221,6 @@ namespace ServerClient
         public void Validate()
         {
             server.SendMessage(MessageType.NEW_VALIDATOR);
-        }
-
-        void OnMove(World w, PlayerInfo player, Point newPos, MoveValidity mv)
-        {
-            onMoveHook.Invoke(w, player, newPos, mv);
-        }
-        void OnPlayerLeave(World w, PlayerInfo player)
-        {
-            onPlayerLeaveHook.Invoke(w, player);
         }
     }
 }

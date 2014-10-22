@@ -56,17 +56,16 @@ namespace ServerClient
 
             Client myClient = all.myClient;
 
-            if (!myClient.knownPlayers.ContainsKey(playerId))
-                return longSleep;
-
             if (!all.playerAgents.ContainsKey(playerId))
                 return longSleep;
 
             MyAssert.Assert(myClient.myPlayerAgents.Contains(playerId));
 
             PlayerAgent pa = all.playerAgents.GetValue(playerId);
-            
-            PlayerData playerData = myClient.knownPlayers.GetValue(playerId);
+            PlayerData playerData = pa.data;
+
+            if (playerData == null)
+                return longSleep;
 
             if (!playerData.connected)
             {

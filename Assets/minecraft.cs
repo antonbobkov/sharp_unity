@@ -197,7 +197,7 @@ public class minecraft : MonoBehaviour {
                 TrySpawn();
         };
 
-		all.myClient.onNewPlayerDataHook = (inf, pd) =>
+		all.onNewPlayerDataHook = (inf, pd) =>
 		{
 			if (inf.id == me)
 				TrySpawn();
@@ -207,7 +207,7 @@ public class minecraft : MonoBehaviour {
         all.myClient.onPlayerLeaveHook = (w, pl) => bufferedActions.Enqueue(() => OnPlayerLeave(w.Position, pl));
         
         all.myClient.onNewWorldHook = (w) => bufferedActions.Enqueue(() => OnNewWorld(w));
-		all.myClient.onPlayerNewRealm = (inf, pd) => bufferedActions.Enqueue(() => 
+		all.onPlayerNewRealm = (inf, pd) => bufferedActions.Enqueue(() => 
 		{
 			if(inf.id == me)
 				UpdateWorlds();
@@ -235,7 +235,7 @@ public class minecraft : MonoBehaviour {
         {
             PlayerAgent pa = all.playerAgents.GetValue(me);
             all.myClient.knownWorlds.GetValue(new Point(0, 0));
-            PlayerData pd = all.myClient.knownPlayers.GetValue(me);
+            PlayerData pd = pa.data;
 
             if (pd.connected)
                 return false;
@@ -260,21 +260,19 @@ public class minecraft : MonoBehaviour {
 		//all.sync.Add(null);
 	}
 
-    void UpdateWorlds()
+    void UpdateWorlds(Point suggestedPos = default(Point))
     {
-        Point centerWorldPos = new Point(0,0);
-
-        PlayerData myData = all.myClient.knownPlayers.TryGetValue(me);
+        PlayerData myData = all.playerAgents.GetValue(me).data;
         if (myData != null)
         {
             if (myData.connected)
-                centerWorldPos = myData.worldPos;
+                suggestedPos = myData.worldPos;
         }
 
         Dictionary<Point, WorldDraw> newWorlds = new Dictionary<Point, WorldDraw>();
         foreach (Point delta in Point.SymmetricRange(new Point(1, 1)))
         {
-            Point targetPos = centerWorldPos + delta;
+            Point targetPos = suggestedPos + delta;
             World worldCandidate = all.myClient.knownWorlds.TryGetValue(targetPos);
             if (worldCandidate == null)
                 continue;
@@ -313,8 +311,8 @@ public class minecraft : MonoBehaviour {
 	{
 		//Log.LogWriteLine(Log.Dump(this, w.info, player, player.id, mv));
 
-        //if (mv == MoveType.JOIN && player.id == me)
-        //    UpdateWorlds(w.Position);
+        if (mv == MoveValidity.NEW && player.id == me)
+            UpdateWorlds(w.Position);
 
         if (!worlds.ContainsKey(w.Position))
             return;
@@ -370,7 +368,7 @@ public class minecraft : MonoBehaviour {
             return;
 
         PlayerAgent pa = all.playerAgents.GetValue(me);
-        PlayerData pd = all.myClient.knownPlayers.GetValue(me);
+        PlayerData pd = pa.data;
         if (!pd.connected)
             return;
         World w = all.myClient.knownWorlds.GetValue(pd.worldPos);
