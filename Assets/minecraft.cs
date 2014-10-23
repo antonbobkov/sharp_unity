@@ -49,7 +49,7 @@ class WorldDraw
 				GameObject wall = GameObject.CreatePrimitive(PrimitiveType.Cube);
 				walls [pos] = wall;
 				
-				wall.transform.position = minecraft.GetPositionAtGrid(w, pos);
+				wall.transform.position = minecraft.GetPositionAtGrid(w.Position, pos);
 				if(!t.Spawn)
                     wall.renderer.material.color = new Color(.3f, .3f, .3f);
                 else
@@ -62,7 +62,7 @@ class WorldDraw
 				
 				loot.transform.localScale = new Vector3(.5f, .5f, 1);
 				loot.renderer.material.color = Color.blue;
-				loot.transform.position = minecraft.GetPositionAtGrid(w, pos);
+				loot.transform.position = minecraft.GetPositionAtGrid(w.Position, pos);
 				loot.transform.rotation = Quaternion.AngleAxis(15f, UnityEngine.Random.onUnitSphere);
 				loot.AddComponent<RotateSlowly>();
 			}
@@ -70,7 +70,7 @@ class WorldDraw
 
 		background = GameObject.CreatePrimitive(PrimitiveType.Quad);
 		background.transform.localScale = new Vector3(sz.x, sz.y, 1);
-		background.transform.position = minecraft.GetPositionAtGrid(w, new Point(0,0)) + new Vector3(sz.x-1, sz.y-1, 1)/2;
+		background.transform.position = minecraft.GetPositionAtGrid(w.Position, new Point(0,0)) + new Vector3(sz.x-1, sz.y-1, 1)/2;
 		background.renderer.material.color = new Color(.7f, .7f, .7f);
 
         if (!continuousBackground)
@@ -118,7 +118,7 @@ class WorldDraw
             (float)r.NextDouble(),
             (float)r.NextDouble());
 
-        avatar.transform.position = minecraft.GetPositionAtGrid(w, pos);
+        avatar.transform.position = minecraft.GetPositionAtGrid(w.Position, pos);
         players.Add(player, avatar);
     }
 
@@ -146,23 +146,15 @@ public class minecraft : MonoBehaviour {
 
 	Guid me;
 
-    static internal Vector3 GetPositionAtGrid(World w, Point pos)
+    static internal Vector3 GetPositionAtGrid(Point worldPos, Point pos)
     {
-        Point worldPos = w.Position;
-        Point worldSize = w.Size;
-
-        Point cornerPos = new Point(worldPos.x * worldSize.x, worldPos.y * worldSize.y);
+        Point cornerPos = Point.Scale(worldPos, World.worldSize);
         return new Vector3(cornerPos.x + pos.x, cornerPos.y + pos.y, 0);
     }
-    static internal Vector3 GetPositionAtGrid(Point worldPos, Point worldSize, Point pos)
-    {
-        Point cornerPos = new Point(worldPos.x * worldSize.x, worldPos.y * worldSize.y);
-        return new Vector3(cornerPos.x + pos.x, cornerPos.y + pos.y, 0);
-    }
-	static internal Point GetPositionAtMap(World w, Point pos)
+    static internal Point GetPositionAtMap(Point worldPos, Point pos)
 	{
-        Point worldPos = new Point(w.Position.x * w.Size.x, w.Position.y * w.Size.y);
-		return pos - worldPos;
+        Point cornerPos = Point.Scale(worldPos, World.worldSize);
+        return pos - cornerPos;
 	}
 
     const float cameraDistance = 20f;
@@ -292,7 +284,7 @@ public class minecraft : MonoBehaviour {
     void OnNewWorld(World w)
     {
 		UpdateWorlds();
-        Log.LogWriteLine("Unity : OnNewWorld " + w.Position);
+        //Log.LogWriteLine("Unity : OnNewWorld " + w.Position);
 
         if (w.Position == new Point(0, 0))
             TrySpawn();
@@ -334,7 +326,7 @@ public class minecraft : MonoBehaviour {
         }
 
         GameObject movedPlayer = wd.players.GetValue(player.id);
-        movedPlayer.transform.position = GetPositionAtGrid(w, newPos);
+        movedPlayer.transform.position = GetPositionAtGrid(w.Position, newPos);
 
         if (player.id == me)
             UpdateCamera(movedPlayer);
@@ -393,7 +385,7 @@ public class minecraft : MonoBehaviour {
             xy.Raycast(ray, out distance);
             var tile = ray.GetPoint(distance) + new Vector3(0, 0, 0);
             Point pos = new Point(Convert.ToInt32(tile.x), Convert.ToInt32(tile.y));
-			pos = GetPositionAtMap(w, pos);
+			pos = GetPositionAtMap(w.Position, pos);
             Log.LogWriteLine("Teleporting to {0}", pos);
             pa.Move(w.Info, pos, MoveValidity.TELEPORT);
             //pa.Move(all.myClient.gameInfo.GetWorldByPos(Point.Zero), pos, MoveValidity.TELEPORT);

@@ -46,6 +46,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Aggregator.cs" />
+    <Compile Include="Ai.cs" />
     <Compile Include="BlockingCollection.cs" />
     <Compile Include="Client.cs" />
     <Compile Include="Game.cs" />

@@ -301,7 +301,7 @@ namespace ServerClient
             return w;
         }
 
-        static readonly Point worldSize = new Point(25, 15);
+        static public readonly Point worldSize = new Point(25, 15);
         private void Generate(WorldInitializer init)
         {
             ServerClient.MyRandom seededRandom = new ServerClient.MyRandom(init.seed);
@@ -389,16 +389,20 @@ namespace ServerClient
 
             return ret;
         }
-        static public RealmMove BoundaryMove(Point p, World w)
+        static public RealmMove BoundaryMove(Point p, Point worldPos)
         {
             int px = p.x;
             int py = p.y;
 
-            Point ret = new Point(BoundaryMove(ref px, w.Size.x), BoundaryMove(ref py, w.Size.y));
+            Point ret = new Point(BoundaryMove(ref px, World.worldSize.x), BoundaryMove(ref py, World.worldSize.y));
 
             p = new Point(px, py);
 
-            return new RealmMove() { newPosition = p, newWorld = ret + w.Position };
+            return new RealmMove() { newPosition = p, newWorld = ret + worldPos };
+        }
+        static public Point Shift(Point worldPos, Point posInWorld)
+        {
+            return Point.Scale(worldPos, World.worldSize) + posInWorld;
         }
         static public void ConsoleOut(World w, GameInfo gameInfo)
         {
@@ -709,7 +713,7 @@ namespace ServerClient
 
                 Point currentRealmPos = world.Position;
 
-                RealmMove wm = WorldTools.BoundaryMove(newPos, world);
+                RealmMove wm = WorldTools.BoundaryMove(newPos, world.Position);
                 newPos = wm.newPosition;
                 Point targetRealmPos = wm.newWorld;
 

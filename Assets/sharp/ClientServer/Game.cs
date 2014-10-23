@@ -47,6 +47,9 @@ namespace ServerClient
         }
 
         public static Point Zero { get { return new Point(0, 0); } }
+        public static Point One { get { return new Point(1, 1); } }
+
+        public static Point Scale(Point p, Point scale) { return new Point(p.x * scale.x, p.y * scale.y); }
     }
 
 

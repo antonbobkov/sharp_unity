@@ -49,6 +49,7 @@
      <Compile Include="Assets\minecraft.cs" />
      <Compile Include="Assets\script.cs" />
      <Compile Include="Assets\sharp\ClientServer\Aggregator.cs" />
+     <Compile Include="Assets\sharp\ClientServer\Ai.cs" />
      <Compile Include="Assets\sharp\ClientServer\BlockingCollection.cs" />
      <Compile Include="Assets\sharp\ClientServer\Client.cs" />
      <Compile Include="Assets\sharp\ClientServer\Game.cs" />
