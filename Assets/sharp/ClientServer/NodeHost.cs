@@ -120,10 +120,10 @@ namespace ServerClient
 
             sl.TerminateThread();
         }
-        public OverlayHost NewHost(OverlayHostName hostName, OverlayHost.ProcessorAssigner messageProcessor)
+        public OverlayHost NewHost(OverlayHostName hostName, OverlayHost.ProcessorAssigner messageProcessor, MemoryStream extraHandshakeInfo)
         {
             MyAssert.Assert(!hosts.ContainsKey(hostName));
-            OverlayHost host = new OverlayHost(hostName, MyAddress, processQueue, messageProcessor);
+            OverlayHost host = new OverlayHost(hostName, MyAddress, processQueue, messageProcessor, extraHandshakeInfo);
             hosts.Add(hostName, host);
 
             //Log.LogWriteLine("New host: {0}", hostName);
@@ -134,11 +134,25 @@ namespace ServerClient
 
     class OverlayHost
     {
+        static public MemoryStream GenerateHandshake(NodeRole nr, params object[] info)
+        {
+            MemoryStream ms = new MemoryStream();
+
+            List<object> args = new List<object>();
+            args.Add(nr);
+            args.AddRange(info);
+
+            Serializer.Serialize(ms, args.ToArray());
+
+            return ms;
+        }
+
         OverlayHostName hostName;
+        MemoryStream extraHandshakeInfo;
 
         Dictionary<OverlayEndpoint, Node> nodes = new Dictionary<OverlayEndpoint, Node>();
 
-        public delegate Node.MessageProcessor ProcessorAssigner(Node n);
+        public delegate Node.MessageProcessor ProcessorAssigner(Node n, MemoryStream extraInfo);
         
         public Action<Node> onNewConnectionHook = (n) => { };
         
@@ -150,12 +164,14 @@ namespace ServerClient
         public OverlayEndpoint Address { get { return new OverlayEndpoint(IpAddress, hostName); } }
 
         public OverlayHost(OverlayHostName hostName_, IPEndPoint address_, Action<Action> processQueue_,
-            ProcessorAssigner messageProcessorAssigner_)
+            ProcessorAssigner messageProcessorAssigner_, MemoryStream extraHandshakeInfo_)
         {
             hostName = hostName_;
             IpAddress = address_;
             processQueue = processQueue_;
             messageProcessorAssigner = messageProcessorAssigner_;
+
+            extraHandshakeInfo = extraHandshakeInfo_;
         }
 
         /*
@@ -174,6 +190,9 @@ namespace ServerClient
             try
             {
                 MyAssert.Assert(info.local.hostname == hostName);
+
+                MemoryStream remoteExtraInfo = info.ExtraInfo;
+                info.ExtraInfo = extraHandshakeInfo;
 
                 Node targetNode = FindNode(info.remote);
 
@@ -195,7 +214,7 @@ namespace ServerClient
                     return;
                 }
 
-                targetNode.AcceptReaderConnection(sck, ProcessMessageWrap(messageProcessorAssigner(targetNode)));
+                targetNode.AcceptReaderConnection(sck, ProcessMessageWrap(messageProcessorAssigner(targetNode, remoteExtraInfo)));
 
                 if (newConnection)
                     onNewConnectionHook.Invoke(targetNode);
@@ -246,7 +265,7 @@ namespace ServerClient
         {
             Node targetNode = FindNode(theirInfo);
 
-            Handshake info = new Handshake(new OverlayEndpoint(IpAddress, hostName), theirInfo);
+            Handshake info = new Handshake(Address, theirInfo, extraHandshakeInfo);
 
             bool newConnection = (targetNode == null);
             if (newConnection)

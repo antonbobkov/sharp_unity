@@ -39,32 +39,32 @@ namespace ServerClient
         {
             all = all_;
 
-            myHost = globalHost.NewHost(Client.hostName, AssignProcessor);
+            myHost = globalHost.NewHost(Client.hostName, AssignProcessor,
+                OverlayHost.GenerateHandshake(NodeRole.CLIENT));
+
             myHost.onNewConnectionHook = ProcessNewConnection;
         }
 
-
-        Node.MessageProcessor AssignProcessor(Node n)
+        Node.MessageProcessor AssignProcessor(Node n, MemoryStream nodeInfo)
         {
-            OverlayHostName remoteName = n.info.remote.hostname;
-            if (remoteName == Client.hostName)
+            NodeRole role = Serializer.Deserialize<NodeRole>(nodeInfo);
+
+            if (role == NodeRole.CLIENT)
                 return ProcessClientMessage;
 
-            if (remoteName == Server.hostName)
+            if (role == NodeRole.SERVER)
             {
                 MyAssert.Assert(serverHost == n.info.remote);
                 return ProcessServerMessage;
             }
 
-            NodeRole role = gameInfo.GetRoleOfHost(n.info.remote);
-
             if (role == NodeRole.WORLD_VALIDATOR)
             {
-                WorldInfo inf = gameInfo.GetWorldByHost(n.info.remote);
+                WorldInfo inf = Serializer.Deserialize<WorldInfo>(nodeInfo);
                 return (mt, stm, nd) => ProcessWorldMessage(mt, stm, nd, inf);
             }
 
-            throw new InvalidOperationException("Client.AssignProcessor unexpected connection " + n.info.remote + " " + role);
+            throw new Exception(Log.StDump(n.info, role, "unexpected"));
         }
         void ProcessClientMessage(MessageType mt, Stream stm, Node n)
         {

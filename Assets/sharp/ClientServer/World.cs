@@ -474,44 +474,44 @@ namespace ServerClient
             Action<ForwardFunctionCall> onChange = (ffc) => myHost.BroadcastGroup(Client.hostName, MessageType.WORLD_VAR_CHANGE, ffc.Serialize());
             world = new ForwardProxy<World>(newWorld, onChange).GetProxy();
 
-            myHost = globalHost.NewHost(info.host.hostname, AssignProcessor);
+            myHost = globalHost.NewHost(info.host.hostname, AssignProcessor,
+                OverlayHost.GenerateHandshake(NodeRole.WORLD_VALIDATOR, info));
             myHost.onNewConnectionHook = ProcessNewConnection;
 
             newWorld.onLootHook = OnLootPickup;
             newWorld.onMoveHook = OnMoveHook;
         }
-        
-        Node.MessageProcessor AssignProcessor(Node n)
+
+        Node.MessageProcessor AssignProcessor(Node n, MemoryStream nodeInfo)
         {
-            OverlayHostName remoteName = n.info.remote.hostname;
-            if (remoteName == Client.hostName)
+            NodeRole role = Serializer.Deserialize<NodeRole>(nodeInfo);
+
+            if (role == NodeRole.CLIENT)
                 return (mt, stm, nd) => { throw new Exception(Log.StDump( n.info, mt, "not expecting messages")); };
-            if (remoteName == Server.hostName)
+
+            if (n.info.remote == serverHost)
                 return ProcessServerMessage;
             
-            NodeRole role = gameInfo.GetRoleOfHost(n.info.remote);
-
             if (role == NodeRole.PLAYER_VALIDATOR)
             {
-                PlayerInfo inf = gameInfo.GetPlayerByHost(n.info.remote);
+                PlayerInfo inf = Serializer.Deserialize<PlayerInfo>(nodeInfo);
                 return (mt, stm, nd) => ProcessPlayerValidatorMessage(mt, stm, nd, inf);
             }
             
             if (role == NodeRole.PLAYER_AGENT)
             {
-                //PlayerInfo inf = gameInfo.GetPlayerByHost(n.info.remote);
-                //return (mt, stm, nd) => ProcessPlayerMessage(mt, stm, nd, inf);
+                PlayerInfo inf = Serializer.Deserialize<PlayerInfo>(nodeInfo);
+                return (mt, stm, nd) => ProcessPlayerMessage(mt, stm, nd, inf);
 
-                return ProcessGenericMessage;
             }
 
             if (role == NodeRole.WORLD_VALIDATOR)
             {
-                WorldInfo inf = gameInfo.GetWorldByHost(n.info.remote);
+                WorldInfo inf = Serializer.Deserialize<WorldInfo>(nodeInfo);
                 return (mt, stm, nd) => ProcessWorldValidatorMessage(mt, stm, nd, inf);
             }
 
-            throw new InvalidOperationException(Log.StDump( n.info, role, "unexpected connection"));
+            throw new Exception(Log.StDump(n.info, role, "unexpected"));
         }
         
         void ProcessNewConnection(Node n)
@@ -525,31 +525,6 @@ namespace ServerClient
         void OnNewClient(Node n)
         {
             n.SendMessage(MessageType.WORLD_VAR_INIT, world.Serialize());
-        }
-
-        Dictionary<OverlayEndpoint, Node.MessageProcessor> messageRelay = new Dictionary<OverlayEndpoint, Node.MessageProcessor>();
-        void ProcessGenericMessage(MessageType mt, Stream stm, Node n)
-        {
-            OverlayEndpoint remote = n.info.remote;
-
-            if (messageRelay.ContainsKey(remote))
-            {
-                messageRelay[remote].Invoke(mt, stm, n);
-                return;
-            }
-
-            if (mt != MessageType.ROLE)
-                throw new Exception(Log.StDump(mt, remote, "unexpected"));
-
-            NodeRole nr = Serializer.Deserialize<NodeRole>(stm);
-
-            if (nr == NodeRole.PLAYER_AGENT)
-            {
-                PlayerInfo playerInfo = Serializer.Deserialize<PlayerInfo>(stm);
-                messageRelay.Add(remote, (message, stream, node) => ProcessPlayerMessage(message, stream, node, playerInfo));
-            }
-            else
-                throw new Exception(Log.StDump(nr, remote, "unexpected"));
         }
 
         void ProcessPlayerValidatorMessage(MessageType mt, Stream stm, Node n, PlayerInfo inf)

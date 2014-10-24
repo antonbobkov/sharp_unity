@@ -92,7 +92,20 @@ namespace ServerClient
 
                     Handshake info = Serializer.Deserialize<Handshake>(Serializer.DeserializeChunk(connectionStream));
 
-                    processConnection(new Handshake(info.remote, info.local), sckRead);
+                    Serializer.lastRead.GetData();
+                    
+                    // swap
+                    OverlayEndpoint remote = info.local;
+                    OverlayEndpoint local = info.remote;
+
+                    info.remote = remote;
+                    info.local = local;
+                    
+                    // read extra information
+                    if (info.hasExtraInfo)
+                        info.ExtraInfo = Serializer.DeserializeChunk(connectionStream);
+
+                    processConnection(info, sckRead);
                 }
                 catch (Exception e)
                 {

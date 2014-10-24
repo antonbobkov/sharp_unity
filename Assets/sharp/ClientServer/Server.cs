@@ -148,60 +148,33 @@ namespace ServerClient
 
         public Server(GlobalHost globalHost)
         {
-            myHost = globalHost.NewHost(Server.hostName, AssignProcessor);
+            myHost = globalHost.NewHost(Server.hostName, AssignProcessor,
+                OverlayHost.GenerateHandshake(NodeRole.SERVER));
             myHost.onNewConnectionHook = ProcessNewConnection;
 
             Action<ForwardFunctionCall> onChange = (ffc) => myHost.BroadcastGroup(Client.hostName, MessageType.GAME_INFO_VAR_CHANGE, ffc.Serialize());
             gameInfo = new ForwardProxy<GameInfo>(new GameInfo(), onChange).GetProxy();
         }
 
-        Node.MessageProcessor AssignProcessor(Node n)
+        Node.MessageProcessor AssignProcessor(Node n, MemoryStream nodeInfo)
         {
-            OverlayHostName remoteName = n.info.remote.hostname;
-            if (remoteName == Client.hostName)
-                return ProcessClientMessage;
+            NodeRole role = Serializer.Deserialize<NodeRole>(nodeInfo);
 
-            NodeRole? role = gameInfo.TryGetRoleOfHost(n.info.remote);
+            if (role == NodeRole.CLIENT)
+                return ProcessClientMessage;
 
             if (role == NodeRole.WORLD_VALIDATOR)
                 return ProcessWorldMessage;
 
             if (role == NodeRole.PLAYER_AGENT)
             {
-                //PlayerInfo inf = gameInfo.GetPlayerByHost(n.info.remote);
-                //return (mt, stm, nd) => ProcessPlayerMessage(mt, stm, nd, inf);
-
-                return ProcessGenericMessage;
+                PlayerInfo inf = Serializer.Deserialize<PlayerInfo>(nodeInfo);
+                return (mt, stm, nd) => ProcessPlayerMessage(mt, stm, nd, inf);
             }
 
-            throw new InvalidOperationException("Server.AssignProcessor unexpected connection " + n.info.remote + " " + role);
+            throw new Exception(Log.StDump(n.info, role, "unexpected"));
         }
 
-        Dictionary<OverlayEndpoint, Node.MessageProcessor> messageRelay = new Dictionary<OverlayEndpoint, Node.MessageProcessor>();
-        void ProcessGenericMessage(MessageType mt, Stream stm, Node n)
-        {
-            OverlayEndpoint remote = n.info.remote;
-
-            if (messageRelay.ContainsKey(remote))
-            {
-                messageRelay[remote].Invoke(mt, stm, n);
-                return;
-            }
-
-            if (mt != MessageType.ROLE)
-                throw new Exception(Log.StDump(mt, remote, "unexpected"));
-
-            NodeRole nr = Serializer.Deserialize<NodeRole>(stm);
-
-            if (nr == NodeRole.PLAYER_AGENT)
-            {
-                PlayerInfo playerInfo = Serializer.Deserialize<PlayerInfo>(stm);
-                messageRelay.Add(remote, (message, stream, node) => ProcessPlayerMessage(message, stream, node, playerInfo));
-            }
-            else
-                throw new Exception(Log.StDump(nr, remote, "unexpected"));
-        }
-        
         void ProcessClientMessage(MessageType mt, Stream stm, Node n)
         {
             if (mt == MessageType.NEW_PLAYER_REQUEST)

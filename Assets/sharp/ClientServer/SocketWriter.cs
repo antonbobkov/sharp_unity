@@ -53,6 +53,13 @@ namespace ServerClient
             bcMessages.Add(stm => Serializer.SendStream(stm, ms));
         }
 
+        public void SendStream(MemoryStream stream)
+        {
+            MemoryStream ms = new MemoryStream(stream.ToArray()); // copy for sync
+
+            bcMessages.Add(stm => Serializer.SendStream(stm, ms));
+        }
+
         public void TerminateThread()
         {
             bcMessages.Add(null);

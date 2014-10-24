@@ -82,11 +82,28 @@ namespace ServerClient
         public OverlayEndpoint local;
 
         public Handshake() { }
-        public Handshake(OverlayEndpoint local_, OverlayEndpoint remote_)
+        public Handshake(OverlayEndpoint local_, OverlayEndpoint remote_, MemoryStream ExtraInfo_)
         {
             remote = remote_;
             local = local_;
+
+            ExtraInfo = ExtraInfo_;
         }
+
+        private MemoryStream _extraInfo = null;
+        
+        [XmlIgnoreAttribute]
+        public MemoryStream ExtraInfo
+        {
+            get { return _extraInfo; }
+            set
+            {
+                _extraInfo = value;
+                hasExtraInfo = (_extraInfo != null);
+            }
+        }
+        
+        public bool hasExtraInfo = false;
 
         public override string ToString()
         {
@@ -122,6 +139,9 @@ namespace ServerClient
 
             // queue up
             SendMessage(MessageType.HANDSHAKE, info);
+
+            if (info.hasExtraInfo)
+                writer.SendStream(info.ExtraInfo);
         }
 
         public bool IsClosed { get; private set; }

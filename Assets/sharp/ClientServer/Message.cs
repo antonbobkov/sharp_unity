@@ -26,7 +26,7 @@ namespace ServerClient
     SPAWN_REQUEST,
     RESPONSE, LOCK_VAR, UNLOCK_VAR};
     
-    public enum NodeRole { PLAYER_AGENT, PLAYER_VALIDATOR, WORLD_VALIDATOR };
+    public enum NodeRole { CLIENT, SERVER, PLAYER_AGENT, PLAYER_VALIDATOR, WORLD_VALIDATOR };
 
     public enum WorldMove { LEAVE, JOIN };
 
