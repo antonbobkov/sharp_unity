@@ -99,12 +99,8 @@ class WorldDraw
 
     public void AddPlayer(Guid player)
     {
-        //if(players.ContainsKey(player))
-        //{
-        //    // due to syncronization fail, this player may be already initialized
-        //    // this happens is world join is really close to world creation
-        //    return;
-        //}
+        if (players.ContainsKey(player))
+            return;
 
 		//MyAssert.Assert(w.playerPositions.ContainsKey(player));
         Point pos = w.GetPlayerPosition(player);
@@ -124,11 +120,8 @@ class WorldDraw
 
     public void RemovePlayer(Guid player)
     {
-        //if(!players.ContainsKey(player))
-        //{
-        //    // due to syncronization fail, this player may happen
-        //    return;
-        //}
+        if (!players.ContainsKey(player))
+            return;
 
         //MyAssert.Assert(w.playerPositions.ContainsKey(player));
         UnityEngine.Object.Destroy(players.GetValue(player));

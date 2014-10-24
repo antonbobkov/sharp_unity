@@ -11,6 +11,96 @@ using System.Diagnostics;
 
 namespace ServerClient
 {
+    [Serializable]
+    public class GameInfoSerialized
+    {
+        public PlayerInfo[] players;
+        public WorldInfo[] worlds;
+
+        public GameInfoSerialized() { }
+    }
+
+    class GameInfo : MarshalByRefObject
+    {
+        // ----- constructors -----
+        public GameInfo() { }
+
+        public GameInfoSerialized Serialize()
+        {
+            return new GameInfoSerialized() { players = playerById.Values.ToArray(), worlds = worldByPoint.Values.ToArray() };
+        }
+        public void Deserialize(GameInfoSerialized info)
+        {
+            foreach (PlayerInfo p in info.players)
+                NET_AddPlayer(p);
+            foreach (WorldInfo w in info.worlds)
+                NET_AddWorld(w);
+        }
+
+        // ----- read only infromation -----
+        public NodeRole GetRoleOfHost(OverlayEndpoint host) { return roles.GetValue(host); }
+        public NodeRole? TryGetRoleOfHost(OverlayEndpoint host)
+        {
+            if (roles.ContainsKey(host))
+                return roles[host];
+            else
+                return null;
+        }
+
+        public PlayerInfo GetPlayerByHost(OverlayEndpoint host) { return playerByHost.GetValue(host); }
+        public WorldInfo GetWorldByHost(OverlayEndpoint host) { return worldByHost.GetValue(host); }
+
+        public PlayerInfo GetPlayerById(Guid player) { return playerById.GetValue(player); }
+        public WorldInfo GetWorldByPos(Point pos) { return worldByPoint.GetValue(pos); }
+
+        public WorldInfo? TryGetWorldByPos(Point pos)
+        {
+            if (worldByPoint.ContainsKey(pos))
+                return worldByPoint[pos];
+            else
+                return null;
+        }
+
+        public OverlayEndpoint GetPlayerHost(Guid player) { return playerById.GetValue(player).playerHost; }
+        public OverlayEndpoint GetPlayerValidatorHost(Guid player) { return playerById.GetValue(player).validatorHost; }
+        public OverlayEndpoint GetWorldHost(Point worldPos) { return worldByPoint.GetValue(worldPos).host; }
+
+        // ----- modifiers -----
+        [Forward]
+        public void NET_AddPlayer(PlayerInfo info)
+        {
+            roles.Add(info.playerHost, NodeRole.PLAYER_AGENT);
+            roles.Add(info.validatorHost, NodeRole.PLAYER_VALIDATOR);
+
+            playerById.Add(info.id, info);
+            playerByHost.Add(info.playerHost, info);
+            playerByHost.Add(info.validatorHost, info);
+
+            onNewPlayer.Invoke(info);
+        }
+        [Forward]
+        public void NET_AddWorld(WorldInfo info)
+        {
+            roles.Add(info.host, NodeRole.WORLD_VALIDATOR);
+
+            worldByPoint.Add(info.worldPos, info);
+            worldByHost.Add(info.host, info);
+
+            onNewWorld.Invoke(info);
+        }
+
+        // ----- hooks -----
+        public Action<PlayerInfo> onNewPlayer = (inf) => { };
+        public Action<WorldInfo> onNewWorld = (inf) => { };
+
+        // ----- private data -----
+        Dictionary<OverlayEndpoint, NodeRole> roles = new Dictionary<OverlayEndpoint, NodeRole>();
+        Dictionary<Guid, PlayerInfo> playerById = new Dictionary<Guid, PlayerInfo>();
+        Dictionary<OverlayEndpoint, PlayerInfo> playerByHost = new Dictionary<OverlayEndpoint, PlayerInfo>();
+        Dictionary<Point, WorldInfo> worldByPoint = new Dictionary<Point, WorldInfo>();
+        Dictionary<OverlayEndpoint, WorldInfo> worldByHost = new Dictionary<OverlayEndpoint, WorldInfo>();
+    }
+
     class DelayedAction
     {
         public OverlayEndpoint ep;
@@ -71,19 +161,47 @@ namespace ServerClient
             if (remoteName == Client.hostName)
                 return ProcessClientMessage;
 
-            NodeRole role = gameInfo.GetRoleOfHost(n.info.remote);
+            NodeRole? role = gameInfo.TryGetRoleOfHost(n.info.remote);
 
             if (role == NodeRole.WORLD_VALIDATOR)
                 return ProcessWorldMessage;
 
-            if (role == NodeRole.PLAYER)
+            if (role == NodeRole.PLAYER_AGENT)
             {
-                PlayerInfo inf = gameInfo.GetPlayerByHost(n.info.remote);
-                return (mt, stm, nd) => ProcessPlayerMessage(mt, stm, nd, inf);
+                //PlayerInfo inf = gameInfo.GetPlayerByHost(n.info.remote);
+                //return (mt, stm, nd) => ProcessPlayerMessage(mt, stm, nd, inf);
+
+                return ProcessGenericMessage;
             }
 
             throw new InvalidOperationException("Server.AssignProcessor unexpected connection " + n.info.remote + " " + role);
         }
+
+        Dictionary<OverlayEndpoint, Node.MessageProcessor> messageRelay = new Dictionary<OverlayEndpoint, Node.MessageProcessor>();
+        void ProcessGenericMessage(MessageType mt, Stream stm, Node n)
+        {
+            OverlayEndpoint remote = n.info.remote;
+
+            if (messageRelay.ContainsKey(remote))
+            {
+                messageRelay[remote].Invoke(mt, stm, n);
+                return;
+            }
+
+            if (mt != MessageType.ROLE)
+                throw new Exception(Log.StDump(mt, remote, "unexpected"));
+
+            NodeRole nr = Serializer.Deserialize<NodeRole>(stm);
+
+            if (nr == NodeRole.PLAYER_AGENT)
+            {
+                PlayerInfo playerInfo = Serializer.Deserialize<PlayerInfo>(stm);
+                messageRelay.Add(remote, (message, stream, node) => ProcessPlayerMessage(message, stream, node, playerInfo));
+            }
+            else
+                throw new Exception(Log.StDump(nr, remote, "unexpected"));
+        }
+        
         void ProcessClientMessage(MessageType mt, Stream stm, Node n)
         {
             if (mt == MessageType.NEW_PLAYER_REQUEST)

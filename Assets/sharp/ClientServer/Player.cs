@@ -129,12 +129,38 @@ namespace ServerClient
                 return (mt, stm, nd) => ProcessWorldMessage(mt, stm, nd, inf);
             }
 
-            if (role == NodeRole.PLAYER)
-                return (mt, stm, nd) => { throw new Exception("PlayerValidator not expecting messages from PlayerAgent." + mt + " " + nd.info); };                
+            if (role == NodeRole.PLAYER_AGENT)
+                //return (mt, stm, nd) => { throw new Exception("PlayerValidator not expecting messages from PlayerAgent." + mt + " " + nd.info); };
+                return ProcessGenericMessage;
 
             throw new InvalidOperationException("WorldValidator.AssignProcessor unexpected connection " + n.info.remote + " " + role);
         }
-        
+
+        Dictionary<OverlayEndpoint, Node.MessageProcessor> messageRelay = new Dictionary<OverlayEndpoint, Node.MessageProcessor>();
+        void ProcessGenericMessage(MessageType mt, Stream stm, Node n)
+        {
+            OverlayEndpoint remote = n.info.remote;
+
+            if (messageRelay.ContainsKey(remote))
+            {
+                messageRelay[remote].Invoke(mt, stm, n);
+                return;
+            }
+
+            if (mt != MessageType.ROLE)
+                throw new Exception(Log.StDump(mt, remote, "unexpected"));
+
+            NodeRole nr = Serializer.Deserialize<NodeRole>(stm);
+
+            if (nr == NodeRole.PLAYER_AGENT)
+            {
+                PlayerInfo playerInfo = Serializer.Deserialize<PlayerInfo>(stm);
+                messageRelay.Add(remote, (message, stream, node) => { throw new Exception( Log.StDump(message, stream, node, playerInfo, "unexpected") );});
+            }
+            else
+                throw new Exception(Log.StDump(nr, remote, "unexpected"));
+        }
+
         void ProcessNewConnection(Node n)
         {
             if (n.info.remote == info.playerHost)
@@ -254,10 +280,16 @@ namespace ServerClient
             gameInfo = gameInfo_;
 
             myHost = globalHost.NewHost(info.playerHost.hostname, AssignProcessor);
+            myHost.onNewConnectionHook = OnNewConnection;
 
             myHost.ConnectAsync(info.validatorHost);
 
             Log.LogWriteLine("Player Agent {0}", info.GetShortInfo());
+        }
+
+        void OnNewConnection(Node n)
+        {
+            n.SendMessage(MessageType.ROLE, NodeRole.PLAYER_AGENT, info);
         }
 
         Node.MessageProcessor AssignProcessor(Node n)

@@ -16,7 +16,7 @@ using System.Runtime.Remoting.Messaging;
 
 namespace ServerClient
 {
-    public enum MessageType : byte { HANDSHAKE,
+    public enum MessageType : byte { HANDSHAKE, ROLE,
     SERVER_ADDRESS, GAME_INFO_VAR_INIT, GAME_INFO_VAR_CHANGE, NEW_VALIDATOR, NEW_PLAYER_REQUEST, NEW_WORLD_REQUEST,
     PLAYER_VALIDATOR_ASSIGN, WORLD_VALIDATOR_ASSIGN, ACCEPT,
     WORLD_VAR_INIT, WORLD_VAR_CHANGE, PLAYER_WORLD_MOVE,
@@ -26,7 +26,7 @@ namespace ServerClient
     SPAWN_REQUEST,
     RESPONSE, LOCK_VAR, UNLOCK_VAR};
     
-    public enum NodeRole { PLAYER, PLAYER_VALIDATOR, WORLD_VALIDATOR };
+    public enum NodeRole { PLAYER_AGENT, PLAYER_VALIDATOR, WORLD_VALIDATOR };
 
     public enum WorldMove { LEAVE, JOIN };
 
@@ -128,94 +128,6 @@ namespace ServerClient
         {
             return inf.GetCustomAttributes(typeof(N), false).Length != 0;
         }
-    }
-
-    [Serializable]
-    public class GameInfoSerialized
-    {
-        public PlayerInfo[] players;
-        public WorldInfo[] worlds;
-
-        public GameInfoSerialized() { }
-    }
-
-    class GameInfo : MarshalByRefObject
-    {
-        // ----- constructors -----
-        public GameInfo() { }
-
-        public GameInfoSerialized Serialize()
-        {
-            return new GameInfoSerialized() { players = playerById.Values.ToArray(), worlds = worldByPoint.Values.ToArray() };
-        }
-        public void Deserialize(GameInfoSerialized info)
-        {
-            foreach (PlayerInfo p in info.players)
-                NET_AddPlayer(p);
-            foreach (WorldInfo w in info.worlds)
-                NET_AddWorld(w);
-        }
-
-        // ----- read only infromation -----
-        public NodeRole GetRoleOfHost(OverlayEndpoint host) { return roles.GetValue(host); }
-        public NodeRole? TryGetRoleOfHost(OverlayEndpoint host)
-        {
-            if (roles.ContainsKey(host))
-                return roles[host];
-            else
-                return null;
-        }
-
-        public PlayerInfo GetPlayerByHost(OverlayEndpoint host) { return playerByHost.GetValue(host); }
-        public WorldInfo GetWorldByHost(OverlayEndpoint host) { return worldByHost.GetValue(host); }
-
-        public PlayerInfo GetPlayerById(Guid player) { return playerById.GetValue(player); }
-        public WorldInfo GetWorldByPos(Point pos) { return worldByPoint.GetValue(pos); }
-
-        public WorldInfo? TryGetWorldByPos(Point pos)
-        {
-            if (worldByPoint.ContainsKey(pos))
-                return worldByPoint[pos];
-            else
-                return null;
-        }
-
-        public OverlayEndpoint GetPlayerHost(Guid player) { return playerById.GetValue(player).playerHost; }
-        public OverlayEndpoint GetPlayerValidatorHost(Guid player) { return playerById.GetValue(player).validatorHost; }
-        public OverlayEndpoint GetWorldHost(Point worldPos) { return worldByPoint.GetValue(worldPos).host; }
-
-        // ----- modifiers -----
-        [Forward] public void NET_AddPlayer(PlayerInfo info)
-        {
-            roles.Add(info.playerHost, NodeRole.PLAYER);
-            roles.Add(info.validatorHost, NodeRole.PLAYER_VALIDATOR);
-
-            playerById.Add(info.id, info);
-            playerByHost.Add(info.playerHost, info);
-            playerByHost.Add(info.validatorHost, info);
-
-            onNewPlayer.Invoke(info);
-        }
-        [Forward] public void NET_AddWorld(WorldInfo info)
-        {
-            roles.Add(info.host, NodeRole.WORLD_VALIDATOR);
-
-            worldByPoint.Add(info.worldPos, info);
-            worldByHost.Add(info.host, info);
-            
-            onNewWorld.Invoke(info);
-        }
-
-        // ----- hooks -----
-        public Action<PlayerInfo> onNewPlayer = (inf) => { };
-        public Action<WorldInfo> onNewWorld = (inf) => { };
-
-        // ----- private data -----
-        Dictionary<OverlayEndpoint, NodeRole> roles = new Dictionary<OverlayEndpoint, NodeRole>();
-        Dictionary<Guid, PlayerInfo> playerById = new Dictionary<Guid, PlayerInfo>();
-        Dictionary<OverlayEndpoint, PlayerInfo> playerByHost = new Dictionary<OverlayEndpoint, PlayerInfo>();
-        Dictionary<Point, WorldInfo> worldByPoint = new Dictionary<Point, WorldInfo>();
-        Dictionary<OverlayEndpoint, WorldInfo> worldByHost = new Dictionary<OverlayEndpoint, WorldInfo>();
     }
 
     interface IManualLock
