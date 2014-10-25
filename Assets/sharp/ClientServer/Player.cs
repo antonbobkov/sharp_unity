@@ -81,8 +81,6 @@ namespace ServerClient
     {
         OverlayHost myHost;
 
-        GameInfo gameInfo;
-        
         PlayerInfo info;
         Node playerAgentNode = null;
 
@@ -110,10 +108,9 @@ namespace ServerClient
             }
         }
 
-        public PlayerValidator(PlayerInfo info_, GlobalHost globalHost, GameInfo gameInfo_)
+        public PlayerValidator(PlayerInfo info_, GlobalHost globalHost)
         {
             info = info_;
-            gameInfo = gameInfo_;
 
             myHost = globalHost.NewHost(info.validatorHost.hostname, AssignProcessor,
                 OverlayHost.GenerateHandshake(NodeRole.PLAYER_VALIDATOR, info));
@@ -240,7 +237,6 @@ namespace ServerClient
         OverlayHost myHost;
 
         OverlayEndpoint serverHost;
-        public GameInfo gameInfo;
 
         public readonly PlayerInfo info;
         public PlayerData data = null;
@@ -248,11 +244,10 @@ namespace ServerClient
         public Action<PlayerData> onNewPlayerDataHook = (a) => { };
         public Action<PlayerData> onPlayerNewRealm = (a) => { };
 
-        public PlayerAgent(PlayerInfo info_, GameInfo gameInfo_, GlobalHost globalHost, OverlayEndpoint serverHost_)
+        public PlayerAgent(PlayerInfo info_, GlobalHost globalHost, OverlayEndpoint serverHost_)
         {
             info = info_;
             serverHost = serverHost_;
-            gameInfo = gameInfo_;
 
             myHost = globalHost.NewHost(info.playerHost.hostname, AssignProcessor,
                 OverlayHost.GenerateHandshake(NodeRole.PLAYER_AGENT, info));

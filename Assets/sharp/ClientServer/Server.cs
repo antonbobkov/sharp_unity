@@ -14,7 +14,6 @@ namespace ServerClient
     [Serializable]
     public class GameInfoSerialized
     {
-        public PlayerInfo[] players;
         public WorldInfo[] worlds;
 
         public GameInfoSerialized() { }
@@ -27,12 +26,10 @@ namespace ServerClient
 
         public GameInfoSerialized Serialize()
         {
-            return new GameInfoSerialized() { players = playerById.Values.ToArray(), worlds = worldByPoint.Values.ToArray() };
+            return new GameInfoSerialized() { worlds = worldByPoint.Values.ToArray() };
         }
         public void Deserialize(GameInfoSerialized info)
         {
-            foreach (PlayerInfo p in info.players)
-                NET_AddPlayer(p);
             foreach (WorldInfo w in info.worlds)
                 NET_AddWorld(w);
         }
@@ -47,12 +44,9 @@ namespace ServerClient
                 return null;
         }
 
-        public PlayerInfo GetPlayerByHost(OverlayEndpoint host) { return playerByHost.GetValue(host); }
         public WorldInfo GetWorldByHost(OverlayEndpoint host) { return worldByHost.GetValue(host); }
 
-        public PlayerInfo GetPlayerById(Guid player) { return playerById.GetValue(player); }
         public WorldInfo GetWorldByPos(Point pos) { return worldByPoint.GetValue(pos); }
-
         public WorldInfo? TryGetWorldByPos(Point pos)
         {
             if (worldByPoint.ContainsKey(pos))
@@ -61,23 +55,9 @@ namespace ServerClient
                 return null;
         }
 
-        public OverlayEndpoint GetPlayerHost(Guid player) { return playerById.GetValue(player).playerHost; }
-        public OverlayEndpoint GetPlayerValidatorHost(Guid player) { return playerById.GetValue(player).validatorHost; }
         public OverlayEndpoint GetWorldHost(Point worldPos) { return worldByPoint.GetValue(worldPos).host; }
 
         // ----- modifiers -----
-        [Forward]
-        public void NET_AddPlayer(PlayerInfo info)
-        {
-            roles.Add(info.playerHost, NodeRole.PLAYER_AGENT);
-            roles.Add(info.validatorHost, NodeRole.PLAYER_VALIDATOR);
-
-            playerById.Add(info.id, info);
-            playerByHost.Add(info.playerHost, info);
-            playerByHost.Add(info.validatorHost, info);
-
-            onNewPlayer.Invoke(info);
-        }
         [Forward]
         public void NET_AddWorld(WorldInfo info)
         {
@@ -90,13 +70,10 @@ namespace ServerClient
         }
 
         // ----- hooks -----
-        public Action<PlayerInfo> onNewPlayer = (inf) => { };
         public Action<WorldInfo> onNewWorld = (inf) => { };
 
         // ----- private data -----
         Dictionary<OverlayEndpoint, NodeRole> roles = new Dictionary<OverlayEndpoint, NodeRole>();
-        Dictionary<Guid, PlayerInfo> playerById = new Dictionary<Guid, PlayerInfo>();
-        Dictionary<OverlayEndpoint, PlayerInfo> playerByHost = new Dictionary<OverlayEndpoint, PlayerInfo>();
         Dictionary<Point, WorldInfo> worldByPoint = new Dictionary<Point, WorldInfo>();
         Dictionary<OverlayEndpoint, WorldInfo> worldByHost = new Dictionary<OverlayEndpoint, WorldInfo>();
     }
@@ -229,7 +206,7 @@ namespace ServerClient
             n.SendMessage(MessageType.GAME_INFO_VAR_INIT, gameInfo.Serialize());
         }
 
-        void OnNewPlayerRequest(Guid playerId, OverlayEndpoint playerHost)
+        void OnNewPlayerRequest(Guid playerId, OverlayEndpoint playerClient)
         {
             // ! Worry about non-atomicity. Two similar requests at once? See OnNewWorldRequest
             
@@ -238,19 +215,19 @@ namespace ServerClient
             
             OverlayEndpoint validatorHost = new OverlayEndpoint(validatorPool.Random(n => r.Next(n)), new OverlayHostName("validator player " + name));
 
-            OverlayEndpoint playerNewHost = new OverlayEndpoint(playerHost.addr, new OverlayHostName("agent player " + name));
-            PlayerInfo info = new PlayerInfo(playerId, playerNewHost, validatorHost, name);
+            OverlayEndpoint playerNewHost = new OverlayEndpoint(playerClient.addr, new OverlayHostName("agent player " + name));
+            PlayerInfo playerInfo = new PlayerInfo(playerId, playerNewHost, validatorHost, name);
 
             OverlayEndpoint validatorClient = new OverlayEndpoint(validatorHost.addr, Client.hostName);
-            myHost.SendMessage(validatorClient, MessageType.PLAYER_VALIDATOR_ASSIGN, actionId, info);
+            myHost.SendMessage(validatorClient, MessageType.PLAYER_VALIDATOR_ASSIGN, actionId, playerInfo);
 
             DelayedAction da = new DelayedAction()
             {
                 ep = validatorClient,
                 a = () =>
                 {
-                    gameInfo.NET_AddPlayer(info);
-                    //myHost.BroadcastGroup(Client.hostName, MessageType.NEW_PLAYER, info);
+                    //gameInfo.NET_AddPlayer(playerInfo);
+                    myHost.ConnectSendMessage(playerClient, MessageType.NEW_PLAYER_REQUEST_SUCCESS, playerInfo);
                 }
             };
 
@@ -276,8 +253,8 @@ namespace ServerClient
             WorldInfo info = new WorldInfo(worldPos, validatorHost);
             WorldInitializer init = new WorldInitializer(r.Next());
 
-            //if (worldPos == new Point(0, 0))
-            if ((worldPos.x % 2 == 0) && (worldPos.y % 2 == 0))
+            if (worldPos == Point.Zero)
+            //if ((worldPos.x % 2 == 0) && (worldPos.y % 2 == 0))
                 init.hasSpawn = true;
 
             OverlayEndpoint validatorClient = new OverlayEndpoint(validatorHost.addr, Client.hostName);
@@ -314,7 +291,7 @@ namespace ServerClient
 
             WorldInfo spawnWorld = gameInfo.GetWorldByPos(spawnWorldPos);
 
-            myHost.ConnectSendMessage(spawnWorld.host, MessageType.SPAWN_REQUEST, inf.id);
+            myHost.ConnectSendMessage(spawnWorld.host, MessageType.SPAWN_REQUEST, inf);
         }
 
         void OnAccept(Guid id, OverlayEndpoint remote)

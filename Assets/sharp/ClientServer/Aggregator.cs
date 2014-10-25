@@ -80,13 +80,13 @@ namespace ServerClient
         public void AddPlayerValidator(PlayerInfo info)
         {
             MyAssert.Assert(!playerValidators.ContainsKey(info.id));
-            playerValidators.Add(info.id, new PlayerValidator(info, host, myClient.gameInfo));
+            playerValidators.Add(info.id, new PlayerValidator(info, host));
         }
         public void AddPlayerAgent(PlayerInfo info)
         {
             MyAssert.Assert(!playerAgents.ContainsKey(info.id));
 
-            PlayerAgent pa = new PlayerAgent(info, myClient.gameInfo, host, myClient.serverHost);
+            PlayerAgent pa = new PlayerAgent(info, host, myClient.serverHost);
 
             pa.onNewPlayerDataHook = (pd) => onNewPlayerDataHook(pa.info, pd);
             pa.onPlayerNewRealm = (pd) => onPlayerNewRealm(pa.info, pd);

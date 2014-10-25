@@ -76,10 +76,9 @@ class WorldDraw
         if (!continuousBackground)
             MessBackground();
         
-        foreach (Guid id in w.GetAllPlayers())
+        foreach (PlayerInfo inf in w.GetAllPlayers())
 		{
-			Log.Dump(w.Info, id);
-			AddPlayer(id);
+			AddPlayer(inf.id);
 		}
     }
 
@@ -174,7 +173,7 @@ public class minecraft : MonoBehaviour {
 
         };
 
-        all.myClient.onNewPlayerHook = (inf) =>
+        all.myClient.onNewMyPlayerHook = (inf) =>
         {
             if (inf.id == me)
                 TrySpawn();
@@ -298,7 +297,11 @@ public class minecraft : MonoBehaviour {
             UpdateWorlds(w.Position);
 
         if (!worlds.ContainsKey(w.Position))
+        {
+            //if(player.id == me)
+            //    Log.Dump();
             return;
+        }
 
         WorldDraw wd = worlds.GetValue(w.Position);
 
@@ -311,12 +314,6 @@ public class minecraft : MonoBehaviour {
 			Destroy(obj);
             wd.loots[newPos] = null;
 		}
-
-        if (!wd.players.ContainsKey(player.id))
-        {
-            // due to lack of sync this might be possible
-            return;
-        }
 
         GameObject movedPlayer = wd.players.GetValue(player.id);
         movedPlayer.transform.position = GetPositionAtGrid(w.Position, newPos);

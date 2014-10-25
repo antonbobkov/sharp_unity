@@ -82,8 +82,6 @@ namespace ServerClient
         public static void GameInfoOut(GameInfo inf)
         {
             GameInfoSerialized infoser = inf.Serialize();
-            foreach (PlayerInfo pi in infoser.players)
-                Console.WriteLine(pi.GetFullInfo());
             foreach (WorldInfo pi in infoser.worlds)
                 Console.WriteLine(pi.GetFullInfo());
         }
@@ -156,7 +154,7 @@ namespace ServerClient
             {
                 World w = all.myClient.knownWorlds.GetValue(new Point(0,0));
                 ThreadManager.NewThread(() => RepeatedAction(all.sync.GetAsDelegate(),
-                    () => WorldTools.ConsoleOut(w, all.myClient.gameInfo), 500),
+                    () => WorldTools.ConsoleOut(w), 500),
                     () => { }, "console drawer");
             });
 

@@ -30,7 +30,7 @@ namespace ServerClient
         public Action onServerReadyHook = () => { };
 
         public Action<World> onNewWorldHook = (a) => { };
-        public Action<PlayerInfo> onNewPlayerHook = (a) => { };
+        public Action<PlayerInfo> onNewMyPlayerHook = (a) => { };
 
         public Action<World, PlayerInfo, Point, MoveValidity> onMoveHook = (a, b, c, d) => { };
         public Action<World, PlayerInfo> onPlayerLeaveHook = (a, b) => { };
@@ -103,6 +103,11 @@ namespace ServerClient
                 WorldInitializer init = Serializer.Deserialize<WorldInitializer>(stm);
                 OnWorldValidateRequest(actionId, info, init);
             }
+            else if (mt == MessageType.NEW_PLAYER_REQUEST_SUCCESS)
+            {
+                PlayerInfo info = Serializer.Deserialize<PlayerInfo>(stm);
+                OnNewPlayerRequestApproved(info);
+            }
             else
                 throw new Exception("Client.ProcessServerMessage bad message type " + mt.ToString());
         }
@@ -111,7 +116,7 @@ namespace ServerClient
             if (mt == MessageType.WORLD_VAR_INIT)
             {
                 WorldSerialized wrld = Serializer.Deserialize<WorldSerialized>(stm);
-                OnNewWorldVar(new World(wrld, gameInfo));
+                OnNewWorldVar(new World(wrld));
             }
             else if (mt == MessageType.WORLD_VAR_CHANGE)
             {
@@ -156,7 +161,6 @@ namespace ServerClient
             MyAssert.Assert(gameInfo == null);
             gameInfo = new GameInfo();
 
-            gameInfo.onNewPlayer = OnNewPlayer;
             gameInfo.onNewWorld = OnNewWorld;
 
             gameInfo.Deserialize(gameStateSer);
@@ -164,16 +168,15 @@ namespace ServerClient
             Log.LogWriteLine("Recieved game info");
             Program.GameInfoOut(gameInfo);
         }
-        void OnNewPlayer(PlayerInfo inf)
+
+        void OnNewPlayerRequestApproved(PlayerInfo inf)
         {
-            //gameInfo.AddPlayer(inf);
-            Log.LogWriteLine("New player\n{0}", inf.GetFullInfo());
+            MyAssert.Assert(myPlayerAgents.Contains(inf.id));
+            all.AddPlayerAgent(inf);
 
-            if (myPlayerAgents.Contains(inf.id))
-                all.AddPlayerAgent(inf);
-
-            onNewPlayerHook(inf);
+            onNewMyPlayerHook(inf);
         }
+
         void OnNewWorld(WorldInfo inf)
         {
             //gameInfo.AddWorld(inf);

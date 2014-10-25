@@ -123,22 +123,26 @@ namespace ServerClient
     {
         public Plane<Tile> map;
         public WorldInfo myInfo;
+        public PlayerInfo[] players;
     }
 
     class World : MarshalByRefObject
     {
         // ----- constructors -----
-        public World(WorldSerialized ws, GameInfo info_) : this(ws.myInfo, info_)
+        public World(WorldSerialized ws) : this(ws.myInfo)
         {
             map = ws.map;
 
             foreach (Point p in Point.Range(map.Size))
                 if (map[p].PlayerId != Guid.Empty)
                     playerPositions.Add(map[p].PlayerId, p);
+
+            foreach (PlayerInfo inf in ws.players)
+                playerInformation.Add(inf.id, inf);
         }
         public WorldSerialized Serialize()
         {
-            return new WorldSerialized() { map = map, myInfo = Info };
+            return new WorldSerialized() { map = map, myInfo = Info, players = playerInformation.Values.ToArray() };
         }
         
         // ----- read only infromation -----
@@ -189,13 +193,14 @@ namespace ServerClient
             else
                 return null;
         }
-        public IEnumerable<KeyValuePair<Guid, Point>> GetAllPlayerPositions()
+        public PlayerInfo GetPlayerInfo(Guid id) { return playerInformation.GetValue(id); }
+        //public IEnumerable<KeyValuePair<Guid, Point>> GetAllPlayerPositions()
+        //{
+        //    return playerPositions;
+        //}
+        public IEnumerable<PlayerInfo> GetAllPlayers()
         {
-            return playerPositions;
-        }
-        public IEnumerable<Guid> GetAllPlayers()
-        {
-            return playerPositions.Keys;
+            return playerInformation.Values;
         }
         public bool HasPlayer(Guid id) { return playerPositions.ContainsKey(id); }
 
@@ -234,10 +239,14 @@ namespace ServerClient
         }
 
         // ----- modifiers -----
-        [Forward] public void NET_AddPlayer(Guid player, Point pos)
+        [Forward] public void NET_AddPlayer(PlayerInfo player, Point pos)
         {
-            MyAssert.Assert(!playerPositions.ContainsKey(player));
-            NET_Move(player, pos, MoveValidity.NEW);
+            MyAssert.Assert(!playerPositions.ContainsKey(player.id));
+            MyAssert.Assert(!playerInformation.ContainsKey(player.id));
+
+            playerInformation.Add(player.id, player);
+
+            NET_Move(player.id, pos, MoveValidity.NEW);
         }
         [Forward] public void NET_RemovePlayer(Guid player)
         {
@@ -245,13 +254,16 @@ namespace ServerClient
             MyAssert.Assert(map[pos].PlayerId == player);
             map[pos].PlayerId = Guid.Empty;
 
-            playerPositions.Remove(player);
+            PlayerInfo inf = playerInformation.GetValue(player);
 
-            onPlayerLeaveHook(gameInfo.GetPlayerById(player));
+            playerPositions.Remove(player);
+            playerInformation.Remove(player);
+
+            onPlayerLeaveHook(inf);
         }
         [Forward] public void NET_Move(Guid player, Point newPos, MoveValidity mv)
         {
-            PlayerInfo p = gameInfo.GetPlayerById(player);
+            PlayerInfo p = playerInformation.GetValue(player);
 
             if (mv != MoveValidity.NEW)
             {
@@ -287,9 +299,9 @@ namespace ServerClient
         public Action<PlayerInfo> onPlayerLeaveHook = (a) => { };
 
         // ----- generating -----
-        static public World Generate(WorldInfo myInfo_, WorldInitializer init, GameInfo info_)
+        static public World Generate(WorldInfo myInfo_, WorldInitializer init)
         {
-            World w = new World(myInfo_, info_);
+            World w = new World(myInfo_);
 
             w.map = new Plane<Tile>(worldSize);
 
@@ -350,17 +362,16 @@ namespace ServerClient
         }
 
         // ----- private data -----
-        private World(WorldInfo myInfo_, GameInfo info_)
+        private World(WorldInfo myInfo_)
         {
             Info = myInfo_;
-            gameInfo = info_;
         }
 
         Plane<Tile> map;
-        Dictionary<Guid, Point> playerPositions = new Dictionary<Guid, Point>();
         Point? spawnPos = null;
 
-        GameInfo gameInfo;
+        Dictionary<Guid, Point> playerPositions = new Dictionary<Guid, Point>();
+        Dictionary<Guid, PlayerInfo> playerInformation = new Dictionary<Guid, PlayerInfo>();
     }
 
     class RealmMove
@@ -404,7 +415,7 @@ namespace ServerClient
         {
             return Point.Scale(worldPos, World.worldSize) + posInWorld;
         }
-        static public void ConsoleOut(World w, GameInfo gameInfo)
+        static public void ConsoleOut(World w)
         {
             Plane<char> pic = new Plane<char>(w.Size);
 
@@ -415,7 +426,7 @@ namespace ServerClient
                 if (t.Solid)
                     pic[p] = '*';
                 else if (t.PlayerId != Guid.Empty)
-                    pic[p] = gameInfo.GetPlayerById(t.PlayerId).name[0];
+                    pic[p] = w.GetPlayerInfo(t.PlayerId).name[0];
                 else if (t.Loot)
                     pic[p] = '$';
             }
@@ -469,7 +480,7 @@ namespace ServerClient
             gameInfo = gameInfo_;
             serverHost = serverHost_;
 
-            World newWorld = World.Generate(info, init, gameInfo);
+            World newWorld = World.Generate(info, init);
 
             Action<ForwardFunctionCall> onChange = (ffc) => myHost.BroadcastGroup(Client.hostName, MessageType.WORLD_VAR_CHANGE, ffc.Serialize());
             world = new ForwardProxy<World>(newWorld, onChange).GetProxy();
@@ -541,9 +552,9 @@ namespace ServerClient
             else if (mt == MessageType.REALM_MOVE)
             {
                 Guid remoteActionId = Serializer.Deserialize<Guid>(stm);
-                Guid player = Serializer.Deserialize<Guid>(stm);
+                PlayerInfo player = Serializer.Deserialize<PlayerInfo>(stm);
                 Point newPos = Serializer.Deserialize<Point>(stm);
-                OnRealmMove(gameInfo.GetPlayerById(player), newPos, n, remoteActionId);
+                OnRealmMove(player, newPos, n, remoteActionId);
             }
             else
                 throw new Exception(Log.StDump( mt, "bad message type"));
@@ -571,8 +582,8 @@ namespace ServerClient
         {
             if (mt == MessageType.SPAWN_REQUEST)
             {
-                Guid playerId = Serializer.Deserialize<Guid>(stm);
-                OnSpawnRequest(gameInfo.GetPlayerById(playerId));
+                PlayerInfo playerInfo = Serializer.Deserialize<PlayerInfo>(stm);
+                OnSpawnRequest(playerInfo);
             }
             else
                 throw new Exception(Log.StDump("unexpected", world.Info, mt));
@@ -629,7 +640,7 @@ namespace ServerClient
 
                             Point spawnPos = spawn.Random((n) => rand.Next(n));
 
-                            world.NET_AddPlayer(player.id, spawnPos);
+                            world.NET_AddPlayer(player, spawnPos);
                             //myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_JOIN, player.id, spawnPos);
                             //myHost.ConnectSendMessage(player.validatorHost, MessageType.PLAYER_WORLD_MOVE, WorldMove.JOIN);
 
@@ -732,7 +743,7 @@ namespace ServerClient
                 ManualLock<Guid> lck = new ManualLock<Guid>(playerLocks, player.id);
 
                 RemoteAction
-                    .Send(myHost, targetRealm.Value.host, MessageType.REALM_MOVE, player.id, newPos)
+                    .Send(myHost, targetRealm.Value.host, MessageType.REALM_MOVE, player, newPos)
                     .Respond(remoteActions, lck, (res, stm) =>
                     {
                         if (res == Response.SUCCESS)
@@ -791,7 +802,7 @@ namespace ServerClient
                     return;
                 }
 
-                world.NET_AddPlayer(player.id, newPos);
+                world.NET_AddPlayer(player, newPos);
                 myHost.ConnectSendMessage(player.validatorHost, MessageType.PLAYER_WORLD_MOVE, WorldMove.JOIN);
 
                 success = true;
