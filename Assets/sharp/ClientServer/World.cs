@@ -83,13 +83,13 @@ namespace ServerClient
     [Serializable]
     public struct WorldInfo
     {
-        public Point worldPos;
+        public Point position;
         public OverlayEndpoint host;
 
         public WorldInfo(Point worldPos_, OverlayEndpoint host_)
         {
-            worldPos = worldPos_;
             host = host_;
+            position = worldPos_;
         }
 
         public override string ToString()
@@ -100,12 +100,12 @@ namespace ServerClient
         public string GetFullInfo()
         {
             StringBuilder sb = new StringBuilder();
-            sb.AppendFormat("World pos: {0}\n", worldPos);
+            sb.AppendFormat("World pos: {0}\n", position);
             sb.AppendFormat("Validator host: {0}\n", host);
 
             return sb.ToString();
         }
-        public string GetShortInfo() { return "World " + worldPos.ToString(); }
+        public string GetShortInfo() { return "World " + position.ToString(); }
     }
 
     public enum MoveValidity
@@ -124,13 +124,17 @@ namespace ServerClient
         public Plane<Tile> map;
         public WorldInfo myInfo;
         public PlayerInfo[] players;
+        public WorldInfo[] neighborWorlds;
     }
 
     class World : MarshalByRefObject
     {
         // ----- constructors -----
-        public World(WorldSerialized ws) : this(ws.myInfo)
+        public World(WorldSerialized ws, Action<WorldInfo> onNeighbor_)
+            : this(ws.myInfo)
         {
+            if(onNeighbor_ != null)
+                onNeighbor = onNeighbor_;
             map = ws.map;
 
             foreach (Point p in Point.Range(map.Size))
@@ -139,16 +143,25 @@ namespace ServerClient
 
             foreach (PlayerInfo inf in ws.players)
                 playerInformation.Add(inf.id, inf);
+
+            foreach (WorldInfo inf in ws.neighborWorlds)
+                NET_AddNeighbor(inf);
         }
         public WorldSerialized Serialize()
         {
-            return new WorldSerialized() { map = map, myInfo = Info, players = playerInformation.Values.ToArray() };
+            return new WorldSerialized()
+            { 
+                map = map,
+                myInfo = Info, 
+                players = playerInformation.Values.ToArray(),
+                neighborWorlds = GetKnownNeighbors().ToArray()
+            };
         }
         
         // ----- read only infromation -----
         public WorldInfo Info { get; private set; }
 
-        public Point Position { get { return Info.worldPos; } }
+        public Point Position { get { return Info.position; } }
         public Point Size { get { return map.Size; } }
 
         public IEnumerable<Point> GetSpawn()
@@ -194,15 +207,30 @@ namespace ServerClient
                 return null;
         }
         public PlayerInfo GetPlayerInfo(Guid id) { return playerInformation.GetValue(id); }
-        //public IEnumerable<KeyValuePair<Guid, Point>> GetAllPlayerPositions()
-        //{
-        //    return playerPositions;
-        //}
+
         public IEnumerable<PlayerInfo> GetAllPlayers()
         {
             return playerInformation.Values;
         }
         public bool HasPlayer(Guid id) { return playerPositions.ContainsKey(id); }
+
+        public IEnumerable<WorldInfo> GetKnownNeighbors()
+        {
+            return from w in neighborWorlds.Values
+                   where w.HasValue
+                   select w.Value;
+        }
+        public IEnumerable<Point> GetUnknownNeighbors()
+        {
+            return from p in neighborWorlds.Keys
+                   where neighborWorlds[p] == null
+                   select p;
+        }
+        public WorldInfo? GetNeighbor(Point p)
+        {
+            MyAssert.Assert(neighborWorlds.ContainsKey(p));
+            return neighborWorlds.GetValue(p);
+        }
 
         public MoveValidity CheckValidMove(Guid player, Point newPos)
         {
@@ -292,11 +320,23 @@ namespace ServerClient
             //Log.Dump(player, newPos, mv);
             onMoveHook(p, newPos, mv);
         }
+        [Forward] public void NET_AddNeighbor(WorldInfo worldInfo)
+        {
+            Point p = worldInfo.position;
+
+            MyAssert.Assert(neighborWorlds.ContainsKey(p));
+            MyAssert.Assert(neighborWorlds[p] == null);
+
+            neighborWorlds[p] = worldInfo;
+
+            onNeighbor.Invoke(worldInfo);
+        }
 
         // ----- hooks -----
         public Action<PlayerInfo> onLootHook = (info) => { };
         public Action<PlayerInfo, Point, MoveValidity> onMoveHook = (a, b, c) => { };
         public Action<PlayerInfo> onPlayerLeaveHook = (a) => { };
+        public Action<WorldInfo> onNeighbor = (a) => { };
 
         // ----- generating -----
         static public World Generate(WorldInfo myInfo_, WorldInitializer init)
@@ -313,7 +353,7 @@ namespace ServerClient
             return w;
         }
 
-        static public readonly Point worldSize = new Point(25, 15);
+        static public readonly Point worldSize = new Point(10, 10);
         private void Generate(WorldInitializer init)
         {
             ServerClient.MyRandom seededRandom = new ServerClient.MyRandom(init.seed);
@@ -365,6 +405,10 @@ namespace ServerClient
         private World(WorldInfo myInfo_)
         {
             Info = myInfo_;
+
+            foreach (Point p in Point.SymmetricRange(Point.One))
+                if (p != Point.Zero)
+                    neighborWorlds.Add(p + Position, null);
         }
 
         Plane<Tile> map;
@@ -372,6 +416,8 @@ namespace ServerClient
 
         Dictionary<Guid, Point> playerPositions = new Dictionary<Guid, Point>();
         Dictionary<Guid, PlayerInfo> playerInformation = new Dictionary<Guid, PlayerInfo>();
+
+        Dictionary<Point, WorldInfo?> neighborWorlds = new Dictionary<Point,WorldInfo?>();
     }
 
     class RealmMove
@@ -468,16 +514,14 @@ namespace ServerClient
         World world;
         OverlayHost myHost;
 
-        GameInfo gameInfo;
         OverlayEndpoint serverHost;
 
         Dictionary<Guid, RemoteAction> remoteActions = new Dictionary<Guid,RemoteAction>();
 
         HashSet<Guid> playerLocks = new HashSet<Guid>();
 
-        public WorldValidator(WorldInfo info, WorldInitializer init, GlobalHost globalHost, GameInfo gameInfo_, OverlayEndpoint serverHost_)
+        public WorldValidator(WorldInfo info, WorldInitializer init, GlobalHost globalHost, OverlayEndpoint serverHost_)
         {
-            gameInfo = gameInfo_;
             serverHost = serverHost_;
 
             World newWorld = World.Generate(info, init);
@@ -557,7 +601,7 @@ namespace ServerClient
                 OnRealmMove(player, newPos, n, remoteActionId);
             }
             else
-                throw new Exception(Log.StDump( mt, "bad message type"));
+                throw new Exception(Log.StDump(mt, "bad message type"));
         }
         void ProcessPlayerMessage(MessageType mt, Stream stm, Node n, PlayerInfo inf)
         {
@@ -584,6 +628,11 @@ namespace ServerClient
             {
                 PlayerInfo playerInfo = Serializer.Deserialize<PlayerInfo>(stm);
                 OnSpawnRequest(playerInfo);
+            }
+            else if (mt == MessageType.NEW_NEIGHBOR)
+            {
+                WorldInfo neighbor = Serializer.Deserialize<WorldInfo>(stm);
+                world.NET_AddNeighbor(neighbor);
             }
             else
                 throw new Exception(Log.StDump("unexpected", world.Info, mt));
@@ -624,7 +673,7 @@ namespace ServerClient
 
                         try
                         {
-                            if (pd.connected == true)
+                            if (pd.IsConnected == true)
                             {
                                 Log.Dump(world.Info, player, "Spawn failed, already spawned");
                                 return;
@@ -644,8 +693,7 @@ namespace ServerClient
                             //myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_JOIN, player.id, spawnPos);
                             //myHost.ConnectSendMessage(player.validatorHost, MessageType.PLAYER_WORLD_MOVE, WorldMove.JOIN);
 
-                            pd.connected = true;
-                            pd.worldPos = world.Position;
+                            pd.world = world.Info;
 
                             //Log.Dump(world.Info, player, "Spawn success");
                             spawnSuccess = true;
@@ -701,13 +749,13 @@ namespace ServerClient
             {
                 if (playerLocks.Contains(player.id))
                 {
-                    Log.LogWriteLine(Log.StDump(world.Info, player, "can't move, locked"));
+                    Log.Dump(world.Info, player, "can't move, locked");
                     return;
                 }
 
                 if (!world.HasPlayer(player.id))
                 {
-                    Log.LogWriteLine(Log.StDump(world.Info, player, "can't move, not in the world"));
+                    Log.Dump(world.Info, player, "can't move, not in the world");
                     return;
                 }
                 
@@ -720,7 +768,7 @@ namespace ServerClient
 
                 if (v != MoveValidity.BOUNDARY)
                 {
-                    Log.LogWriteLine(Log.StDump(world.Info, player, v, currPos, newPos, "invalid move"));
+                    Log.Dump(world.Info, player, v, currPos, newPos, "invalid move");
                     return;
                 }
 
@@ -730,11 +778,22 @@ namespace ServerClient
                 newPos = wm.newPosition;
                 Point targetRealmPos = wm.newWorld;
 
+                var a = from p in Point.SymmetricRange(Point.One)
+                        where p != Point.Zero
+                        where p + world.Position == targetRealmPos
+                        select p;
+
+                if (!a.Any())
+                {
+                    Log.Dump(world.Info, player, currentRealmPos, targetRealmPos, newPos, "move too far");
+                    return;
+                }
+
                 MyAssert.Assert(currentRealmPos != targetRealmPos);
-                WorldInfo? targetRealm = gameInfo.TryGetWorldByPos(targetRealmPos);
+                WorldInfo? targetRealm = world.GetNeighbor(targetRealmPos);
                 if (targetRealm == null)
                 {
-                    Log.LogWriteLine(Log.StDump(world.Info, player, currentRealmPos, targetRealmPos, newPos, "no realm to move in"));
+                    Log.Dump(world.Info, player, currentRealmPos, targetRealmPos, newPos, "no realm to move in");
                     return;
                 }
 
@@ -752,11 +811,11 @@ namespace ServerClient
 
                             world.NET_RemovePlayer(player.id);
                             //myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_LEAVE, player.id, targetRealmPos);
-                            myHost.ConnectSendMessage(player.validatorHost, MessageType.PLAYER_WORLD_MOVE, WorldMove.LEAVE, targetRealmPos);
+                            myHost.ConnectSendMessage(player.validatorHost, MessageType.PLAYER_WORLD_MOVE, WorldMove.LEAVE, targetRealm.Value);
                         }
                         else
                         {
-                            Log.LogWriteLine(Log.StDump(world.Info, player, currentRealmPos, targetRealmPos, newPos, res, "remote world refused"));
+                            Log.Dump(world.Info, player, currentRealmPos, targetRealmPos, newPos, res, "remote world refused");
                         }
 
                         postProcess.Invoke(res);
@@ -932,18 +991,8 @@ namespace ServerClient
 
         void BoundaryRequest()
         {
-            //Log.Dump();
-            Point myPosition = world.Position;
-            foreach (Point delta in Point.SymmetricRange(new Point(1, 1)))
-            {
-                Point newPos = myPosition + delta;
-
-                if (gameInfo.TryGetWorldByPos(newPos) == null)
-                {
-                    //Log.Dump(newPos);
-                    myHost.ConnectSendMessage(serverHost, MessageType.NEW_WORLD_REQUEST, newPos);
-                }
-            }
+            foreach (Point p in world.GetUnknownNeighbors())
+                myHost.ConnectSendMessage(serverHost, MessageType.NEW_WORLD_REQUEST, p);
         }
     }
 }

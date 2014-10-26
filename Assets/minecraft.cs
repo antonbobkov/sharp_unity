@@ -216,10 +216,10 @@ public class minecraft : MonoBehaviour {
         try
         {
             PlayerAgent pa = all.playerAgents.GetValue(me);
-            all.myClient.knownWorlds.GetValue(new Point(0, 0));
+            //all.myClient.knownWorlds.GetValue(new Point(0, 0));
             PlayerData pd = pa.data;
 
-            if (pd.connected)
+            if (pd.IsConnected)
                 return false;
 
             pa.Spawn();
@@ -247,15 +247,19 @@ public class minecraft : MonoBehaviour {
         PlayerData myData = all.playerAgents.GetValue(me).data;
         if (myData != null)
         {
-            if (myData.connected)
-                suggestedPos = myData.worldPos;
+            if (myData.IsConnected)
+                suggestedPos = myData.WorldPosition;
         }
 
         Dictionary<Point, WorldDraw> newWorlds = new Dictionary<Point, WorldDraw>();
-        foreach (Point delta in Point.SymmetricRange(new Point(1, 1)))
+        //foreach (Point delta in Point.SymmetricRange(new Point(1, 1)))
+        //{
+        //    Point targetPos = suggestedPos + delta;
+        //    World worldCandidate = all.myClient.knownWorlds.TryGetValue(targetPos);
+        foreach(World worldCandidate in all.myClient.knownWorlds.Values)
         {
-            Point targetPos = suggestedPos + delta;
-            World worldCandidate = all.myClient.knownWorlds.TryGetValue(targetPos);
+            Point targetPos = worldCandidate.Position;
+
             if (worldCandidate == null)
                 continue;
 
@@ -349,9 +353,9 @@ public class minecraft : MonoBehaviour {
 
         PlayerAgent pa = all.playerAgents.GetValue(me);
         PlayerData pd = pa.data;
-        if (!pd.connected)
+        if (!pd.IsConnected)
             return;
-        World w = all.myClient.knownWorlds.GetValue(pd.worldPos);
+        World w = all.myClient.knownWorlds.GetValue(pd.WorldPosition);
 
 
         if (move)

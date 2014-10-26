@@ -15,7 +15,7 @@ namespace ServerClient
     {
         public static readonly OverlayHostName hostName = new OverlayHostName("client");
 
-        public GameInfo gameInfo = null;
+        //public GameInfo gameInfo = null;
         public OverlayEndpoint serverHost = null;
         Node server = null;
 
@@ -23,7 +23,41 @@ namespace ServerClient
 
         Aggregator all;
 
+        public Dictionary<Point, int> trackedWorlds = new Dictionary<Point, int>();
         public Dictionary<Point, World> knownWorlds = new Dictionary<Point, World>();
+
+        public void TrackWorld(WorldInfo world)
+        {
+            foreach (Point p in Point.SymmetricRange(Point.One))
+            {
+                Point q = p + world.position;
+                if (!trackedWorlds.ContainsKey(q))
+                    trackedWorlds.Add(q, 0);
+
+                trackedWorlds[q]++;
+            }
+
+            if (knownWorlds.ContainsKey(world.position))
+            {
+                World w = knownWorlds[world.position];
+                foreach (WorldInfo inf in w.GetKnownNeighbors())
+                    OnNeighbor(inf);
+            }
+            else
+                OnNewWorld(world);
+        }
+        public void UnTrackWorld(Point worldPos)
+        {
+            foreach (Point p in Point.SymmetricRange(Point.One))
+            {
+                Point q = p + worldPos;
+                if (!trackedWorlds.ContainsKey(q))
+                    trackedWorlds.Add(q, 0);
+
+                trackedWorlds[q]--;
+
+            }
+        }
 
         public HashSet<Guid> myPlayerAgents = new HashSet<Guid>();
 
@@ -78,19 +112,19 @@ namespace ServerClient
         }
         void ProcessServerMessage(MessageType mt, Stream stm, Node n)
         {
-            if (mt == MessageType.GAME_INFO_VAR_INIT)
-            {
-                GameInfoSerialized info = Serializer.Deserialize<GameInfoSerialized>(stm);
-                OnGameInfo(info);
-            }
-            else if (mt == MessageType.GAME_INFO_VAR_CHANGE)
-            {
-                MyAssert.Assert(gameInfo != null);
+            //if (mt == MessageType.GAME_INFO_VAR_INIT)
+            //{
+            //    GameInfoSerialized info = Serializer.Deserialize<GameInfoSerialized>(stm);
+            //    OnGameInfo(info);
+            //}
+            //else if (mt == MessageType.GAME_INFO_VAR_CHANGE)
+            //{
+            //    MyAssert.Assert(gameInfo != null);
 
-                ForwardFunctionCall ffc = ForwardFunctionCall.Deserialize(stm, typeof(GameInfo));
-                ffc.Apply(gameInfo);
-            }
-            else if (mt == MessageType.PLAYER_VALIDATOR_ASSIGN)
+            //    ForwardFunctionCall ffc = ForwardFunctionCall.Deserialize(stm, typeof(GameInfo));
+            //    ffc.Apply(gameInfo);
+            //}
+            if (mt == MessageType.PLAYER_VALIDATOR_ASSIGN)
             {
                 Guid actionId = Serializer.Deserialize<Guid>(stm);
                 PlayerInfo info = Serializer.Deserialize<PlayerInfo>(stm);
@@ -116,12 +150,12 @@ namespace ServerClient
             if (mt == MessageType.WORLD_VAR_INIT)
             {
                 WorldSerialized wrld = Serializer.Deserialize<WorldSerialized>(stm);
-                OnNewWorldVar(new World(wrld));
+                OnNewWorldVar(wrld);
             }
             else if (mt == MessageType.WORLD_VAR_CHANGE)
             {
                 ForwardFunctionCall ffc = ForwardFunctionCall.Deserialize(stm, typeof(World));
-                ffc.Apply(knownWorlds.GetValue(inf.worldPos));
+                ffc.Apply(knownWorlds.GetValue(inf.position));
             }
             else
                 throw new Exception(Log.StDump(mt, inf, "unexpected"));
@@ -156,18 +190,18 @@ namespace ServerClient
             else
                 MyAssert.Assert(serverHost == serverHost_);
         }
-        void OnGameInfo(GameInfoSerialized gameStateSer)
-        {
-            MyAssert.Assert(gameInfo == null);
-            gameInfo = new GameInfo();
+        //void OnGameInfo(GameInfoSerialized gameStateSer)
+        //{
+        //    MyAssert.Assert(gameInfo == null);
+        //    gameInfo = new GameInfo();
 
-            gameInfo.onNewWorld = OnNewWorld;
+        //    //gameInfo.onNewWorld = OnNewWorld;
 
-            gameInfo.Deserialize(gameStateSer);
+        //    gameInfo.Deserialize(gameStateSer);
 
-            Log.LogWriteLine("Recieved game info");
-            Program.GameInfoOut(gameInfo);
-        }
+        //    Log.LogWriteLine("Recieved game info");
+        //    Program.GameInfoOut(gameInfo);
+        //}
 
         void OnNewPlayerRequestApproved(PlayerInfo inf)
         {
@@ -177,14 +211,16 @@ namespace ServerClient
             onNewMyPlayerHook(inf);
         }
 
-        void OnNewWorld(WorldInfo inf)
+        public void OnNewWorld(WorldInfo inf)
         {
             //gameInfo.AddWorld(inf);
             //Log.LogWriteLine("New world\n{0}", inf.GetFullInfo());
-            myHost.ConnectAsync(inf.host);
+            myHost.TryConnectAsync(inf.host);
         }
-        void OnNewWorldVar(World w)
+        void OnNewWorldVar(WorldSerialized ws)
         {
+            World w = new World(ws, OnNeighbor);
+            
             knownWorlds.Add(w.Position, w);
             w.onMoveHook = (player, pos, mv) => onMoveHook(w, player, pos, mv);
             w.onPlayerLeaveHook = (player) => onPlayerLeaveHook(w, player);
@@ -193,6 +229,12 @@ namespace ServerClient
 
             //Log.LogWriteLine("New world {0}", w.Position);
             //w.ConsoleOut();
+        }
+
+        void OnNeighbor(WorldInfo inf)
+        {
+            if (trackedWorlds.TryGetValue(inf.position) > 0)
+                OnNewWorld(inf);
         }
 
         void OnPlayerValidateRequest(Guid actionId, PlayerInfo info)

@@ -11,72 +11,71 @@ using System.Diagnostics;
 
 namespace ServerClient
 {
-    [Serializable]
-    public class GameInfoSerialized
-    {
-        public WorldInfo[] worlds;
+    //[Serializable]
+    //public class GameInfoSerialized
+    //{
+    //    public WorldInfo[] worlds;
 
-        public GameInfoSerialized() { }
-    }
+    //    public GameInfoSerialized() { }
+    //}
 
-    class GameInfo : MarshalByRefObject
-    {
-        // ----- constructors -----
-        public GameInfo() { }
+    //class GameInfo : MarshalByRefObject
+    //{
+    //    // ----- constructors -----
+    //    public GameInfo() { }
 
-        public GameInfoSerialized Serialize()
-        {
-            return new GameInfoSerialized() { worlds = worldByPoint.Values.ToArray() };
-        }
-        public void Deserialize(GameInfoSerialized info)
-        {
-            foreach (WorldInfo w in info.worlds)
-                NET_AddWorld(w);
-        }
+    //    public GameInfoSerialized Serialize()
+    //    {
+    //        return new GameInfoSerialized() { worlds = worldByPoint.Values.ToArray() };
+    //    }
+    //    public void Deserialize(GameInfoSerialized info)
+    //    {
+    //        foreach (WorldInfo w in info.worlds)
+    //            NET_AddWorld(w);
+    //    }
 
-        // ----- read only infromation -----
-        public NodeRole GetRoleOfHost(OverlayEndpoint host) { return roles.GetValue(host); }
-        public NodeRole? TryGetRoleOfHost(OverlayEndpoint host)
-        {
-            if (roles.ContainsKey(host))
-                return roles[host];
-            else
-                return null;
-        }
+    //    // ----- read only infromation -----
+    //    public NodeRole GetRoleOfHost(OverlayEndpoint host) { return roles.GetValue(host); }
+    //    public NodeRole? TryGetRoleOfHost(OverlayEndpoint host)
+    //    {
+    //        if (roles.ContainsKey(host))
+    //            return roles[host];
+    //        else
+    //            return null;
+    //    }
 
-        public WorldInfo GetWorldByHost(OverlayEndpoint host) { return worldByHost.GetValue(host); }
+    //    public WorldInfo GetWorldByHost(OverlayEndpoint host) { return worldByHost.GetValue(host); }
 
-        public WorldInfo GetWorldByPos(Point pos) { return worldByPoint.GetValue(pos); }
-        public WorldInfo? TryGetWorldByPos(Point pos)
-        {
-            if (worldByPoint.ContainsKey(pos))
-                return worldByPoint[pos];
-            else
-                return null;
-        }
+    //    public WorldInfo GetWorldByPos(Point pos) { return worldByPoint.GetValue(pos); }
+    //    public WorldInfo? TryGetWorldByPos(Point pos)
+    //    {
+    //        if (worldByPoint.ContainsKey(pos))
+    //            return worldByPoint[pos];
+    //        else
+    //            return null;
+    //    }
 
-        public OverlayEndpoint GetWorldHost(Point worldPos) { return worldByPoint.GetValue(worldPos).host; }
+    //    public OverlayEndpoint GetWorldHost(Point worldPos) { return worldByPoint.GetValue(worldPos).host; }
 
-        // ----- modifiers -----
-        [Forward]
-        public void NET_AddWorld(WorldInfo info)
-        {
-            roles.Add(info.host, NodeRole.WORLD_VALIDATOR);
+    //    // ----- modifiers -----
+    //    [Forward] public void NET_AddWorld(WorldInfo info)
+    //    {
+    //        roles.Add(info.host, NodeRole.WORLD_VALIDATOR);
 
-            worldByPoint.Add(info.worldPos, info);
-            worldByHost.Add(info.host, info);
+    //        worldByPoint.Add(info.position, info);
+    //        worldByHost.Add(info.host, info);
 
-            onNewWorld.Invoke(info);
-        }
+    //        onNewWorld.Invoke(info);
+    //    }
 
-        // ----- hooks -----
-        public Action<WorldInfo> onNewWorld = (inf) => { };
+    //    // ----- hooks -----
+    //    public Action<WorldInfo> onNewWorld = (inf) => { };
 
-        // ----- private data -----
-        Dictionary<OverlayEndpoint, NodeRole> roles = new Dictionary<OverlayEndpoint, NodeRole>();
-        Dictionary<Point, WorldInfo> worldByPoint = new Dictionary<Point, WorldInfo>();
-        Dictionary<OverlayEndpoint, WorldInfo> worldByHost = new Dictionary<OverlayEndpoint, WorldInfo>();
-    }
+    //    // ----- private data -----
+    //    Dictionary<OverlayEndpoint, NodeRole> roles = new Dictionary<OverlayEndpoint, NodeRole>();
+    //    Dictionary<Point, WorldInfo> worldByPoint = new Dictionary<Point, WorldInfo>();
+    //    Dictionary<OverlayEndpoint, WorldInfo> worldByHost = new Dictionary<OverlayEndpoint, WorldInfo>();
+    //}
 
     class DelayedAction
     {
@@ -90,11 +89,13 @@ namespace ServerClient
 
         Random r = new Random();
 
-        GameInfo gameInfo;
+        //GameInfo gameInfo;
         HashSet<Point> worldsInProgress = new HashSet<Point>();
 
         List<IPEndPoint> validatorPool = new List<IPEndPoint>();
+        
         List<Point> spawnWorlds = new List<Point>();
+        Dictionary<Point, WorldInfo> worlds = new Dictionary<Point, WorldInfo>();
 
         OverlayHost myHost;
 
@@ -129,8 +130,8 @@ namespace ServerClient
                 OverlayHost.GenerateHandshake(NodeRole.SERVER));
             myHost.onNewConnectionHook = ProcessNewConnection;
 
-            Action<ForwardFunctionCall> onChange = (ffc) => myHost.BroadcastGroup(Client.hostName, MessageType.GAME_INFO_VAR_CHANGE, ffc.Serialize());
-            gameInfo = new ForwardProxy<GameInfo>(new GameInfo(), onChange).GetProxy();
+            //Action<ForwardFunctionCall> onChange = (ffc) => myHost.BroadcastGroup(Client.hostName, MessageType.GAME_INFO_VAR_CHANGE, ffc.Serialize());
+            //gameInfo = new ForwardProxy<GameInfo>(new GameInfo(), onChange).GetProxy();
         }
 
         Node.MessageProcessor AssignProcessor(Node n, MemoryStream nodeInfo)
@@ -203,7 +204,7 @@ namespace ServerClient
         }
         void OnNewClient(Node n)
         {
-            n.SendMessage(MessageType.GAME_INFO_VAR_INIT, gameInfo.Serialize());
+            //n.SendMessage(MessageType.GAME_INFO_VAR_INIT, gameInfo.Serialize());
         }
 
         void OnNewPlayerRequest(Guid playerId, OverlayEndpoint playerClient)
@@ -241,7 +242,9 @@ namespace ServerClient
         
         void OnNewWorldRequest(Point worldPos)
         {
-            if (gameInfo.TryGetWorldByPos(worldPos) != null)
+            //if (gameInfo.TryGetWorldByPos(worldPos) != null)
+            //    return;
+            if (worlds.ContainsKey(worldPos))
                 return;
             if (worldsInProgress.Contains(worldPos))
                 return;
@@ -269,8 +272,25 @@ namespace ServerClient
                         spawnWorlds.Add(worldPos);
 
                     worldsInProgress.Remove(worldPos);
+                    worlds.Add(info.position, info);
 
-                    gameInfo.NET_AddWorld(info);
+                    foreach(Point p in Point.SymmetricRange(Point.One))
+                    {
+                        if (p == Point.Zero)
+                            continue;
+
+                        Point neighborPos = p + info.position;
+
+                        if(!worlds.ContainsKey(neighborPos))
+                            continue;
+
+                        WorldInfo neighborWorld = worlds[neighborPos];
+
+                        myHost.ConnectSendMessage(neighborWorld.host, MessageType.NEW_NEIGHBOR, info);
+                        myHost.ConnectSendMessage(info.host, MessageType.NEW_NEIGHBOR, neighborWorld);
+                    }
+
+                    //gameInfo.NET_AddWorld(info);
                     //myHost.BroadcastGroup(Client.hostName, MessageType.NEW_WORLD, info);
                 }
             };
@@ -289,7 +309,7 @@ namespace ServerClient
 
             Point spawnWorldPos = spawnWorlds.Random(n => r.Next(n));
 
-            WorldInfo spawnWorld = gameInfo.GetWorldByPos(spawnWorldPos);
+            WorldInfo spawnWorld = worlds.GetValue(spawnWorldPos);
 
             myHost.ConnectSendMessage(spawnWorld.host, MessageType.SPAWN_REQUEST, inf);
         }

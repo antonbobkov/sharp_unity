@@ -74,8 +74,8 @@ namespace ServerClient
 
         public void AddWorldValidator(WorldInfo info, WorldInitializer init)
         {
-            MyAssert.Assert(!worldValidators.ContainsKey(info.worldPos));
-            worldValidators.Add(info.worldPos, new WorldValidator(info, init, host, myClient.gameInfo, myClient.serverHost));
+            MyAssert.Assert(!worldValidators.ContainsKey(info.position));
+            worldValidators.Add(info.position, new WorldValidator(info, init, host, myClient.serverHost));
         }
         public void AddPlayerValidator(PlayerInfo info)
         {
@@ -86,7 +86,7 @@ namespace ServerClient
         {
             MyAssert.Assert(!playerAgents.ContainsKey(info.id));
 
-            PlayerAgent pa = new PlayerAgent(info, host, myClient.serverHost);
+            PlayerAgent pa = new PlayerAgent(info, host, myClient.serverHost, myClient);
 
             pa.onNewPlayerDataHook = (pd) => onNewPlayerDataHook(pa.info, pd);
             pa.onPlayerNewRealm = (pd) => onPlayerNewRealm(pa.info, pd);

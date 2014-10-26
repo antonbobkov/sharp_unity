@@ -68,15 +68,15 @@ namespace ServerClient
             if (playerData == null)
                 return longSleep;
 
-            if (!playerData.connected)
+            if (!playerData.IsConnected)
             {
-                if (myClient.knownWorlds.ContainsKey(new Point(0, 0)))
-                    pa.Spawn();
+                //if (myClient.knownWorlds.ContainsKey(new Point(0, 0)))
+                pa.Spawn();
 
                 return longSleep;
             }
 
-            World playerWorld = myClient.knownWorlds.GetValue(playerData.worldPos);
+            World playerWorld = myClient.knownWorlds.GetValue(playerData.WorldPosition);
 
             if (playerData.inventory.teleport > 0 && rand.NextDouble() < .01)
             {

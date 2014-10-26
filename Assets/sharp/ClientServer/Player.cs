@@ -66,14 +66,19 @@ namespace ServerClient
     [Serializable]
     public class PlayerData
     {
-        public bool connected = false;
-        public Point worldPos = new Point(0,0);
+        [XmlIgnore]
+        public bool IsConnected { get { return world != null; } }
+
+        [XmlIgnore]
+        public Point WorldPosition { get { return world.Value.position; } }
+
+        public WorldInfo? world = null;
 
         public Inventory inventory = new Inventory(5);
 
         public override string ToString()
         {
-            return (connected ? worldPos.ToString() : "[not connected]") + " " + inventory;
+            return (IsConnected ? WorldPosition.ToString() : "[not connected]") + " " + inventory;
         }
     }
 
@@ -166,10 +171,10 @@ namespace ServerClient
             else if (mt == MessageType.PLAYER_WORLD_MOVE)
             {
                 WorldMove wm = Serializer.Deserialize<WorldMove>(stm);
-                Point newWorld = inf.worldPos;
+                WorldInfo newWorld = inf;
 
                 if (wm == WorldMove.LEAVE)
-                    newWorld = Serializer.Deserialize<Point>(stm);
+                    newWorld = Serializer.Deserialize<WorldInfo>(stm);
 
                 ProcessOrDelay(() => RealmUpdate(newWorld));
             }
@@ -212,14 +217,14 @@ namespace ServerClient
                 });
         }
         
-        void RealmUpdate(Point newWorld)
+        void RealmUpdate(WorldInfo newWorld)
         {
             //Log.Dump(newWorld);
             
-            if ((playerData.worldPos != newWorld))
+            if ((playerData.WorldPosition != newWorld.position))
             {
-                playerData.worldPos = newWorld;
-                MessageToAgent(MessageType.PLAYER_INFO_VAR, playerData, PlayerDataUpdate.JOIN_WORLD);
+                playerData.world = newWorld;
+                MessageToAgent(MessageType.PLAYER_INFO_VAR, playerData, PlayerDataUpdate.CHANGE_REALM);
             }
         }
 
@@ -238,16 +243,19 @@ namespace ServerClient
 
         OverlayEndpoint serverHost;
 
+        Client myClient;
+
         public readonly PlayerInfo info;
         public PlayerData data = null;
 
         public Action<PlayerData> onNewPlayerDataHook = (a) => { };
         public Action<PlayerData> onPlayerNewRealm = (a) => { };
 
-        public PlayerAgent(PlayerInfo info_, GlobalHost globalHost, OverlayEndpoint serverHost_)
+        public PlayerAgent(PlayerInfo info_, GlobalHost globalHost, OverlayEndpoint serverHost_, Client myClient_)
         {
             info = info_;
             serverHost = serverHost_;
+            myClient = myClient_;
 
             myHost = globalHost.NewHost(info.playerHost.hostname, AssignProcessor,
                 OverlayHost.GenerateHandshake(NodeRole.PLAYER_AGENT, info));
@@ -291,18 +299,34 @@ namespace ServerClient
                 MyAssert.Assert(data == null);
             else
                 MyAssert.Assert(data != null);
+
+            if (pdu == PlayerDataUpdate.CHANGE_REALM)
+                OnChangeRealm(data.world.Value, pd.world.Value);
+
+            if (pdu == PlayerDataUpdate.SPAWN)
+                OnSpawn(pd.world.Value);
             
             data = pd;
             //Log.LogWriteLine(Log.StDump( inf, pd, pdu));
 
             if (pdu == PlayerDataUpdate.INIT)
                 onNewPlayerDataHook(pd);
-            else if (pdu == PlayerDataUpdate.JOIN_WORLD || pdu == PlayerDataUpdate.SPAWN)
+            else if (pdu == PlayerDataUpdate.CHANGE_REALM || pdu == PlayerDataUpdate.SPAWN)
                 onPlayerNewRealm(pd);
             else if (pdu != PlayerDataUpdate.INVENTORY_CHANGE)
                 throw new Exception(Log.StDump(pdu, "unexpected"));
         }
 
+        void OnChangeRealm(WorldInfo oldWorld, WorldInfo newWorld)
+        {
+            myClient.TrackWorld(newWorld);
+            myClient.UnTrackWorld(oldWorld.position);
+        }
+
+        void OnSpawn(WorldInfo newWorld)
+        {
+            myClient.TrackWorld(newWorld);
+        }
         
         public void Spawn()
         {

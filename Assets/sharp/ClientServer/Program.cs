@@ -79,12 +79,12 @@ namespace ServerClient
             catch (Exception){}
         }
 
-        public static void GameInfoOut(GameInfo inf)
-        {
-            GameInfoSerialized infoser = inf.Serialize();
-            foreach (WorldInfo pi in infoser.worlds)
-                Console.WriteLine(pi.GetFullInfo());
-        }
+        //public static void GameInfoOut(GameInfo inf)
+        //{
+        //    GameInfoSerialized infoser = inf.Serialize();
+        //    foreach (WorldInfo pi in infoser.worlds)
+        //        Console.WriteLine(pi.GetFullInfo());
+        //}
 
         static Guid NewAiPlayer(Aggregator all)
         {

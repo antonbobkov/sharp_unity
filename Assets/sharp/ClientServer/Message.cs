@@ -17,10 +17,10 @@ using System.Runtime.Remoting.Messaging;
 namespace ServerClient
 {
     public enum MessageType : byte { HANDSHAKE, ROLE,
-    SERVER_ADDRESS, GAME_INFO_VAR_INIT, GAME_INFO_VAR_CHANGE, NEW_VALIDATOR,
+    SERVER_ADDRESS, NEW_VALIDATOR,
     NEW_PLAYER_REQUEST, NEW_WORLD_REQUEST, NEW_PLAYER_REQUEST_SUCCESS,
     PLAYER_VALIDATOR_ASSIGN, WORLD_VALIDATOR_ASSIGN, ACCEPT,
-    WORLD_VAR_INIT, WORLD_VAR_CHANGE, PLAYER_WORLD_MOVE,
+    WORLD_VAR_INIT, WORLD_VAR_CHANGE, PLAYER_WORLD_MOVE, NEW_NEIGHBOR,
     MOVE_REQUEST, REALM_MOVE,
     PICKUP_ITEM,
     PLAYER_INFO_VAR,
@@ -31,7 +31,7 @@ namespace ServerClient
 
     public enum WorldMove { LEAVE, JOIN };
 
-    public enum PlayerDataUpdate { INIT, SPAWN, JOIN_WORLD, INVENTORY_CHANGE };
+    public enum PlayerDataUpdate { INIT, SPAWN, CHANGE_REALM, INVENTORY_CHANGE };
 
     [Serializable]
     public class ForwardFunctionCall

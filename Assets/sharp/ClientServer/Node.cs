@@ -18,7 +18,7 @@ namespace ServerClient
         public IPEndPointSer() { }
         public IPEndPointSer(IPEndPoint Addr_) { Addr = Addr_; }
 
-        [XmlIgnoreAttribute]
+        [XmlIgnore]
         public IPEndPoint Addr
         {
             get { return new IPEndPoint(IPAddress.Parse(ipAddr), port); }
@@ -46,7 +46,7 @@ namespace ServerClient
     [Serializable]
     public class OverlayEndpoint
     {
-        [XmlIgnoreAttribute]
+        [XmlIgnore]
         public IPEndPoint addr;
 
         public IPEndPointSer AddrSer
@@ -92,7 +92,7 @@ namespace ServerClient
 
         private MemoryStream _extraInfo = null;
         
-        [XmlIgnoreAttribute]
+        [XmlIgnore]
         public MemoryStream ExtraInfo
         {
             get { return _extraInfo; }
