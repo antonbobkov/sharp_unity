@@ -19,6 +19,7 @@ class WorldDraw
     static public bool continuousBackground = false;
 
     World w;
+    minecraft main;
 
     public readonly Point sz;
 
@@ -33,9 +34,10 @@ class WorldDraw
         background.transform.localScale *= .99f;
     }
 
-    public WorldDraw(World w_)
+    public WorldDraw(World w_, minecraft main_)
 	{
 		w = w_;
+        main = main_;
         sz = w.Size;
 
 		walls = new Plane<GameObject>(sz);
@@ -115,6 +117,9 @@ class WorldDraw
 
         avatar.transform.position = minecraft.GetPositionAtGrid(w.Position, pos);
         players.Add(player, avatar);
+
+        if (player == main.me)
+            main.UpdateCamera(avatar);
     }
 
     public void RemovePlayer(Guid player)
@@ -136,7 +141,17 @@ public class minecraft : MonoBehaviour {
 
 	Dictionary<Point, WorldDraw> worlds = new Dictionary<Point, WorldDraw>();
 
-	Guid me;
+	public Guid me;
+    PlayerAgent myAgent = null;
+    PlayerData myData = null;
+
+    void OnGUI()
+    {
+        if (myData == null || !myData.IsConnected)
+            return;
+
+        GUI.Label(new Rect(10, 10, 100, 20), myData.WorldPosition.ToString());// + " " + myData.inventory.teleport);
+    }
 
     static internal Vector3 GetPositionAtGrid(Point worldPos, Point pos)
     {
@@ -149,14 +164,8 @@ public class minecraft : MonoBehaviour {
         return pos - cornerPos;
 	}
 
-    const float cameraDistance = 20f;
+    const float cameraDistance = 30f;
 
-    Point? worldPos = null;
-    void OnGUI()
-    {
-        if(worldPos != null)
-            GUI.Label(new Rect(10, 10, 100, 20), worldPos.ToString());
-    }
     
     // Use this for initialization
 	void Start () {
@@ -180,16 +189,24 @@ public class minecraft : MonoBehaviour {
 
         };
 
-        all.myClient.onNewMyPlayerHook = (inf) =>
-        {
-            if (inf.id == me)
-                TrySpawn();
-        };
-
-		all.onNewPlayerDataHook = (inf, pd) =>
+		all.onNewPlayerAgentHook = (pa) =>
 		{
-			if (inf.id == me)
-				TrySpawn();
+            if (pa.info.id == me)
+            {
+                myAgent = pa;
+
+                pa.onDataHook = (pd) =>
+                {
+                    bool newData = (myData == null);
+
+                    myData = pd;
+
+                    if (newData)
+                        TrySpawn();
+                };
+            }
+            else
+                throw new Exception(Log.StDump("unexpected"));
 		};
 
         all.myClient.onMoveHook = (w, pl, pos, mt) => OnMove(w, pl, pos, mt);
@@ -217,14 +234,10 @@ public class minecraft : MonoBehaviour {
     {
         try
         {
-            PlayerAgent pa = all.playerAgents.GetValue(me);
-            //all.myClient.knownWorlds.GetValue(new Point(0, 0));
-            PlayerData pd = pa.data;
-
-            if (pd.IsConnected)
+            if (myData.IsConnected)
                 return false;
 
-            pa.Spawn();
+            myAgent.Spawn();
 
             return true;
         }
@@ -244,14 +257,12 @@ public class minecraft : MonoBehaviour {
 		//all.sync.Add(null);
 	}
 
-    void UpdateWorlds(Point suggestedPos = default(Point))
+    void UpdateWorlds()
     {
-        PlayerData myData = all.playerAgents.GetValue(me).data;
-        if (myData != null)
-        {
-            if (myData.IsConnected)
-                suggestedPos = myData.WorldPosition;
-        }
+        //if (myData == null || !myData.IsConnected)
+        //    return;
+
+        //suggestedPos = myData.WorldPosition;
 
         Dictionary<Point, WorldDraw> newWorlds = new Dictionary<Point, WorldDraw>();
         //foreach (Point delta in Point.SymmetricRange(new Point(1, 1)))
@@ -271,7 +282,7 @@ public class minecraft : MonoBehaviour {
                 worlds.Remove(targetPos);
             }
             else
-                newWorlds[targetPos] = new WorldDraw(worldCandidate);
+                newWorlds[targetPos] = new WorldDraw(worldCandidate, this);
         }
 
         foreach (WorldDraw wdt in worlds.Values)
@@ -283,9 +294,6 @@ public class minecraft : MonoBehaviour {
     {
 		UpdateWorlds();
         //Log.LogWriteLine("Unity : OnNewWorld " + w.Position);
-
-        if (w.Position == new Point(0, 0))
-            TrySpawn();
     }
 
     void OnPlayerLeave(Point worldPos, PlayerInfo player)
@@ -299,15 +307,11 @@ public class minecraft : MonoBehaviour {
 	{
 		//Log.LogWriteLine(Log.Dump(this, w.info, player, player.id, mv));
 
-        if (mv == MoveValidity.NEW && player.id == me)
-            UpdateWorlds(w.Position);
+        //if (mv == MoveValidity.NEW && player.id == me)
+        //    UpdateWorlds(w.Position);
 
         if (!worlds.ContainsKey(w.Position))
-        {
-            //if(player.id == me)
-            //    Log.Dump();
             return;
-        }
 
         WorldDraw wd = worlds.GetValue(w.Position);
 
@@ -325,15 +329,13 @@ public class minecraft : MonoBehaviour {
         movedPlayer.transform.position = GetPositionAtGrid(w.Position, newPos);
 
         if (player.id == me)
-            UpdateCamera(movedPlayer, w.Position);
+            UpdateCamera(movedPlayer);
 	}
 
-    public void UpdateCamera(GameObject ourPlayer, Point worldPos_)
+    public void UpdateCamera(GameObject ourPlayer)
     {
         camera.transform.position = ourPlayer.transform.position;
         camera.transform.position += new Vector3(0f, 0f, -cameraDistance);
-
-        worldPos = worldPos_;
     }
 
 	void ProcessMovement()
@@ -355,18 +357,20 @@ public class minecraft : MonoBehaviour {
         if (! (move || teleport))
             return;
 
-        PlayerAgent pa = all.playerAgents.GetValue(me);
-        PlayerData pd = pa.data;
-        if (!pd.IsConnected)
+        PlayerAgent pa = myAgent;
+        PlayerData pd = myData;
+        if (pa == null || pd == null || !pd.IsConnected)
             return;
-        World w = all.myClient.knownWorlds.GetValue(pd.WorldPosition);
+        
+        World w = all.myClient.knownWorlds.TryGetValue(pd.WorldPosition);
 
+        if (w == null)
+            return;
+        if (!w.HasPlayer(me))
+            return;
 
         if (move)
         {
-			if(!w.HasPlayer(me))
-				return;
-
             Point oldPos = w.GetPlayerPosition(me);
 			Point newPos = oldPos + p;
 

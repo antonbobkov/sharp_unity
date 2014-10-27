@@ -24,7 +24,7 @@ namespace ServerClient
         public Dictionary<Guid, PlayerValidator> playerValidators = new Dictionary<Guid, PlayerValidator>();
         public Dictionary<Guid, PlayerAgent> playerAgents = new Dictionary<Guid, PlayerAgent>();
 
-        public Action<PlayerInfo, PlayerData> onNewPlayerDataHook = (a, b) => { };
+        public Action<PlayerAgent> onNewPlayerAgentHook = (a) => { };
         
         public Aggregator()
         {
@@ -87,7 +87,7 @@ namespace ServerClient
 
             PlayerAgent pa = new PlayerAgent(info, host, myClient.serverHost, myClient);
 
-            pa.onNewPlayerDataHook = (pd) => onNewPlayerDataHook(pa.info, pd);
+            onNewPlayerAgentHook(pa);
             
             playerAgents.Add(info.id, pa);
         }

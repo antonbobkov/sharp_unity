@@ -247,7 +247,9 @@ namespace ServerClient
         public readonly PlayerInfo info;
         public PlayerData data = null;
 
-        public Action<PlayerData> onNewPlayerDataHook = (a) => { };
+        public Action<PlayerData> onDataHook = (a) => { };
+        public Action<WorldInfo> onSpawnHook = (a) => { };
+        public Action<WorldInfo, WorldInfo> onRealmMoveHook = (a, b) => { };
 
         public PlayerAgent(PlayerInfo info_, GlobalHost globalHost, OverlayEndpoint serverHost_, Client myClient_)
         {
@@ -294,11 +296,10 @@ namespace ServerClient
         {
             try
             {
+                onDataHook(pd);
+                
                 if (data == null)   // initialize
-                {
-                    onNewPlayerDataHook(pd);
                     return;
-                }
 
                 if (data.ToString() == pd.ToString())
                     throw new Exception(Log.StDump(data, "unchanged"));
@@ -319,12 +320,16 @@ namespace ServerClient
 
         void OnChangeRealm(WorldInfo oldWorld, WorldInfo newWorld)
         {
+            onRealmMoveHook(oldWorld, newWorld);
+
             myClient.TrackWorld(newWorld);
             myClient.UnTrackWorld(oldWorld.position);
         }
 
         void OnSpawn(WorldInfo newWorld)
         {
+            onSpawnHook(newWorld);
+
             myClient.TrackWorld(newWorld);
         }
         
