@@ -151,7 +151,14 @@ public class minecraft : MonoBehaviour {
 
     const float cameraDistance = 20f;
 
-	// Use this for initialization
+    Point? worldPos = null;
+    void OnGUI()
+    {
+        if(worldPos != null)
+            GUI.Label(new Rect(10, 10, 100, 20), worldPos.ToString());
+    }
+    
+    // Use this for initialization
 	void Start () {
         Log.log = msg => Debug.Log(msg);
 
@@ -323,13 +330,15 @@ public class minecraft : MonoBehaviour {
         movedPlayer.transform.position = GetPositionAtGrid(w.Position, newPos);
 
         if (player.id == me)
-            UpdateCamera(movedPlayer);
+            UpdateCamera(movedPlayer, w.Position);
 	}
 
-    public void UpdateCamera(GameObject ourPlayer)
+    public void UpdateCamera(GameObject ourPlayer, Point worldPos_)
     {
         camera.transform.position = ourPlayer.transform.position;
         camera.transform.position += new Vector3(0f, 0f, -cameraDistance);
+
+        worldPos = worldPos_;
     }
 
 	void ProcessMovement()
