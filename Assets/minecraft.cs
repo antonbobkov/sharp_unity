@@ -338,21 +338,50 @@ public class minecraft : MonoBehaviour {
         camera.transform.position += new Vector3(0f, 0f, -cameraDistance);
     }
 
-	void ProcessMovement()
+    Dictionary<KeyCode, float> keyTrack = new Dictionary<KeyCode, float>();
+    
+    Dictionary<KeyCode, Point> keyDir = new Dictionary<KeyCode, Point>()
+    { 
+        {KeyCode.UpArrow, new Point(0, 1)},
+        {KeyCode.DownArrow, new Point(0, -1)},
+        {KeyCode.LeftArrow, new Point(-1, 0)},
+        {KeyCode.RightArrow, new Point(1, 0)}
+    };
+    
+    void ProcessMovement()
     {
-        Point p = new Point();
+        Point p = Point.Zero;
 
-        if (Input.GetKeyDown(KeyCode.UpArrow))
-            p = p + new Point(0, 1);
-        if (Input.GetKeyDown(KeyCode.DownArrow))
-            p = p + new Point(0, -1);
-        if (Input.GetKeyDown(KeyCode.LeftArrow))
-            p = p + new Point(-1, 0);
-        if (Input.GetKeyDown(KeyCode.RightArrow))
-            p = p + new Point(1, 0);
+        foreach (KeyCode k in keyDir.Keys)
+        {
+            if (Input.GetKeyDown(k))
+            {
+                if (keyTrack.ContainsKey(k))
+                    keyTrack.Remove(k);
+                
+                keyTrack.Add(k, 0);
+                p += keyDir[k];
+            }
+
+            if (Input.GetKeyUp(k))
+            {
+                if (keyTrack.ContainsKey(k))
+                    keyTrack.Remove(k);
+            }
+        }
+
+        foreach (KeyCode k in keyTrack.Keys.ToArray())
+        {
+            keyTrack[k] += Time.deltaTime;
+            if (keyTrack[k] >= .2f)
+            {
+                keyTrack[k] = 0;
+                p += keyDir[k];
+            }
+        }
 
         bool teleport = Input.GetMouseButtonDown(0);
-        bool move = (p != new Point(0, 0));
+        bool move = (p != Point.Zero);
 
         if (! (move || teleport))
             return;
