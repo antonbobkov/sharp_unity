@@ -146,7 +146,7 @@ namespace ServerClient
         void OnAgentConnect(Node n)
         {
             playerAgentNode = n;
-            MessageToAgent(MessageType.PLAYER_INFO_VAR, playerData, PlayerDataUpdate.INIT);
+            MessageToAgent(MessageType.PLAYER_INFO_VAR, playerData);
         }
 
         void MessageToAgent(MessageType mt, params object[] args)
@@ -203,12 +203,11 @@ namespace ServerClient
 
                     if (res == Response.SUCCESS)
                     {
-                        PlayerDataUpdate pdu = Serializer.Deserialize<PlayerDataUpdate>(str);
                         PlayerData modifiedData = Serializer.Deserialize<PlayerData>(str);
 
                         playerData = modifiedData;
                         //Log.Dump(info, "unlocking got new data", pdu);
-                        MessageToAgent(MessageType.PLAYER_INFO_VAR, playerData, pdu);
+                        MessageToAgent(MessageType.PLAYER_INFO_VAR, playerData);
                     }
                     //else
                     //    Log.Dump(info, "unlocking - unchanged");
@@ -224,7 +223,7 @@ namespace ServerClient
             if ((playerData.WorldPosition != newWorld.position))
             {
                 playerData.world = newWorld;
-                MessageToAgent(MessageType.PLAYER_INFO_VAR, playerData, PlayerDataUpdate.CHANGE_REALM);
+                MessageToAgent(MessageType.PLAYER_INFO_VAR, playerData);
             }
         }
 
@@ -233,7 +232,7 @@ namespace ServerClient
             //Log.Dump();
 
             ++playerData.inventory.teleport;
-            MessageToAgent(MessageType.PLAYER_INFO_VAR, playerData, PlayerDataUpdate.INVENTORY_CHANGE);
+            MessageToAgent(MessageType.PLAYER_INFO_VAR, playerData);
         }
     }
 
@@ -249,7 +248,6 @@ namespace ServerClient
         public PlayerData data = null;
 
         public Action<PlayerData> onNewPlayerDataHook = (a) => { };
-        public Action<PlayerData> onPlayerNewRealm = (a) => { };
 
         public PlayerAgent(PlayerInfo info_, GlobalHost globalHost, OverlayEndpoint serverHost_, Client myClient_)
         {
@@ -286,35 +284,37 @@ namespace ServerClient
             if (mt == MessageType.PLAYER_INFO_VAR)
             {
                 PlayerData pd = Serializer.Deserialize<PlayerData>(stm);
-                PlayerDataUpdate pdu = Serializer.Deserialize<PlayerDataUpdate>(stm);
-                OnPlayerData(pd, pdu);
+                OnPlayerData(pd);
             }
             else
                 throw new Exception(Log.StDump(mt, "unexpected"));
         }
 
-        void OnPlayerData(PlayerData pd, PlayerDataUpdate pdu)
+        void OnPlayerData(PlayerData pd)
         {
-            if (pdu == PlayerDataUpdate.INIT)
-                MyAssert.Assert(data == null);
-            else
-                MyAssert.Assert(data != null);
+            try
+            {
+                if (data == null)   // initialize
+                {
+                    onNewPlayerDataHook(pd);
+                    return;
+                }
 
-            if (pdu == PlayerDataUpdate.CHANGE_REALM)
-                OnChangeRealm(data.world.Value, pd.world.Value);
+                if (data.ToString() == pd.ToString())
+                    throw new Exception(Log.StDump(data, "unchanged"));
 
-            if (pdu == PlayerDataUpdate.SPAWN)
-                OnSpawn(pd.world.Value);
-            
-            data = pd;
-            //Log.LogWriteLine(Log.StDump( inf, pd, pdu));
+                if (!data.IsConnected) // spawn
+                    OnSpawn(pd.world.Value);
+                else if (data.world.Value.position != pd.world.Value.position)  // realm move
+                    OnChangeRealm(data.world.Value, pd.world.Value);
 
-            if (pdu == PlayerDataUpdate.INIT)
-                onNewPlayerDataHook(pd);
-            else if (pdu == PlayerDataUpdate.CHANGE_REALM || pdu == PlayerDataUpdate.SPAWN)
-                onPlayerNewRealm(pd);
-            else if (pdu != PlayerDataUpdate.INVENTORY_CHANGE)
-                throw new Exception(Log.StDump(pdu, "unexpected"));
+                if (data.inventory != pd.inventory) // inventory change
+                { }
+            }
+            finally
+            {
+                data = pd;
+            }
         }
 
         void OnChangeRealm(WorldInfo oldWorld, WorldInfo newWorld)

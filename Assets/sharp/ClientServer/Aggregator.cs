@@ -25,7 +25,6 @@ namespace ServerClient
         public Dictionary<Guid, PlayerAgent> playerAgents = new Dictionary<Guid, PlayerAgent>();
 
         public Action<PlayerInfo, PlayerData> onNewPlayerDataHook = (a, b) => { };
-        public Action<PlayerInfo, PlayerData> onPlayerNewRealm = (a, b) => { };
         
         public Aggregator()
         {
@@ -89,7 +88,6 @@ namespace ServerClient
             PlayerAgent pa = new PlayerAgent(info, host, myClient.serverHost, myClient);
 
             pa.onNewPlayerDataHook = (pd) => onNewPlayerDataHook(pa.info, pd);
-            pa.onPlayerNewRealm = (pd) => onPlayerNewRealm(pa.info, pd);
             
             playerAgents.Add(info.id, pa);
         }

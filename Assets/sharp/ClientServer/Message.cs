@@ -31,8 +31,6 @@ namespace ServerClient
 
     public enum WorldMove { LEAVE, JOIN };
 
-    public enum PlayerDataUpdate { INIT, SPAWN, CHANGE_REALM, INVENTORY_CHANGE };
-
     [Serializable]
     public class ForwardFunctionCall
     {

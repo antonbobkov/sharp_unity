@@ -196,11 +196,6 @@ public class minecraft : MonoBehaviour {
         all.myClient.onPlayerLeaveHook = (w, pl) => OnPlayerLeave(w.Position, pl);
         
         all.myClient.onNewWorldHook = (w) => OnNewWorld(w);
-		all.onPlayerNewRealm = (inf, pd) =>
-		{
-			if(inf.id == me)
-				UpdateWorlds();
-		};
 
         if (all.host.MyAddress.Port == GlobalHost.nStartPort)
             all.StartServer();

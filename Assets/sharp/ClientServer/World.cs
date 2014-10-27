@@ -598,7 +598,7 @@ namespace ServerClient
                 Guid remoteActionId = Serializer.Deserialize<Guid>(stm);
                 PlayerInfo player = Serializer.Deserialize<PlayerInfo>(stm);
                 Point newPos = Serializer.Deserialize<Point>(stm);
-                OnRealmMove(player, newPos, n, remoteActionId);
+                RealmMoveIn(player, newPos, n, remoteActionId);
             }
             else
                 throw new Exception(Log.StDump(mt, "bad message type"));
@@ -703,7 +703,7 @@ namespace ServerClient
                             if(!spawnSuccess)
                                 myHost.ConnectSendMessage(player.validatorHost, MessageType.UNLOCK_VAR, Response.FAIL, remoteLockId);
                             else
-                                myHost.ConnectSendMessage(player.validatorHost, MessageType.UNLOCK_VAR, Response.SUCCESS, remoteLockId, PlayerDataUpdate.SPAWN, pd);
+                                myHost.ConnectSendMessage(player.validatorHost, MessageType.UNLOCK_VAR, Response.SUCCESS, remoteLockId, pd);
                         }
                     }
                     else
@@ -740,38 +740,66 @@ namespace ServerClient
             world.NET_Move(inf.id, newPos, MoveValidity.VALID);
             //myHost.BroadcastGroup(Client.hostName, MessageType.MOVE, inf.id, newPos);
         }
-        void OnValidateRealmMove(PlayerInfo player, Point newPos) { OnValidateRealmMove(player, newPos, false, (mt) => { }); }
-        void OnValidateRealmMove(PlayerInfo player, Point newPos, bool teleporting, Action<Response> postProcess)
+        void OnValidateRealmMove(PlayerInfo player, Point newPos)
+        {
+            if (playerLocks.Contains(player.id))
+            {
+                Log.Dump(world.Info, player, "can't move, locked");
+                return;
+            }
+
+            if (!world.HasPlayer(player.id))
+            {
+                Log.Dump(world.Info, player, "can't move, not in the world");
+                return;
+            }
+
+            Point currPos = world.GetPlayerPosition(player.id);
+
+            MoveValidity v = world.CheckValidMove(player.id, newPos);
+
+            if (v != MoveValidity.BOUNDARY)
+            {
+                Log.Dump(world.Info, player, v, currPos, newPos, "invalid move");
+                return;
+            }
+
+            ManualLock<Guid> lck = new ManualLock<Guid>(playerLocks, player.id);
+
+            RemoteAction
+                .Send(myHost, player.validatorHost, MessageType.LOCK_VAR)
+                .Respond(remoteActions, lck, (res, stm) =>
+                {
+                    if (res == Response.SUCCESS)
+                    {
+                        Guid remoteLockId = Serializer.Deserialize<Guid>(stm);
+                        PlayerData pd = Serializer.Deserialize<PlayerData>(stm);
+
+                        Action<Response> postProcess = (rs) =>
+                        {
+                            if (rs == Response.SUCCESS)
+                                myHost.ConnectSendMessage(player.validatorHost, MessageType.UNLOCK_VAR, Response.SUCCESS, remoteLockId, pd);
+                            else
+                                myHost.ConnectSendMessage(player.validatorHost, MessageType.UNLOCK_VAR, Response.FAIL, remoteLockId);
+                        };
+
+                        RealmMoveOut(player, newPos, pd, postProcess);
+                    }
+                    else
+                    {
+                        Log.Dump("RealmMove failed, remote lock rejected", world.Info, player, currPos, newPos);
+                    }
+                });
+
+            
+        }
+        
+        void RealmMoveOut(PlayerInfo player, Point newPos, PlayerData pd, Action<Response> postProcess)
         {
             bool success = false;
 
             try
             {
-                if (playerLocks.Contains(player.id))
-                {
-                    Log.Dump(world.Info, player, "can't move, locked");
-                    return;
-                }
-
-                if (!world.HasPlayer(player.id))
-                {
-                    Log.Dump(world.Info, player, "can't move, not in the world");
-                    return;
-                }
-                
-                Point currPos = world.GetPlayerPosition(player.id);
-
-                MoveValidity v = world.CheckValidMove(player.id, newPos);
-
-                if (teleporting)
-                    v &= ~MoveValidity.TELEPORT;
-
-                if (v != MoveValidity.BOUNDARY)
-                {
-                    Log.Dump(world.Info, player, v, currPos, newPos, "invalid move");
-                    return;
-                }
-
                 Point currentRealmPos = world.Position;
 
                 RealmMove wm = WorldTools.BoundaryMove(newPos, world.Position);
@@ -812,6 +840,8 @@ namespace ServerClient
                             world.NET_RemovePlayer(player.id);
                             //myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_LEAVE, player.id, targetRealmPos);
                             myHost.ConnectSendMessage(player.validatorHost, MessageType.PLAYER_WORLD_MOVE, WorldMove.LEAVE, targetRealm.Value);
+
+                            pd.world = targetRealm;
                         }
                         else
                         {
@@ -831,7 +861,7 @@ namespace ServerClient
             }
         }
 
-        void OnRealmMove(PlayerInfo player, Point newPos, Node n, Guid remoteActionId)
+        void RealmMoveIn(PlayerInfo player, Point newPos, Node n, Guid remoteActionId)
         {
             bool success = false;
 
@@ -919,8 +949,7 @@ namespace ServerClient
                                 --pd.inventory.teleport;
                                 MyAssert.Assert(pd.inventory.teleport >= 0);
 
-                                myHost.ConnectSendMessage(player.validatorHost, MessageType.UNLOCK_VAR, Response.SUCCESS, remoteLockId,
-                                    PlayerDataUpdate.INVENTORY_CHANGE, pd);
+                                myHost.ConnectSendMessage(player.validatorHost, MessageType.UNLOCK_VAR, Response.SUCCESS, remoteLockId, pd);
                             }
                             else
                                 myHost.ConnectSendMessage(player.validatorHost, MessageType.UNLOCK_VAR, Response.FAIL, remoteLockId);
@@ -953,7 +982,7 @@ namespace ServerClient
                 {
                     //Log.Dump("Realm teleport request", world.info, player, v, currPos, newPos);
 
-                    OnValidateRealmMove(player, newPos, true, (res) =>
+                    RealmMoveOut(player, newPos, pd, (res) =>
                     {
                         if (res == Response.SUCCESS)
                         {
