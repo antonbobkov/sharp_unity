@@ -187,6 +187,8 @@ public class minecraft : MonoBehaviour {
             Log.LogWriteLine("Player {0}", me);
             all.myClient.NewMyPlayer(me);
 
+            Program.NewAiPlayer(all);
+
         };
 
 		all.onNewPlayerAgentHook = (pa) =>
@@ -205,8 +207,6 @@ public class minecraft : MonoBehaviour {
                         TrySpawn();
                 };
             }
-            else
-                throw new Exception(Log.StDump("unexpected"));
 		};
 
         all.myClient.onMoveHook = (w, pl, pos, mt) => OnMove(w, pl, pos, mt);

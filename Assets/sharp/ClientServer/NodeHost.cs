@@ -239,6 +239,9 @@ namespace ServerClient
 
             return (mt, str, n) =>
                 {
+                    if (n.IsClosed)
+                        return;
+                    
                     try
                     {
                         messageProcessor(mt, str, n);
@@ -338,6 +341,20 @@ namespace ServerClient
             {
                 return null;
             }
+        }
+
+        public bool TryCloseNode(OverlayEndpoint remote)
+        {
+            Node n = FindNode(remote);
+
+            if (n != null)
+            {
+                MyAssert.Assert(!n.IsClosed);
+                n.Disconnect();
+                return true;
+            }
+
+            return false;
         }
 
         public void SendMessage(OverlayEndpoint remote, MessageType mt, params object[] objs)

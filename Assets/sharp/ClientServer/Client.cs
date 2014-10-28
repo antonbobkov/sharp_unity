@@ -51,11 +51,20 @@ namespace ServerClient
             foreach (Point p in Point.SymmetricRange(Point.One))
             {
                 Point q = p + worldPos;
-                if (!trackedWorlds.ContainsKey(q))
-                    trackedWorlds.Add(q, 0);
+
+                MyAssert.Assert(trackedWorlds.ContainsKey(q));
+                MyAssert.Assert(trackedWorlds[q] > 0);
 
                 trackedWorlds[q]--;
 
+                if (trackedWorlds[q] == 0)
+                {
+                    World w = knownWorlds.TryGetValue(q);
+                    if (w == null)
+                        continue;
+                    myHost.TryCloseNode(w.Info.host);
+                    knownWorlds.Remove(q);
+                }
             }
         }
 
@@ -229,6 +238,12 @@ namespace ServerClient
 
             //Log.LogWriteLine("New world {0}", w.Position);
             //w.ConsoleOut();
+
+            if (trackedWorlds.TryGetValue(w.Position) == 0)
+            {
+                myHost.TryCloseNode(w.Info.host);
+                knownWorlds.Remove(w.Position);
+            }
         }
 
         void OnNeighbor(WorldInfo inf)

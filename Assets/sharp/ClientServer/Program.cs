@@ -86,7 +86,7 @@ namespace ServerClient
         //        Console.WriteLine(pi.GetFullInfo());
         //}
 
-        static Guid NewAiPlayer(Aggregator all)
+        static public Guid NewAiPlayer(Aggregator all)
         {
             Guid newPlayer = Guid.NewGuid();
 
