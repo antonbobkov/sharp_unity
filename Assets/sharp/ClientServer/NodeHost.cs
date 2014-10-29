@@ -254,7 +254,7 @@ namespace ServerClient
                 };
         }
         
-        void Sync_OutgoingConnectionReady(Node n)
+        void OutgoingConnectionReady(Node n)
         {
             if (n.AreBothConnected())
                 OnNewConnectionCompletelyReady(n);        
@@ -308,7 +308,7 @@ namespace ServerClient
         void ConnectNodeAsync(Node n)
         {
             n.ConnectAsync(
-                            () => this.Sync_OutgoingConnectionReady(n)
+                            () => this.OutgoingConnectionReady(n)
                           );
         }
 

@@ -92,8 +92,6 @@ namespace ServerClient
 
                     Handshake info = Serializer.Deserialize<Handshake>(Serializer.DeserializeChunk(connectionStream));
 
-                    Serializer.lastRead.GetData();
-                    
                     // swap
                     OverlayEndpoint remote = info.local;
                     OverlayEndpoint local = info.remote;

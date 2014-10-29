@@ -36,13 +36,13 @@ namespace ServerClient
                 throw;
             }
         }
-        
-        public void SendMessage(MessageType mt, params object[] messages)
+
+        public static MemoryStream SerializeMessage(MessageType mt, params object[] messages)
         {
             MemoryStream ms = new MemoryStream();
 
             //Console.WriteLine("Message sent: {0}", mt);
-            
+
             ms.WriteByte((byte)mt);
 
             Serializer.Serialize(ms, messages);
@@ -50,7 +50,12 @@ namespace ServerClient
 
             ms.Position = 0;
 
-            bcMessages.Add(stm => Serializer.SendStream(stm, ms));
+            return ms;
+        }
+        
+        public void SendMessage(MessageType mt, params object[] messages)
+        {
+            bcMessages.Add(stm => Serializer.SendStream(stm, SerializeMessage(mt, messages)));
         }
 
         public void SendStream(MemoryStream stream)

@@ -127,7 +127,7 @@ namespace ServerClient
     class Node
     {
         public delegate void MessageProcessor(MessageType mt, Stream stm, Node n);
-        
+
         public Node(Handshake info_, Action<Action> actionQueue_, Action<Node, Exception, DisconnectType> processDisonnect_)
         {
             info = info_;
@@ -137,11 +137,11 @@ namespace ServerClient
             writerStatus = WriteStatus.READY;
             readerStatus = ReadStatus.READY;
 
-            // queue up
-            SendMessage(MessageType.HANDSHAKE, info);
+            //// queue up
+            //SendMessage(MessageType.HANDSHAKE, info);
 
-            if (info.hasExtraInfo)
-                writer.SendStream(info.ExtraInfo);
+            //if (info.hasExtraInfo)
+            //    writer.SendStream(info.ExtraInfo);
         }
 
         public bool IsClosed { get; private set; }
@@ -266,6 +266,19 @@ namespace ServerClient
             try
             {
                 sck.Connect(Address);
+
+                // send handshake data
+                using (NetworkStream connectionStream = new NetworkStream(sck, false))
+                {
+                    Serializer.SendStream(connectionStream, SocketWriter.SerializeMessage(MessageType.HANDSHAKE, info));
+
+                    if (info.hasExtraInfo)
+                    {
+                        info.ExtraInfo.Position = 0;
+                        Serializer.SendStream(connectionStream, info.ExtraInfo);
+                    }
+                }
+
             }
             catch (Exception e)
             {
