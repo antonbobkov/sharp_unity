@@ -182,7 +182,7 @@ namespace ServerClient
 
         void ProcessDisconnect(Node n, Exception ioex, DisconnectType ds)
         {
-            Log.LogWriteLine("{0} disconnected on {1} ({2})", n.info.remote, ds, (ioex == null) ? "" : ioex.Message);
+            //Log.LogWriteLine("{0} disconnected on {1} ({2})", n.info.remote, ds, (ioex == null) ? "" : ioex.Message);
             RemoveNode(n);
         }
         internal void NewIncomingConnection(Handshake info, Socket sck)

@@ -146,6 +146,8 @@ namespace ServerClient
 
             foreach (WorldInfo inf in ws.neighborWorlds)
                 NET_AddNeighbor(inf);
+
+            MyAssert.Assert(playerPositions.Count == playerInformation.Count);
         }
         public WorldSerialized Serialize()
         {

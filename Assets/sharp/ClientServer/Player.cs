@@ -205,6 +205,9 @@ namespace ServerClient
                     {
                         PlayerData modifiedData = Serializer.Deserialize<PlayerData>(str);
 
+                        if (playerData.ToString() == modifiedData.ToString())
+                            throw new Exception(Log.StDump(playerData, n.info, "unchanged"));
+
                         playerData = modifiedData;
                         //Log.Dump(info, "unlocking got new data", pdu);
                         MessageToAgent(MessageType.PLAYER_INFO_VAR, playerData);
@@ -232,6 +235,7 @@ namespace ServerClient
             //Log.Dump();
 
             ++playerData.inventory.teleport;
+            //Log.Dump(playerData);
             MessageToAgent(MessageType.PLAYER_INFO_VAR, playerData);
         }
     }
@@ -302,7 +306,7 @@ namespace ServerClient
                     return;
 
                 if (data.ToString() == pd.ToString())
-                    throw new Exception(Log.StDump(data, "unchanged"));
+                    throw new Exception(Log.StDump(data, pd, "unchanged"));
 
                 if (!data.IsConnected) // spawn
                     OnSpawn(pd.world.Value);
