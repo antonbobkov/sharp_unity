@@ -55,7 +55,9 @@ namespace ServerClient
         
         public void SendMessage(MessageType mt, params object[] messages)
         {
-            bcMessages.Add(stm => Serializer.SendStream(stm, SerializeMessage(mt, messages)));
+            MemoryStream ms = SerializeMessage(mt, messages);
+            
+            bcMessages.Add(stm => Serializer.SendStream(stm, ms));
         }
 
         public void SendStream(MemoryStream stream)

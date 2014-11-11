@@ -208,7 +208,9 @@ namespace ServerClient
                         if (playerData.ToString() == modifiedData.ToString())
                             throw new Exception(Log.StDump(playerData, n.info, "unchanged"));
 
+                        //Log.Dump(info.name, "from ", playerData);
                         playerData = modifiedData;
+                        //Log.Dump(info.name, "to ", playerData);
                         //Log.Dump(info, "unlocking got new data", pdu);
                         MessageToAgent(MessageType.PLAYER_INFO_VAR, playerData);
                     }
@@ -225,17 +227,19 @@ namespace ServerClient
             
             if ((playerData.WorldPosition != newWorld.position))
             {
+                //Log.Dump(info.name, "from ", playerData);
                 playerData.world = newWorld;
+                //Log.Dump(info.name, "to ", playerData);
                 MessageToAgent(MessageType.PLAYER_INFO_VAR, playerData);
             }
         }
 
         void OnPickupItem()
         {
-            //Log.Dump();
-
+            //Log.Dump(info.name, "from ", playerData);
             ++playerData.inventory.teleport;
-            //Log.Dump(playerData);
+            //Log.Dump(info.name, "to ", playerData);
+
             MessageToAgent(MessageType.PLAYER_INFO_VAR, playerData);
         }
     }

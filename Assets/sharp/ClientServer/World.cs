@@ -151,6 +151,8 @@ namespace ServerClient
         }
         public WorldSerialized Serialize()
         {
+            //SanityCheck();
+            
             return new WorldSerialized()
             { 
                 map = map,
@@ -158,6 +160,19 @@ namespace ServerClient
                 players = playerInformation.Values.ToArray(),
                 neighborWorlds = GetKnownNeighbors().ToArray()
             };
+        }
+
+        void SanityCheck()
+        {
+            MyAssert.Assert(playerPositions.Count == playerInformation.Count);
+
+            int playerCount = 0;
+            foreach (Point p in Point.Range(map.Size))
+                if (map[p].PlayerId != Guid.Empty)
+                    playerCount++;
+
+            MyAssert.Assert(playerCount == playerInformation.Count);
+            MyAssert.Assert(playerCount == playerPositions.Count);
         }
         
         // ----- read only infromation -----
