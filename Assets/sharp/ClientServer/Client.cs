@@ -84,7 +84,7 @@ namespace ServerClient
 
         public Action<PlayerInfo> onNewMyPlayerHook = (a) => { };
 
-        public Action<World, PlayerInfo, Point, MoveValidity> onMoveHook = (a, b, c, d) => { };
+        public Action<World, PlayerInfo, Point, ActionValidity> onMoveHook = (a, b, c, d) => { };
         public Action<World, PlayerInfo> onPlayerLeaveHook = (a, b) => { };
         
         public Client(GlobalHost globalHost, Aggregator all_)

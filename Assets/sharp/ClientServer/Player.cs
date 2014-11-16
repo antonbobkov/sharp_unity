@@ -52,14 +52,15 @@ namespace ServerClient
     [Serializable]
     public class Inventory
     {
-        public int teleport = 0;
+        public int teleport;
+        public int blocks;
 
         public Inventory() { }
-        public Inventory(int teleport_) { teleport = teleport_; }
+        public Inventory(int teleport_, int blocks_) { teleport = teleport_; blocks = blocks_; }
 
         public override string ToString()
         {
-            return "teleport: " + teleport;
+            return "tel: " + teleport + "blc: " + blocks;
         }
     }
 
@@ -74,7 +75,7 @@ namespace ServerClient
 
         public WorldInfo? world = null;
 
-        public Inventory inventory = new Inventory(5);
+        public Inventory inventory = new Inventory(5, 5);
 
         public override string ToString()
         {
@@ -168,8 +169,10 @@ namespace ServerClient
             {
                 RemoteAction.Process(ref locked, n, stm);
             }
-            else if (mt == MessageType.PICKUP_ITEM)
-                ProcessOrDelay(() => OnPickupItem());
+            else if (mt == MessageType.PICKUP_TELEPORT)
+                ProcessOrDelay(() => OnPickupTeleport());
+            else if (mt == MessageType.PICKUP_BLOCK)
+                ProcessOrDelay(() => OnPickupBlock());
             else
                 throw new Exception(Log.StDump(info, inf, mt, "unexpected message"));
         }
@@ -211,11 +214,15 @@ namespace ServerClient
                 });
         }
         
-        void OnPickupItem()
+        void OnPickupTeleport()
         {
-            //Log.Dump(info.name, "from ", playerData);
             ++playerData.inventory.teleport;
-            //Log.Dump(info.name, "to ", playerData);
+
+            MessageToAgent(MessageType.PLAYER_INFO_VAR, playerData);
+        }
+        void OnPickupBlock()
+        {
+            ++playerData.inventory.blocks;
 
             MessageToAgent(MessageType.PLAYER_INFO_VAR, playerData);
         }
@@ -322,9 +329,17 @@ namespace ServerClient
         {
             myHost.ConnectSendMessage(serverHost, MessageType.SPAWN_REQUEST);
         }
-        public void Move(WorldInfo worldInfo, Point newPos, MoveValidity mv)
+        public void Move(WorldInfo worldInfo, Point newPos, ActionValidity mv)
         {
             myHost.ConnectSendMessage(worldInfo.host, MessageType.MOVE_REQUEST, newPos, mv);
+        }
+        public void PlaceBlock(WorldInfo worldInfo, Point blockPos)
+        {
+            myHost.ConnectSendMessage(worldInfo.host, MessageType.PLACE_BLOCK, blockPos);
+        }
+        public void TakeBlock(WorldInfo worldInfo, Point blockPos)
+        {
+            myHost.ConnectSendMessage(worldInfo.host, MessageType.TAKE_BLOCK, blockPos);
         }
     }
 }

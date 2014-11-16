@@ -40,6 +40,8 @@ class WorldDraw
         main = main_;
         sz = w.Size;
 
+        w.onChangeBlock = (pos, placed) => { if (placed) PlaceBlock(pos); else RemoveBlock(pos); };
+
 		walls = new Plane<GameObject>(sz);
 		loots = new Plane<GameObject>(sz);
 		
@@ -48,14 +50,7 @@ class WorldDraw
 			ITile t = w[pos];
 			if (t.Solid)
 			{
-				GameObject wall = GameObject.CreatePrimitive(PrimitiveType.Cube);
-				walls [pos] = wall;
-				
-				wall.transform.position = minecraft.GetPositionAtGrid(w.Position, pos);
-				if(!t.Spawn)
-                    wall.renderer.material.color = new Color(.3f, .3f, .3f);
-                else
-                    wall.renderer.material.color = Color.yellow;
+                PlaceBlock(pos);
 			}
 			else if(t.Loot)
 			{
@@ -130,6 +125,33 @@ class WorldDraw
         //MyAssert.Assert(w.playerPositions.ContainsKey(player));
         UnityEngine.Object.Destroy(players.GetValue(player));
 		players.Remove(player);
+    }
+
+    public void RemoveBlock(Point pos)
+    {
+        ITile t = w[pos];
+
+        MyAssert.Assert(t.IsEmpty());
+        MyAssert.Assert(walls[pos] != null);
+
+        UnityEngine.Object.Destroy(walls[pos]);
+    }
+
+    public void PlaceBlock(Point pos)
+    {
+        ITile t = w[pos];
+
+        MyAssert.Assert(t.Solid);
+        MyAssert.Assert(walls[pos] == null);
+
+        GameObject wall = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        walls[pos] = wall;
+
+        wall.transform.position = minecraft.GetPositionAtGrid(w.Position, pos);
+        if (!t.Spawn)
+            wall.renderer.material.color = new Color(.3f, .3f, .3f);
+        else
+            wall.renderer.material.color = Color.yellow;
     }
 }
 
@@ -309,11 +331,11 @@ public class minecraft : MonoBehaviour {
             worldDraw.RemovePlayer(player.id);
     }
 
-    void OnMove(World w, PlayerInfo player, Point newPos, MoveValidity mv)
+    void OnMove(World w, PlayerInfo player, Point newPos, ActionValidity mv)
 	{
 		//Log.LogWriteLine(Log.Dump(this, w.info, player, player.id, mv));
 
-        //if (mv == MoveValidity.NEW && player.id == me)
+        //if (mv == ActionValidity.NEW && player.id == me)
         //    UpdateWorlds(w.Position);
 
         if (!worlds.ContainsKey(w.Position))
@@ -321,7 +343,7 @@ public class minecraft : MonoBehaviour {
 
         WorldDraw wd = worlds.GetValue(w.Position);
 
-        if (mv == MoveValidity.NEW)
+        if (mv == ActionValidity.NEW)
             wd.AddPlayer(player.id);
 
         GameObject obj = wd.loots[newPos];
@@ -353,6 +375,19 @@ public class minecraft : MonoBehaviour {
         {KeyCode.LeftArrow, new Point(-1, 0)},
         {KeyCode.RightArrow, new Point(1, 0)}
     };
+
+    Point RayCast(Point currentWorldPos)
+    {
+        Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
+        Plane xy = new Plane(Vector3.forward, new Vector3(0, 0, .5f));
+        float distance;
+        xy.Raycast(ray, out distance);
+        var tile = ray.GetPoint(distance) + new Vector3(0, 0, 0);
+        Point pos = new Point(Convert.ToInt32(tile.x), Convert.ToInt32(tile.y));
+        pos = GetPositionAtMap(currentWorldPos, pos);
+
+        return pos;
+    }
     
     void ProcessMovement()
     {
@@ -409,24 +444,36 @@ public class minecraft : MonoBehaviour {
             Point oldPos = w.GetPlayerPosition(me);
 			Point newPos = oldPos + p;
 
-            MoveValidity mv = w.CheckValidMove(me, newPos);
+            ActionValidity mv = w.CheckValidMove(me, newPos);
             
-            if (mv == MoveValidity.VALID || mv == MoveValidity.BOUNDARY)
+            if (mv == ActionValidity.VALID || mv == ActionValidity.BOUNDARY)
 				pa.Move(w.Info, newPos, mv);
         }
         else if (teleport)
         {
-			Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
-            Plane xy = new Plane(Vector3.forward, new Vector3(0, 0, .5f));
-            float distance;
-            xy.Raycast(ray, out distance);
-            var tile = ray.GetPoint(distance) + new Vector3(0, 0, 0);
-            Point pos = new Point(Convert.ToInt32(tile.x), Convert.ToInt32(tile.y));
-			pos = GetPositionAtMap(w.Position, pos);
-            Log.LogWriteLine("Teleporting to {0}", pos);
-            pa.Move(w.Info, pos, MoveValidity.TELEPORT);
-            //pa.Move(all.myClient.gameInfo.GetWorldByPos(Point.Zero), pos, MoveValidity.TELEPORT);
+            Point pos = RayCast(w.Position);
+            
+            //Log.LogWriteLine("Teleporting to {0}", pos);
+            pa.Move(w.Info, pos, ActionValidity.REMOTE);
+            //pa.Move(all.myClient.gameInfo.GetWorldByPos(Point.Zero), pos, ActionValidity.REMOTE);
         }
+    }
+    void ProcessBlockInteraction()
+    {
+        if (!Input.GetMouseButtonDown(1) && !Input.GetMouseButtonDown(2))
+            return;
+
+        if (myData == null || !myData.IsConnected)
+            return;
+
+        World w = all.myClient.knownWorlds.TryGetValue(myData.WorldPosition);
+
+        Point pos = RayCast(w.Position);
+
+        if (Input.GetMouseButtonDown(1))
+            myAgent.PlaceBlock(w.Info, pos);
+        else
+            myAgent.TakeBlock(w.Info, pos);
     }
 
     void ProcessQueuedMessages()
@@ -449,6 +496,7 @@ public class minecraft : MonoBehaviour {
             ProcessQueuedMessages();
 
             ProcessMovement();
+            ProcessBlockInteraction();
 
             if(Input.GetKeyDown(KeyCode.Alpha1))
             {

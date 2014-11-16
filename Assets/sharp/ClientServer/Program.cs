@@ -14,7 +14,7 @@ namespace ServerClient
 {
     class PlayerMove
     {
-        public MoveValidity mv;
+        public ActionValidity mv;
         public Point newPos;
     }
 

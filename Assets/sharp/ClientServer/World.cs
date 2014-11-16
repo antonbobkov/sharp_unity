@@ -22,7 +22,9 @@ namespace ServerClient
 
         Guid PlayerId { get; }
 
+        bool IsMoveable();
         bool IsEmpty();
+        bool IsSpecial();
     }
 
     [Serializable]
@@ -36,7 +38,9 @@ namespace ServerClient
 
         public Guid PlayerId { get; set; }
 
-        public bool IsEmpty() { return (PlayerId == Guid.Empty) && !Solid; }
+        public bool IsEmpty() { return IsMoveable() && !Loot; }
+        public bool IsMoveable() { return (PlayerId == Guid.Empty) && !Solid; }
+        public bool IsSpecial() { return Spawn; }
 
         public Tile() { }
         public Tile(Point pos)
@@ -108,14 +112,17 @@ namespace ServerClient
         public string GetShortInfo() { return "World " + position.ToString(); }
     }
 
-    public enum MoveValidity
+    [Flags]
+    public enum ActionValidity
     {
         VALID = 0,
         BOUNDARY = 1,
-        OCCUPIED_PLAYER = 2,
-        OCCUPIED_WALL = 4,
-        TELEPORT = 8,
-        NEW = 16
+        REMOTE = 2,
+        NEW = 4,
+        OCCUPIED_PLAYER = 8,
+        OCCUPIED_WALL = 16,
+        OCCUPIED_LOOT = 32,
+        OCCUPIED_SPECIAL = 64 
     };
 
     [Serializable]
@@ -202,7 +209,7 @@ namespace ServerClient
                         continue;
                     
                     Tile t = map[p];
-                    if (t.IsEmpty())
+                    if (t.IsMoveable())
                         //yield return new KeyValuePair<Point, Tile>(p, t);
                         yield return p;
                 }
@@ -249,35 +256,48 @@ namespace ServerClient
             return neighborWorlds.GetValue(p);
         }
 
-        public MoveValidity CheckValidMove(Guid player, Point newPos)
+        public ActionValidity CheckValidMove(Guid player, Point newPos)
         {
-            MoveValidity mv = MoveValidity.VALID;
+            ActionValidity mv = CheckAction(player, newPos);
+
+            mv &= ~ActionValidity.OCCUPIED_LOOT;
+
+            return mv;
+        }
+
+        public ActionValidity CheckAction(Guid player, Point newPos)
+        {
+            ActionValidity mv = ActionValidity.VALID;
 
             Point curPos = playerPositions.GetValue(player);
 
             Point diff = newPos - curPos;
             if (Math.Abs(diff.x) > 1)
-                mv |= MoveValidity.TELEPORT;
+                mv |= ActionValidity.REMOTE;
             if (Math.Abs(diff.y) > 1)
-                mv |= MoveValidity.TELEPORT;
+                mv |= ActionValidity.REMOTE;
 
-            Tile tile;
+            ITile tile;
             try
             {
                 tile = map[newPos];
             }
             catch (IndexOutOfRangeException)
             {
-                mv |= MoveValidity.BOUNDARY;
+                mv |= ActionValidity.BOUNDARY;
                 return mv;
             }
 
             if (!tile.IsEmpty())
             {
                 if (tile.PlayerId != Guid.Empty)
-                    mv |= MoveValidity.OCCUPIED_PLAYER;
+                    mv |= ActionValidity.OCCUPIED_PLAYER;
                 if (tile.Solid)
-                    mv |= MoveValidity.OCCUPIED_WALL;
+                    mv |= ActionValidity.OCCUPIED_WALL;
+                if(tile.Loot)
+                    mv |= ActionValidity.OCCUPIED_LOOT;
+                if (tile.IsSpecial())
+                    mv |= ActionValidity.OCCUPIED_SPECIAL;
             }
 
             return mv;
@@ -291,7 +311,7 @@ namespace ServerClient
 
             playerInformation.Add(player.id, player);
 
-            NET_Move(player.id, pos, MoveValidity.NEW);
+            NET_Move(player.id, pos, ActionValidity.NEW);
         }
         [Forward] public void NET_RemovePlayer(Guid player)
         {
@@ -306,18 +326,18 @@ namespace ServerClient
 
             onPlayerLeaveHook(inf);
         }
-        [Forward] public void NET_Move(Guid player, Point newPos, MoveValidity mv)
+        [Forward] public void NET_Move(Guid player, Point newPos, ActionValidity mv)
         {
             PlayerInfo p = playerInformation.GetValue(player);
 
-            if (mv != MoveValidity.NEW)
+            if (mv != ActionValidity.NEW)
             {
                 Point curPos = playerPositions.GetValue(player);
 
-                MoveValidity v = CheckValidMove(player, newPos) & ~mv;
-                MyAssert.Assert(v == MoveValidity.VALID);
+                ActionValidity v = CheckValidMove(player, newPos) & ~mv;
+                MyAssert.Assert(v == ActionValidity.VALID);
 
-                //if (v != MoveValidity.VALID)
+                //if (v != ActionValidity.VALID)
                     //Log.LogWriteLine("Game.Move Warning: Invalid move {0} from {1} to {2} by {3}", v, curPos, newPos, p.name);
 
                 MyAssert.Assert(map[curPos].PlayerId == player);
@@ -325,7 +345,7 @@ namespace ServerClient
             }
 
             Tile tile = map[newPos];
-            MyAssert.Assert(tile.IsEmpty());
+            MyAssert.Assert(tile.IsMoveable());
 
             if (tile.Loot == true)
                 onLootHook(p);
@@ -348,12 +368,34 @@ namespace ServerClient
 
             onNeighbor.Invoke(worldInfo);
         }
+        [Forward] public void NET_PlaceBlock(Point pos)
+        {
+            Tile t = map[pos];
+
+            MyAssert.Assert(t.IsEmpty());
+
+            t.Solid = true;
+
+            onChangeBlock(pos, true);
+        }
+        [Forward] public void NET_RemoveBlock(Point pos)
+        {
+            Tile t = map[pos];
+
+            MyAssert.Assert(t.Solid);
+            MyAssert.Assert(!t.IsSpecial());
+
+            t.Solid = false;
+
+            onChangeBlock(pos, false);
+        }
 
         // ----- hooks -----
         public Action<PlayerInfo> onLootHook = (info) => { };
-        public Action<PlayerInfo, Point, MoveValidity> onMoveHook = (a, b, c) => { };
+        public Action<PlayerInfo, Point, ActionValidity> onMoveHook = (a, b, c) => { };
         public Action<PlayerInfo> onPlayerLeaveHook = (a) => { };
         public Action<WorldInfo> onNeighbor = (a) => { };
+        public Action<Point, bool> onChangeBlock = (a, b) => { };
 
         // ----- generating -----
         static public World Generate(WorldInfo myInfo_, WorldInitializer init)
@@ -392,17 +434,15 @@ namespace ServerClient
             if (init.hasSpawn)
             {
                 var a = (from t in map.GetEnum()
-                         where !t.Value.IsEmpty()
+                         where t.Value.Solid
                          select t).ToList();
 
-                if (!a.Any())
-                    a = map.GetEnum().ToList();
-
-                MyAssert.Assert(a.Any());
-
-                var spawn = a.Random(n => seededRandom.Next(n));
-                spawn.Value.Spawn = true;
-                spawnPos = spawn.Key;
+                if (a.Any()) // could be empty world
+                {
+                    var spawn = a.Random(n => seededRandom.Next(n));
+                    spawn.Value.Spawn = true;
+                    spawnPos = spawn.Key;
+                }
             }
 
             /*/ clear spawn points
@@ -617,24 +657,54 @@ namespace ServerClient
                 Point newPos = Serializer.Deserialize<Point>(stm);
                 RealmMoveIn(player, newPos, n, remoteActionId);
             }
+            else if (mt == MessageType.TAKE_BLOCK)
+            {
+                PlayerInfo player = Serializer.Deserialize<PlayerInfo>(stm);
+                Point blockPos = Serializer.Deserialize<Point>(stm);
+                RemoveBlock(player, blockPos);
+            }
             else
                 throw new Exception(Log.StDump(mt, "bad message type"));
         }
         void ProcessPlayerMessage(MessageType mt, Stream stm, Node n, PlayerInfo inf)
         {
+            if (playerLocks.Contains(inf.id))
+            {
+                Log.Dump("can't act, locked", inf, mt);
+                return;
+            }
+
+            if (!world.HasPlayer(inf.id))
+            {
+                Log.Dump("can't act, not in the world", inf, mt);
+                return;
+            }
+
+            Point curPos = world.GetPlayerPosition(inf.id);
+
             if (mt == MessageType.MOVE_REQUEST)
             {
                 Point newPos = Serializer.Deserialize<Point>(stm);
-                MoveValidity mv = Serializer.Deserialize<MoveValidity>(stm);
+                ActionValidity mv = Serializer.Deserialize<ActionValidity>(stm);
 
-                if(mv == MoveValidity.VALID)
-                    OnMoveValidate(inf, newPos);
-                else if(mv == MoveValidity.BOUNDARY)
-                    OnValidateRealmMove(inf, newPos);
-                else if(mv == MoveValidity.TELEPORT)
-                    OnValidateTeleport(inf, newPos);
+                if(mv == ActionValidity.VALID)
+                    OnMoveValidate(inf, curPos, newPos);
+                else if(mv == ActionValidity.BOUNDARY)
+                    OnValidateRealmMove(inf, curPos, newPos);
+                else if(mv == ActionValidity.REMOTE)
+                    OnValidateTeleport(inf, curPos, newPos);
                 else
                     throw new Exception(Log.StDump(mt, inf, newPos, mv, "unexpected move request"));
+            }
+            else if (mt == MessageType.PLACE_BLOCK)
+            {
+                Point blockPos = Serializer.Deserialize<Point>(stm);
+                OnPlaceBlock(inf, curPos, blockPos);
+            }
+            else if (mt == MessageType.TAKE_BLOCK)
+            {
+                Point blockPos = Serializer.Deserialize<Point>(stm);
+                OnRemoveBlock(inf, curPos, blockPos);
             }
             else
                 throw new Exception(Log.StDump(mt, inf, "unexpected message"));
@@ -655,14 +725,108 @@ namespace ServerClient
                 throw new Exception(Log.StDump("unexpected", world.Info, mt));
         }
 
-        void OnMoveHook(PlayerInfo inf, Point newPos, MoveValidity mv)
+        void OnMoveHook(PlayerInfo inf, Point newPos, ActionValidity mv)
         {
             //Log.Dump(inf, newPos, mv);
             
-            if (mv == MoveValidity.NEW)
+            if (mv == ActionValidity.NEW)
             {
                 BoundaryRequest();
             }
+        }
+
+        void OnPlaceBlock(PlayerInfo player, Point currPos, Point blockPos)
+        {
+            ActionValidity v = world.CheckValidMove(player.id, blockPos);// &~(ActionValidity.REMOTE | ActionValidity.BOUNDARY);
+
+            if (v != ActionValidity.VALID)
+            {
+                Log.Dump("Invalid action (check 1)", world.Info, player, v, currPos, blockPos);
+                return;
+            }
+
+            ManualLock<Guid> lck = new ManualLock<Guid>(playerLocks, player.id);
+
+            RemoteAction
+                .Send(myHost, player.validatorHost, MessageType.LOCK_VAR)
+                .Respond(remoteActions, lck, (res, stm) =>
+                {
+                    if (res == Response.SUCCESS)
+                    {
+                        Guid remoteLockId = Serializer.Deserialize<Guid>(stm);
+                        PlayerData pd = Serializer.Deserialize<PlayerData>(stm);
+
+                        Action<Response> postProcess = (rs) =>
+                        {
+                            if (rs == Response.SUCCESS)
+                            {
+                                --pd.inventory.blocks;      
+                                MyAssert.Assert(pd.inventory.blocks >= 0);
+
+                                myHost.ConnectSendMessage(player.validatorHost, MessageType.UNLOCK_VAR, Response.SUCCESS, remoteLockId, pd);
+                            }
+                            else
+                                myHost.ConnectSendMessage(player.validatorHost, MessageType.UNLOCK_VAR, Response.FAIL, remoteLockId);
+                        };
+
+                        MyAssert.Assert(pd.inventory.blocks >= 0);
+                        if (pd.inventory.blocks == 0)
+                        {
+                            Log.Dump("Block placing failed, not enough items", world.Info, player, currPos, blockPos);
+                            postProcess.Invoke(Response.FAIL);
+                            return;
+                        }
+
+                        postProcess.Invoke(Response.SUCCESS);
+                        world.NET_PlaceBlock(blockPos);
+
+                        //Teleport(player, currPos, newPos, pd, postProcess);
+                    }
+                    else
+                    {
+                        Log.Dump("Block placing failed, remote lock rejected", world.Info, player, currPos, blockPos);
+                    }
+                });
+        }
+        void OnRemoveBlock(PlayerInfo player, Point currPos, Point blockPos)
+        {
+            ActionValidity v = world.CheckValidMove(player.id, blockPos) & ~ActionValidity.OCCUPIED_WALL;
+
+            if ((v & ~ActionValidity.BOUNDARY) != ActionValidity.VALID)
+            {
+                Log.Dump("Invalid action (check 1)", world.Info, player, v, currPos, blockPos);
+                return;
+            }
+
+            if (v != ActionValidity.BOUNDARY)
+                RemoveBlock(player, blockPos);
+            else
+            {
+                try
+                {
+                    WorldInfo remoteRealm = GetRemoteRealm(ref blockPos);
+                    myHost.ConnectSendMessage(remoteRealm.host, MessageType.TAKE_BLOCK, player, blockPos);
+                }
+                catch (GetRealmException e)
+                {
+                    Log.Dump(world.Info, player, e.Message);
+                }
+            }
+        }
+        
+        void RemoveBlock(PlayerInfo player, Point blockPos)
+        {
+            ITile t = world[blockPos];
+
+            if (!t.Solid || t.IsSpecial())
+            {
+                Log.Dump("Invalid action, bad tile", world.Info, player, blockPos);
+                return;
+            }
+
+            world.NET_RemoveBlock(blockPos);
+            myHost.ConnectSendMessage(player.validatorHost, MessageType.PICKUP_BLOCK);
+
         }
 
         void OnSpawnRequest(PlayerInfo player)
@@ -729,53 +893,24 @@ namespace ServerClient
                     }
                 });
         }
-        void OnMoveValidate(PlayerInfo inf, Point newPos)
+        void OnMoveValidate(PlayerInfo inf, Point currPos, Point newPos)
         {
-            if (playerLocks.Contains(inf.id))
-            {
-                Log.LogWriteLine("World {0}: {1} can't move, locked", world.Info.GetShortInfo(), inf.GetShortInfo());
-                return;
-            }
-
-            if (!world.HasPlayer(inf.id))
-            {
-                Log.LogWriteLine("World {0}: Invalid move {1} by {2}: player absent from this world",
-                    world.Info.GetShortInfo(), newPos, inf.GetShortInfo());
-                return;
-            }
-            
-            Point currPos = world.GetPlayerPosition(inf.id);
-
-            MoveValidity v = world.CheckValidMove(inf.id, newPos);
-            if (v != MoveValidity.VALID)
+            ActionValidity v = world.CheckValidMove(inf.id, newPos);
+            if (v != ActionValidity.VALID)
             {
                 Log.LogWriteLine("World {4}: Invalid move {0} from {1} to {2} by {3}", v,
                     currPos, newPos, inf.GetShortInfo(), world.Info.GetShortInfo());
                 return;
             }
 
-            world.NET_Move(inf.id, newPos, MoveValidity.VALID);
+            world.NET_Move(inf.id, newPos, ActionValidity.VALID);
             //myHost.BroadcastGroup(Client.hostName, MessageType.MOVE, inf.id, newPos);
         }
-        void OnValidateRealmMove(PlayerInfo player, Point newPos)
+        void OnValidateRealmMove(PlayerInfo player, Point currPos, Point newPos)
         {
-            if (playerLocks.Contains(player.id))
-            {
-                Log.Dump(world.Info, player, "can't move, locked");
-                return;
-            }
+            ActionValidity v = world.CheckValidMove(player.id, newPos);
 
-            if (!world.HasPlayer(player.id))
-            {
-                Log.Dump(world.Info, player, "can't move, not in the world");
-                return;
-            }
-
-            Point currPos = world.GetPlayerPosition(player.id);
-
-            MoveValidity v = world.CheckValidMove(player.id, newPos);
-
-            if (v != MoveValidity.BOUNDARY)
+            if (v != ActionValidity.BOUNDARY)
             {
                 Log.Dump(world.Info, player, v, currPos, newPos, "invalid move");
                 return;
@@ -810,6 +945,34 @@ namespace ServerClient
 
             
         }
+
+        class GetRealmException : Exception { public GetRealmException(string s) : base(s) { } }
+        
+        WorldInfo GetRemoteRealm(ref Point targetPos)
+        {
+            Point currentRealmPos = world.Position;
+
+            RealmMove wm = WorldTools.BoundaryMove(targetPos, world.Position);
+            targetPos = wm.newPosition;
+            Point targetRealmPos = wm.newWorld;
+
+            var a = from p in Point.SymmetricRange(Point.One)
+                    where p != Point.Zero
+                    where p + world.Position == targetRealmPos
+                    select p;
+
+            if (!a.Any())
+                throw new GetRealmException(Log.StDump(currentRealmPos, targetRealmPos, targetPos, "realm too far"));
+
+            MyAssert.Assert(currentRealmPos != targetRealmPos);
+            WorldInfo? targetRealm = world.GetNeighbor(targetRealmPos);
+            if (targetRealm == null)
+            {
+                throw new GetRealmException(Log.StDump(currentRealmPos, targetRealmPos, targetPos, "no realm to move in"));
+            }
+
+            return targetRealm.Value;
+        }
         
         void RealmMoveOut(PlayerInfo player, Point newPos, PlayerData pd, Action<Response> postProcess)
         {
@@ -817,37 +980,14 @@ namespace ServerClient
 
             try
             {
-                Point currentRealmPos = world.Position;
-
-                RealmMove wm = WorldTools.BoundaryMove(newPos, world.Position);
-                newPos = wm.newPosition;
-                Point targetRealmPos = wm.newWorld;
-
-                var a = from p in Point.SymmetricRange(Point.One)
-                        where p != Point.Zero
-                        where p + world.Position == targetRealmPos
-                        select p;
-
-                if (!a.Any())
-                {
-                    Log.Dump(world.Info, player, currentRealmPos, targetRealmPos, newPos, "move too far");
-                    return;
-                }
-
-                MyAssert.Assert(currentRealmPos != targetRealmPos);
-                WorldInfo? targetRealm = world.GetNeighbor(targetRealmPos);
-                if (targetRealm == null)
-                {
-                    Log.Dump(world.Info, player, currentRealmPos, targetRealmPos, newPos, "no realm to move in");
-                    return;
-                }
+                WorldInfo targetRealm = GetRemoteRealm(ref newPos);
 
                 //Log.LogWriteLine(Log.StDump(world.info, player, currentRealmPos, targetRealmPos, newPos, "realm request"));
 
                 ManualLock<Guid> lck = new ManualLock<Guid>(playerLocks, player.id);
 
                 RemoteAction
-                    .Send(myHost, targetRealm.Value.host, MessageType.REALM_MOVE, player, newPos)
+                    .Send(myHost, targetRealm.host, MessageType.REALM_MOVE, player, newPos)
                     .Respond(remoteActions, lck, (res, stm) =>
                     {
                         if (res == Response.SUCCESS)
@@ -855,21 +995,22 @@ namespace ServerClient
                             //Log.LogWriteLine(Log.StDump(world.info, player, currentRealmPos, targetRealmPos, newPos, "realm move success"));
 
                             world.NET_RemovePlayer(player.id);
-                            //myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_LEAVE, player.id, targetRealmPos);
-                            //myHost.ConnectSendMessage(player.validatorHost, MessageType.PLAYER_WORLD_MOVE, WorldMove.LEAVE, targetRealm.Value);
 
                             pd.world = targetRealm;
                         }
                         else
                         {
-                            Log.Dump(world.Info, player, currentRealmPos, targetRealmPos, newPos, res, "remote world refused");
+                            Log.Dump(world.Info, player, targetRealm.position, newPos, res, "remote world refused");
                         }
 
                         postProcess.Invoke(res);
                     });
 
                 success = true;
-                return;
+            }
+            catch (GetRealmException e)
+            {
+                Log.Dump(world.Info, player, e.Message);
             }
             finally
             {
@@ -890,16 +1031,18 @@ namespace ServerClient
                     return;
                 }
 
+                MyAssert.Assert(!world.HasPlayer(player.id));
+
                 ITile t = world[newPos];
 
-                if (!t.IsEmpty())
+                if (!t.IsMoveable())
                 {
-                    MoveValidity mv = MoveValidity.VALID;
+                    ActionValidity mv = ActionValidity.VALID;
 
                     if (t.PlayerId != Guid.Empty)
-                        mv = MoveValidity.OCCUPIED_PLAYER;
+                        mv = ActionValidity.OCCUPIED_PLAYER;
                     else if (t.Solid)
-                        mv = MoveValidity.OCCUPIED_WALL;
+                        mv = ActionValidity.OCCUPIED_WALL;
                     else
                         throw new Exception(Log.StDump(world.Info, player, mv, "bad tile status"));
 
@@ -922,25 +1065,12 @@ namespace ServerClient
             }
         }
 
-        void OnValidateTeleport(PlayerInfo player, Point newPos)
+        void OnValidateTeleport(PlayerInfo player, Point currPos, Point newPos)
         {
-            if (playerLocks.Contains(player.id))
-            {
-                Log.LogWriteLine(Log.StDump( world.Info, player, "can't teleport, locked"));
-                return;
-            }
+            ActionValidity v = world.CheckValidMove(player.id, newPos) & ~(ActionValidity.REMOTE | ActionValidity.BOUNDARY);
+            //ActionValidity v = ActionValidity.VALID;// world.CheckValidMove(player.id, newPos) & ~(ActionValidity.REMOTE);
 
-            if (!world.HasPlayer(player.id))
-            {
-                Log.LogWriteLine(Log.StDump(world.Info, player, "can't teleport, not in the world"));
-                return;
-            }
-
-            Point currPos = world.GetPlayerPosition(player.id);
-            MoveValidity v = world.CheckValidMove(player.id, newPos) & ~(MoveValidity.TELEPORT | MoveValidity.BOUNDARY);
-            //MoveValidity v = MoveValidity.VALID;// world.CheckValidMove(player.id, newPos) & ~(MoveValidity.TELEPORT);
-
-            if (v != MoveValidity.VALID)
+            if (v != ActionValidity.VALID)
             {
                 Log.Dump("Invalid teleport (check 1)", world.Info, player, v, currPos, newPos);
                 return;
@@ -991,11 +1121,11 @@ namespace ServerClient
 
         void Teleport(PlayerInfo player, Point currPos, Point newPos, PlayerData pd, Action<Response> postProcess)
         {
-            MoveValidity v = world.CheckValidMove(player.id, newPos) & ~(MoveValidity.TELEPORT);
+            ActionValidity v = world.CheckValidMove(player.id, newPos) & ~(ActionValidity.REMOTE);
 
-            if (v != MoveValidity.VALID)
+            if (v != ActionValidity.VALID)
             {
-                if (v == MoveValidity.BOUNDARY) // not done yet - realm teleport
+                if (v == ActionValidity.BOUNDARY) // not done yet - realm teleport
                 {
                     //Log.Dump("Realm teleport request", world.info, player, v, currPos, newPos);
 
@@ -1023,7 +1153,7 @@ namespace ServerClient
             else // teleporting success
             {
                 //Log.Dump("Teleported", world.info, player, currPos, newPos);
-                world.NET_Move(player.id, newPos, MoveValidity.TELEPORT);
+                world.NET_Move(player.id, newPos, ActionValidity.REMOTE);
                 //myHost.BroadcastGroup(Client.hostName, MessageType.TELEPORT_MOVE, player.id, newPos);
 
                 postProcess.Invoke(Response.SUCCESS);
@@ -1032,7 +1162,7 @@ namespace ServerClient
 
         void OnLootPickup(PlayerInfo inf)
         {
-            myHost.ConnectSendMessage(inf.validatorHost, MessageType.PICKUP_ITEM);
+            myHost.ConnectSendMessage(inf.validatorHost, MessageType.PICKUP_TELEPORT);
         }
 
         void BoundaryRequest()

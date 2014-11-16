@@ -30,9 +30,9 @@ namespace ServerClient
 
             Point newPosition = currPos + moves[rand.Next(0, moves.Length)];
 
-            MoveValidity mv = world.CheckValidMove(player, newPosition);
+            ActionValidity mv = world.CheckValidMove(player, newPosition);
 
-            if (mv == MoveValidity.BOUNDARY)
+            if (mv == ActionValidity.BOUNDARY)
             {
                 RealmMove rm = WorldTools.BoundaryMove(newPosition, world.Position);
                 World w = all.myClient.knownWorlds.TryGetValue(rm.newWorld);
@@ -40,11 +40,11 @@ namespace ServerClient
                 if (w == null)
                     return null;
 
-                if (!w[rm.newPosition].IsEmpty())
+                if (!w[rm.newPosition].IsMoveable())
                     return null;
             }
 
-            if (mv == MoveValidity.VALID || mv == MoveValidity.BOUNDARY)
+            if (mv == ActionValidity.VALID || mv == ActionValidity.BOUNDARY)
                 return new PlayerMove() { mv = mv, newPos = newPosition };
             else
                 return null;
@@ -89,13 +89,13 @@ namespace ServerClient
                                    let w = myClient.knownWorlds.TryGetValue(p + playerWorld.Position)
                                    where w != null
                                    from t in w.GetAllTiles()
-                                   where t.IsEmpty()
+                                   where t.IsMoveable()
                                    select WorldTools.Shift(p, t.Position)).ToList();
 
                 if (teleportPos.Any())
                 {
                     Point newPos = teleportPos[rand.Next(0, teleportPos.Count)];
-                    pa.Move(playerWorld.Info, newPos, MoveValidity.TELEPORT);
+                    pa.Move(playerWorld.Info, newPos, ActionValidity.REMOTE);
 
                     return shortSleep;
                 }
@@ -111,7 +111,7 @@ namespace ServerClient
 
             if (move != null)
             {
-                if (move.mv == MoveValidity.VALID || move.mv == MoveValidity.BOUNDARY)
+                if (move.mv == ActionValidity.VALID || move.mv == ActionValidity.BOUNDARY)
                     pa.Move(playerWorld.Info, move.newPos, move.mv);
                 else
                     throw new Exception(Log.StDump(move.mv, move.newPos, "unexpected move"));
