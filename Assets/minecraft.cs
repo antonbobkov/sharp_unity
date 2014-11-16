@@ -211,8 +211,9 @@ public class minecraft : MonoBehaviour {
 
         all.myClient.onMoveHook = (w, pl, pos, mt) => OnMove(w, pl, pos, mt);
         all.myClient.onPlayerLeaveHook = (w, pl) => OnPlayerLeave(w.Position, pl);
-        
+
         all.myClient.onNewWorldHook = (w) => OnNewWorld(w);
+        all.myClient.onDeleteWorldHook = (w) => OnDeleteWorld(w);
 
         if (all.host.MyAddress.Port == GlobalHost.nStartPort)
             all.StartServer();
@@ -269,12 +270,12 @@ public class minecraft : MonoBehaviour {
         //{
         //    Point targetPos = suggestedPos + delta;
         //    World worldCandidate = all.myClient.knownWorlds.TryGetValue(targetPos);
+        //    if (worldCandidate == null)
+        //        continue;
+        
         foreach(World worldCandidate in all.myClient.knownWorlds.Values)
         {
             Point targetPos = worldCandidate.Position;
-
-            if (worldCandidate == null)
-                continue;
 
             if (worlds.ContainsKey(targetPos))
             {
@@ -294,6 +295,11 @@ public class minecraft : MonoBehaviour {
     {
 		UpdateWorlds();
         //Log.LogWriteLine("Unity : OnNewWorld " + w.Position);
+    }
+
+    void OnDeleteWorld(World w)
+    {
+        UpdateWorlds();
     }
 
     void OnPlayerLeave(Point worldPos, PlayerInfo player)

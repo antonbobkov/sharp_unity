@@ -856,7 +856,7 @@ namespace ServerClient
 
                             world.NET_RemovePlayer(player.id);
                             //myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_LEAVE, player.id, targetRealmPos);
-                            myHost.ConnectSendMessage(player.validatorHost, MessageType.PLAYER_WORLD_MOVE, WorldMove.LEAVE, targetRealm.Value);
+                            //myHost.ConnectSendMessage(player.validatorHost, MessageType.PLAYER_WORLD_MOVE, WorldMove.LEAVE, targetRealm.Value);
 
                             pd.world = targetRealm;
                         }
@@ -909,7 +909,7 @@ namespace ServerClient
                 }
 
                 world.NET_AddPlayer(player, newPos);
-                myHost.ConnectSendMessage(player.validatorHost, MessageType.PLAYER_WORLD_MOVE, WorldMove.JOIN);
+                //myHost.ConnectSendMessage(player.validatorHost, MessageType.PLAYER_WORLD_MOVE, WorldMove.JOIN);
 
                 success = true;
             }

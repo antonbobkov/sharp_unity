@@ -58,14 +58,21 @@ namespace ServerClient
                 trackedWorlds[q]--;
 
                 if (trackedWorlds[q] == 0)
-                {
-                    World w = knownWorlds.TryGetValue(q);
-                    if (w == null)
-                        continue;
-                    myHost.TryCloseNode(w.Info.host);
-                    knownWorlds.Remove(q);
-                }
+                    TryRemoveWorld(q);
             }
+        }
+
+        bool TryRemoveWorld(Point worldPos)
+        {
+            World w = knownWorlds.TryGetValue(worldPos);
+            if (w == null)
+                return false;
+            
+            myHost.TryCloseNode(w.Info.host);
+            knownWorlds.Remove(worldPos);
+            onDeleteWorldHook(w);
+
+            return true;
         }
 
         public HashSet<Guid> myPlayerAgents = new HashSet<Guid>();
@@ -73,6 +80,8 @@ namespace ServerClient
         public Action onServerReadyHook = () => { };
 
         public Action<World> onNewWorldHook = (a) => { };
+        public Action<World> onDeleteWorldHook = (a) => { };
+
         public Action<PlayerInfo> onNewMyPlayerHook = (a) => { };
 
         public Action<World, PlayerInfo, Point, MoveValidity> onMoveHook = (a, b, c, d) => { };

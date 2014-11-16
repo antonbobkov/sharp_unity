@@ -229,6 +229,7 @@ namespace ServerClient
                 {
                     //gameInfo.NET_AddPlayer(playerInfo);
                     myHost.ConnectSendMessage(playerClient, MessageType.NEW_PLAYER_REQUEST_SUCCESS, playerInfo);
+                    //Log.LogWriteLine("New player " + name + " validated by " + validatorHost.addr);
                 }
             };
 
@@ -273,6 +274,8 @@ namespace ServerClient
 
                     worldsInProgress.Remove(worldPos);
                     worlds.Add(info.position, info);
+
+                    //Log.LogWriteLine("New world " + worldPos + " validated by " + validatorHost.addr);
 
                     foreach(Point p in Point.SymmetricRange(Point.One))
                     {

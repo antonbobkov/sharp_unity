@@ -168,16 +168,6 @@ namespace ServerClient
             {
                 RemoteAction.Process(ref locked, n, stm);
             }
-            else if (mt == MessageType.PLAYER_WORLD_MOVE)
-            {
-                WorldMove wm = Serializer.Deserialize<WorldMove>(stm);
-                WorldInfo newWorld = inf;
-
-                if (wm == WorldMove.LEAVE)
-                    newWorld = Serializer.Deserialize<WorldInfo>(stm);
-
-                ProcessOrDelay(() => RealmUpdate(newWorld));
-            }
             else if (mt == MessageType.PICKUP_ITEM)
                 ProcessOrDelay(() => OnPickupItem());
             else
@@ -221,19 +211,6 @@ namespace ServerClient
                 });
         }
         
-        void RealmUpdate(WorldInfo newWorld)
-        {
-            //Log.Dump(newWorld);
-            
-            if ((playerData.WorldPosition != newWorld.position))
-            {
-                //Log.Dump(info.name, "from ", playerData);
-                playerData.world = newWorld;
-                //Log.Dump(info.name, "to ", playerData);
-                MessageToAgent(MessageType.PLAYER_INFO_VAR, playerData);
-            }
-        }
-
         void OnPickupItem()
         {
             //Log.Dump(info.name, "from ", playerData);
