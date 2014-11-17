@@ -50,6 +50,7 @@
     <Compile Include="BlockingCollection.cs" />
     <Compile Include="Client.cs" />
     <Compile Include="Game.cs" />
+    <Compile Include="PerlinNoise.cs" />
     <Compile Include="Player.cs" />
     <Compile Include="Server.cs" />
     <Compile Include="Tools.cs" />

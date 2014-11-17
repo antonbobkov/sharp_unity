@@ -240,7 +240,21 @@ namespace ServerClient
             MyAssert.Assert(!validatorPool.Where((valip) => valip == ip).Any());
             validatorPool.Add(ip);
         }
-        
+
+        MyColor RandomColor(Point p)
+        {
+            float fScale = .1f;
+            Point pShift = new Point(10, 10);
+
+            Func<Point, byte> gen = (pos) => Convert.ToByte(Math.Round((SimplexNoise.Noise.Generate((float)pos.x * fScale, (float)pos.y * fScale) + 1f) / 2 * 255));
+
+            Byte R = gen(p);
+            Byte G = gen(p + pShift);
+            Byte B = gen(p + pShift + pShift);
+
+            return new MyColor(R, G, B);
+        }
+
         void OnNewWorldRequest(Point worldPos)
         {
             //if (gameInfo.TryGetWorldByPos(worldPos) != null)
@@ -255,7 +269,7 @@ namespace ServerClient
             OverlayEndpoint validatorHost = new OverlayEndpoint(validatorPool.Random(n => r.Next(n)), new OverlayHostName("host world " + worldPos));
 
             WorldInfo info = new WorldInfo(worldPos, validatorHost);
-            WorldInitializer init = new WorldInitializer(r.Next());
+            WorldInitializer init = new WorldInitializer(r.Next(), RandomColor(worldPos));
 
             if (worldPos == Point.Zero)
             //if ((worldPos.x % 2 == 0) && (worldPos.y % 2 == 0))

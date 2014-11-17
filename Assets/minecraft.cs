@@ -149,7 +149,9 @@ class WorldDraw
 
         wall.transform.position = minecraft.GetPositionAtGrid(w.Position, pos);
         if (!t.Spawn)
-            wall.renderer.material.color = new Color(.3f, .3f, .3f);
+        {
+            wall.renderer.material.color = new Color((float)t.Block.R / 255, (float)t.Block.G / 255, (float)t.Block.B / 255);
+        }
         else
             wall.renderer.material.color = Color.yellow;
     }

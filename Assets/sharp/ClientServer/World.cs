@@ -12,11 +12,23 @@ using System.Xml.Serialization;
 
 namespace ServerClient
 {
+    public class MyColor
+    {
+        public byte R;
+        public byte G;
+        public byte B;
+
+        public MyColor() { }
+        public MyColor(byte R_, byte G_, byte B_) { R = R_; G = G_; B = B_; }
+    }
+
     interface ITile
     {
         Point Position { get; }
 
         bool Solid { get; }
+        MyColor Block { get; }
+
         bool Loot { get; }
         bool Spawn { get; }
 
@@ -32,7 +44,9 @@ namespace ServerClient
     {
         public Point Position { get; set; }
 
-        public bool Solid { get; set; }
+        public bool Solid { get { return Block != null; } }
+        public MyColor Block { get; set; }
+
         public bool Loot { get; set; }
         public bool Spawn { get; set; }
 
@@ -76,11 +90,13 @@ namespace ServerClient
         public double wallDensity = .2;
         public double lootDensity = .05;
         public bool hasSpawn = false;
+        public MyColor defaultColor;
 
         public WorldInitializer() { }
-        internal WorldInitializer(int seed_)
+        internal WorldInitializer(int seed_, MyColor defaultColor_)
         {
             seed = seed_;
+            defaultColor = defaultColor_;
         }
     }
 
@@ -374,7 +390,7 @@ namespace ServerClient
 
             MyAssert.Assert(t.IsEmpty());
 
-            t.Solid = true;
+            t.Block = new MyColor(50, 50, 50);
 
             onChangeBlock(pos, true);
         }
@@ -385,7 +401,7 @@ namespace ServerClient
             MyAssert.Assert(t.Solid);
             MyAssert.Assert(!t.IsSpecial());
 
-            t.Solid = false;
+            t.Block = null;
 
             onChangeBlock(pos, false);
         }
@@ -421,10 +437,10 @@ namespace ServerClient
             foreach (Tile t in map.GetTiles())
             {
                 if (seededRandom.NextDouble() < init.wallDensity)
-                    t.Solid = true;
+                    t.Block = init.defaultColor;
                 else
                 {
-                    t.Solid = false;
+                    t.Block = null;
 
                     if (seededRandom.NextDouble() < init.lootDensity)
                         t.Loot = true;
@@ -661,7 +677,14 @@ namespace ServerClient
             {
                 PlayerInfo player = Serializer.Deserialize<PlayerInfo>(stm);
                 Point blockPos = Serializer.Deserialize<Point>(stm);
-                RemoveBlock(player, blockPos);
+                TryRemoveBlock(player, blockPos);
+            }
+            else if (mt == MessageType.PLACE_BLOCK)
+            {
+                Guid remoteActionId = Serializer.Deserialize<Guid>(stm);
+                Point blockPos = Serializer.Deserialize<Point>(stm);
+
+                OnRemotePlaceBlock(blockPos, n, remoteActionId);
             }
             else
                 throw new Exception(Log.StDump(mt, "bad message type"));
@@ -737,9 +760,9 @@ namespace ServerClient
 
         void OnPlaceBlock(PlayerInfo player, Point currPos, Point blockPos)
         {
-            ActionValidity v = world.CheckValidMove(player.id, blockPos);// &~(ActionValidity.REMOTE | ActionValidity.BOUNDARY);
+            ActionValidity v = world.CheckAction(player.id, blockPos) & ~ActionValidity.REMOTE;
 
-            if (v != ActionValidity.VALID)
+            if ((v & ~ActionValidity.BOUNDARY) != ActionValidity.VALID)
             {
                 Log.Dump("Invalid action (check 1)", world.Info, player, v, currPos, blockPos);
                 return;
@@ -769,18 +792,45 @@ namespace ServerClient
                                 myHost.ConnectSendMessage(player.validatorHost, MessageType.UNLOCK_VAR, Response.FAIL, remoteLockId);
                         };
 
-                        MyAssert.Assert(pd.inventory.blocks >= 0);
-                        if (pd.inventory.blocks == 0)
+                        bool success = false;
+                        try
                         {
-                            Log.Dump("Block placing failed, not enough items", world.Info, player, currPos, blockPos);
-                            postProcess.Invoke(Response.FAIL);
-                            return;
+                            MyAssert.Assert(pd.inventory.blocks >= 0);
+                            if (pd.inventory.blocks == 0)
+                            {
+                                Log.Dump("Block placing failed, not enough items", world.Info, player, currPos, blockPos);
+                                return;
+                            }
+
+                            if (v == ActionValidity.VALID)
+                            {
+                                v = world.CheckAction(player.id, blockPos) & ~ActionValidity.REMOTE;
+
+                                if (v != ActionValidity.VALID)
+                                {
+                                    Log.Dump("Invalid action (check 2)", world.Info, player, v, currPos, blockPos);
+                                    return;
+                                }
+
+                                world.NET_PlaceBlock(blockPos);
+
+                                postProcess.Invoke(Response.SUCCESS);   // done
+                            }
+                            else
+                            {
+                                // action has to be done remotely
+                                MyAssert.Assert(v == ActionValidity.BOUNDARY);
+
+                                RemotePlaceBlock(player, blockPos, postProcess);
+                            }
+
+                            success = true;
                         }
-
-                        postProcess.Invoke(Response.SUCCESS);
-                        world.NET_PlaceBlock(blockPos);
-
-                        //Teleport(player, currPos, newPos, pd, postProcess);
+                        finally
+                        {
+                            if(!success)
+                                postProcess.Invoke(Response.FAIL);
+                        }
                     }
                     else
                     {
@@ -788,9 +838,71 @@ namespace ServerClient
                     }
                 });
         }
+
+        void RemotePlaceBlock(PlayerInfo player, Point blockPos, Action<Response> postProcess)
+        {
+            bool success = false;
+
+            try
+            {
+                WorldInfo remoteRealm = GetRemoteRealm(ref blockPos);
+
+                ManualLock<Guid> lck = new ManualLock<Guid>(playerLocks, player.id);
+
+                RemoteAction
+                    .Send(myHost, remoteRealm.host, MessageType.PLACE_BLOCK, blockPos)
+                    .Respond(remoteActions, lck, (res, stm) =>
+                    {
+                        if (res == Response.SUCCESS)
+                        {
+                            postProcess.Invoke(Response.SUCCESS);
+                        }
+                        else
+                        {
+                            Log.Dump("Block placing failed, remote realm rejected", world.Info, player, blockPos);
+                            postProcess.Invoke(Response.FAIL);
+                        }
+                    });
+
+                success = true;
+            }
+            catch (GetRealmException) { }
+            finally
+            {
+                if (!success)
+                    postProcess(Response.FAIL);
+            }
+        }
+        
+        void OnRemotePlaceBlock(Point blockPos, Node n, Guid remoteActionId)
+        {
+            bool success = false;
+
+            try
+            {
+                ITile t = world[blockPos];
+
+                if (!t.IsEmpty())
+                {
+                    Log.Dump("Invalid action, bad tile", world.Info, blockPos);
+                    return;
+                }
+
+                world.NET_PlaceBlock(blockPos);
+
+                success = true;
+            }
+            finally
+            {
+                if (success)
+                    RemoteAction.Sucess(n, remoteActionId);
+                else
+                    RemoteAction.Fail(n, remoteActionId);
+            }
+        }
         void OnRemoveBlock(PlayerInfo player, Point currPos, Point blockPos)
         {
-            ActionValidity v = world.CheckValidMove(player.id, blockPos) & ~ActionValidity.OCCUPIED_WALL;
+            ActionValidity v = world.CheckAction(player.id, blockPos) & ~ActionValidity.OCCUPIED_WALL & ~ActionValidity.REMOTE;
 
             if ((v & ~ActionValidity.BOUNDARY) != ActionValidity.VALID)
             {
@@ -799,7 +911,7 @@ namespace ServerClient
             }
 
             if (v != ActionValidity.BOUNDARY)
-                RemoveBlock(player, blockPos);
+                TryRemoveBlock(player, blockPos);
             else
             {
                 try
@@ -813,20 +925,20 @@ namespace ServerClient
                 }
             }
         }
-        
-        void RemoveBlock(PlayerInfo player, Point blockPos)
+        bool TryRemoveBlock(PlayerInfo player, Point blockPos)
         {
             ITile t = world[blockPos];
 
             if (!t.Solid || t.IsSpecial())
             {
                 Log.Dump("Invalid action, bad tile", world.Info, player, blockPos);
-                return;
+                return false;
             }
 
             world.NET_RemoveBlock(blockPos);
             myHost.ConnectSendMessage(player.validatorHost, MessageType.PICKUP_BLOCK);
 
+            return true;
         }
 
         void OnSpawnRequest(PlayerInfo player)

@@ -56,6 +56,7 @@
      <Compile Include="Assets\sharp\ClientServer\Message.cs" />
      <Compile Include="Assets\sharp\ClientServer\Node.cs" />
      <Compile Include="Assets\sharp\ClientServer\NodeHost.cs" />
+     <Compile Include="Assets\sharp\ClientServer\PerlinNoise.cs" />
      <Compile Include="Assets\sharp\ClientServer\Player.cs" />
      <Compile Include="Assets\sharp\ClientServer\Program.cs" />
      <Compile Include="Assets\sharp\ClientServer\Properties\AssemblyInfo.cs" />
