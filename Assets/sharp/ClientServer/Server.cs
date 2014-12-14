@@ -248,9 +248,14 @@ namespace ServerClient
 
             Func<Point, byte> gen = (pos) => Convert.ToByte(Math.Round((SimplexNoise.Noise.Generate((float)pos.x * fScale, (float)pos.y * fScale) + 1f) / 2 * 255));
 
+            //p += pShift;
             Byte R = gen(p);
-            Byte G = gen(p + pShift);
-            Byte B = gen(p + pShift + pShift);
+
+            p += pShift;
+            Byte G = gen(p);
+
+            p += pShift;
+            Byte B = gen(p);
 
             return new MyColor(R, G, B);
         }
