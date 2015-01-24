@@ -240,8 +240,8 @@ public class minecraft : MonoBehaviour {
         all.myClient.onNewWorldHook = (w) => OnNewWorld(w);
         all.myClient.onDeleteWorldHook = (w) => OnDeleteWorld(w);
 
-        if (all.host.MyAddress.Port == GlobalHost.nStartPort)
-            all.StartServer();
+        //if (all.host.MyAddress.Port == GlobalHost.nStartPort)
+        //    all.StartServer();
 
         //all.sync.Start();
 
