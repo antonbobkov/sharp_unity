@@ -175,6 +175,7 @@ public class minecraft : MonoBehaviour {
             return;
 
         GUI.Label(new Rect(10, 10, 100, 20), myData.WorldPosition.ToString());// + " " + myData.inventory.teleport);
+        GUI.Label(new Rect(10, 30, 100, 20), all.myClient.serverHost.ToString());
     }
 
     static internal Vector3 GetPositionAtGrid(Point worldPos, Point pos)
