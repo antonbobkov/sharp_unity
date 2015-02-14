@@ -98,6 +98,8 @@ namespace ServerClient
 
         static void Main(string[] args)
         {
+            Serializer.Test();
+            
             Aggregator all = new Aggregator();
 
             MeshConnect(all);
@@ -156,6 +158,13 @@ namespace ServerClient
                 ThreadManager.NewThread(() => RepeatedAction(all.sync.GetAsDelegate(),
                     () => WorldTools.ConsoleOut(w), 500),
                     () => { }, "console drawer");
+            });
+
+            inputProc.commands.Add("exit", (param) =>
+            {
+                all.host.Close();
+                System.Threading.Thread.Sleep(100);
+                ThreadManager.Terminate();
             });
 
             while (true)

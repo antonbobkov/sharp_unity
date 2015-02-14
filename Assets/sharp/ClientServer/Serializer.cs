@@ -74,7 +74,7 @@ namespace ServerClient
             : base("XML serialization failed", e) { }
     }
     
-    class Serializer
+    static class Serializer
     {
         public static ChunkDebug lastRead = new ChunkDebug();
         public static ChunkDebug lastWrite = new ChunkDebug();
@@ -241,6 +241,28 @@ namespace ServerClient
                 Array.Reverse(intBytes);
 
             return BitConverter.ToInt32(intBytes, 0);
+        }
+
+        public static void Test()
+        {
+            XmlSerializer ser = new XmlSerializer(typeof(LogConfig));
+
+            LogConfig lc = new LogConfig();
+
+            lc.defaultLogLevel = "normal";
+
+            LogConfigEntry e1 = new LogConfigEntry() { logLevel = "error", name = "network", output = "console" };
+            LogConfigEntry e2 = new LogConfigEntry() { logLevel = "normal", name = "world", output = "world" };
+
+            lc.logConfigList.Add(e1);
+            lc.logConfigList.Add(e2);
+
+            StreamWriter fs = new StreamWriter("log_config.xml");
+
+            ser.Serialize(fs, lc);
+
+            fs.Close();
+
         }
     }
 }

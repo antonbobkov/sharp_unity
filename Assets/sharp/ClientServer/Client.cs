@@ -208,18 +208,6 @@ namespace ServerClient
             else
                 MyAssert.Assert(serverHost == serverHost_);
         }
-        //void OnGameInfo(GameInfoSerialized gameStateSer)
-        //{
-        //    MyAssert.Assert(gameInfo == null);
-        //    gameInfo = new GameInfo();
-
-        //    //gameInfo.onNewWorld = OnNewWorld;
-
-        //    gameInfo.Deserialize(gameStateSer);
-
-        //    Log.LogWriteLine("Recieved game info");
-        //    Program.GameInfoOut(gameInfo);
-        //}
 
         void OnNewPlayerRequestApproved(PlayerInfo inf)
         {

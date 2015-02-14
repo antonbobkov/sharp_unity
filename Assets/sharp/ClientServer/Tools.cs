@@ -146,10 +146,12 @@ namespace ServerClient
     {
         static List<ThreadInfo> threads = new List<ThreadInfo>();
 
+        static ILog threadLog = MasterFileLog.GetLog("Threads.log");
+
         static public void NewThread(ThreadStart threadFunction, Action terminate, string name)
         {
             ThreadInfo ti = new ThreadInfo() { thread = new Thread(threadFunction), terminate = terminate, name = name };
-            //Log.LogWriteLine("Thread: {0}", name);
+            threadLog.LogWriteLine("Thread: {0}", name);
             ti.thread.Start();
 
             lock (threads)
@@ -181,7 +183,7 @@ namespace ServerClient
                 {
                     if ((ti.thread.ThreadState & System.Threading.ThreadState.Stopped) != 0)
                         continue;
-                    Log.LogWriteLine("Terminating {0}", ti.name);
+                    threadLog.LogWriteLine("Terminating {0}", ti.name);
                     ti.terminate.Invoke();
                 }
             }       
