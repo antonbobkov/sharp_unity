@@ -56,9 +56,13 @@ namespace ServerClient
 
         public IPEndPoint MyAddress { get; private set; }
 
+        private ILog log;
+
         public GlobalHost(Action<Action> processQueue_)
         {
             processQueue = processQueue_;
+            log = MasterFileLog.GetLog("network", "globalhost.log");
+
             StartListening();
         }
 
@@ -81,7 +85,7 @@ namespace ServerClient
                         int nPort = nStartPort + i;
                         MyAddress = new IPEndPoint(ip, nPort);
                         sckListen.Bind(MyAddress);
-                        Log.LogWriteLine("Listening at {0}:{1}", ip, nPort);
+                        ILog.EntryConsole(log, "Listening at {0}:{1}", ip, nPort);
                         break;
                     }
                     catch (SocketException)
@@ -109,12 +113,15 @@ namespace ServerClient
 
         void NewIncomingConnection(Handshake info, Socket sck)
         {
+            ILog.EntryNormal(log, "New connection: " + info);
             MyAssert.Assert(hosts.ContainsKey(info.local.hostname));
             hosts.GetValue(info.local.hostname).NewIncomingConnection(info, sck);
         }
 
         public void Close()
         {
+            ILog.EntryNormal(log, "Closing all");
+            
             foreach (var h in hosts.Values)
                 h.Close();
 
@@ -126,7 +133,7 @@ namespace ServerClient
             OverlayHost host = new OverlayHost(hostName, MyAddress, processQueue, messageProcessor, extraHandshakeInfo);
             hosts.Add(hostName, host);
 
-            //Log.LogWriteLine("New host: {0}", hostName);
+            ILog.EntryNormal(log, "New host: " + hostName);
             
             return host;
         }
@@ -163,6 +170,8 @@ namespace ServerClient
         public IPEndPoint IpAddress { get; private set; }
         public OverlayEndpoint Address { get { return new OverlayEndpoint(IpAddress, hostName); } }
 
+        private ILog log;
+        
         public OverlayHost(OverlayHostName hostName_, IPEndPoint address_, Action<Action> processQueue_,
             ProcessorAssigner messageProcessorAssigner_, MemoryStream extraHandshakeInfo_)
         {
@@ -172,6 +181,8 @@ namespace ServerClient
             messageProcessorAssigner = messageProcessorAssigner_;
 
             extraHandshakeInfo = extraHandshakeInfo_;
+
+            log = MasterFileLog.GetLog("network", hostName.ToString() + ".log");
         }
 
         /*
@@ -182,8 +193,8 @@ namespace ServerClient
 
         void ProcessDisconnect(Node n, Exception ioex, DisconnectType ds)
         {
-            if(ds == DisconnectType.WRITE_CONNECT_FAIL)
-                Log.LogWriteLine("{0} disconnected on {1} ({2})", n.info.remote, ds, (ioex == null) ? "" : ioex.Message);
+            //if(ds == DisconnectType.WRITE_CONNECT_FAIL)
+            ILog.EntryError(log, "{0} disconnected on {1} ({2})", n.info.remote, ds, (ioex == null) ? "" : ioex.Message);
             RemoveNode(n);
         }
         internal void NewIncomingConnection(Handshake info, Socket sck)
@@ -262,7 +273,7 @@ namespace ServerClient
         }
         void OnNewConnectionCompletelyReady(Node n)
         {
-            //Log.LogWriteLine("New connection: {0} -> {1}", n.info.local.hostname, n.info.remote);
+            ILog.EntryError(log, "New connection: {0} -> {1}", n.info.local.hostname, n.info.remote);
         }
 
         public Node ConnectAsync(OverlayEndpoint theirInfo)

@@ -3,11 +3,30 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.IO;
+using System.Xml.Serialization;
 
 namespace ServerClient
 {
+    [Flags]
+    enum LogParam
+    {
+        NO_OPTION = 0,
+        NO_CONSOLE = 1,
+        CONSOLE = 2,
+    }
+    
     abstract class ILog
     {
+        public int LogLevel { get; private set; }
+        public bool Timestamp { get; private set; }
+
+        public ILog(int logLevel_arg)
+        {
+            LogLevel = logLevel_arg;
+            Timestamp = true;
+        }
+
+
         public abstract void LogWrite(string s);
         public void LogWrite(string s, params object[] vars)
         {
@@ -22,21 +41,46 @@ namespace ServerClient
             sb.AppendLine();
             LogWrite(sb.ToString());
         }
-    }
 
-    class ConsoleLog : ILog
-    {
-        public override void LogWrite(string s)
+        static public void Entry(ILog l, int logLevel, LogParam pr, string s, params object[] vars)
         {
-            Console.Write(s);
+            if (l == null)
+                return;
+
+            bool useConsole = (pr & LogParam.CONSOLE) != 0 && (pr & LogParam.NO_CONSOLE) == 0;
+            bool writeIntoLog = l.LogLevel >= logLevel;
+
+            if (!useConsole && !writeIntoLog)
+                return;
+
+            string timestamp = "";
+            if(l.Timestamp)
+                timestamp = String.Format("{0:hh:mm:ss.fff }", DateTime.Now);
+
+
+            if (useConsole)
+            {
+                MasterFileLog.GetConsoleLog().LogWriteLine(timestamp + s, vars);
+                Log.LogWriteLine(s, vars);
+            }
+
+            if (writeIntoLog)
+                l.LogWriteLine(timestamp + s, vars);
         }
+
+        static public void EntryError(ILog l, string s, params object[] vars)   { Entry(l, 0, LogParam.NO_OPTION, s, vars); }
+        static public void EntryNormal(ILog l, string s, params object[] vars)  { Entry(l, 1, LogParam.NO_OPTION, s, vars); }
+        static public void EntryVerbose(ILog l, string s, params object[] vars) { Entry(l, 2, LogParam.NO_OPTION, s, vars); }
+
+        static public void EntryConsole(ILog l, string s, params object[] vars) { Entry(l, 1, LogParam.CONSOLE, s, vars); }
     }
 
     class FileLog : ILog
     {
         StreamWriter fs;
 
-        public FileLog(string path)
+        public FileLog(string path, int logLevel_arg)
+            :base(logLevel_arg)
         {
             Directory.CreateDirectory(Path.GetDirectoryName(path));
             fs = new StreamWriter(path, false);
@@ -49,24 +93,26 @@ namespace ServerClient
         }
     }
 
-    class PiggyBackLog : ILog
-    {
-        ILog piggy;
-        public PiggyBackLog(ILog piggy) { this.piggy = piggy; }
-        public override void LogWrite(string s)
-        {
-            piggy.LogWrite(s);
-        }
+    //class MultiLog : ILog
+    //{
+    //    private List<ILog> logs;
 
-    }
+    //    public MultiLog(params ILog[] logs_arg) { logs = new List<ILog>(logs_arg); }
+    //    public void AddLog(ILog l) { logs.Add(l); }
+
+    //    public override void LogWrite(string s)
+    //    {
+    //        foreach(var l in logs)
+    //            l.LogWrite(s);
+    //    }
+
+    //}
 
     class MasterFileLogger
     {
         static string GetPath(string rootPath)
         {
-            DateTime dt = DateTime.Now;
-            String s = String.Join("_", dt.Month.ToString("00"), dt.Day.ToString("00")) + " " +
-                        dt.Hour.ToString("00") + "h" + dt.Minute.ToString("00") + "m" + dt.Second.ToString("00") + "s";
+            String s = String.Format("{0:MM-yy HH.mm.ss}", DateTime.Now);
 
             string path = System.IO.Path.Combine(rootPath, s);
 
@@ -80,7 +126,14 @@ namespace ServerClient
 
         public MasterFileLogger(string rootPath = "Logs")
         {
+            XmlSerializer ser = new XmlSerializer(typeof(LogConfig));
+
+            StreamReader sr = new StreamReader("log_config.xml");
+            lc = (LogConfig)ser.Deserialize(sr);
+
             Path = GetPath(rootPath);
+
+            consoleLog = GetLog("Console.log");
         }
 
         public ILog GetLog(params string[] folders)
@@ -88,22 +141,34 @@ namespace ServerClient
             string path = System.IO.Path.Combine(folders);
             path = System.IO.Path.Combine(Path, path);
 
-            return new FileLog(path);
+            return new FileLog(path, lc.logLevel);
         }
+
+        private ILog consoleLog;
+        public ILog GetConsoleLog()
+        {
+            return consoleLog;
+        }
+
+        LogConfig lc = new LogConfig();
+
+        public int LogLevel { get { return lc.logLevel; } }
     }
 
     static class MasterFileLog
     {
-        static MasterFileLogger mfl = new MasterFileLogger();
+        static private MasterFileLogger mfl = new MasterFileLogger();
         static public ILog GetLog(params string[] folders)
         {
             return mfl.GetLog(folders);
         }
+        static public ILog GetConsoleLog() { return mfl.GetConsoleLog(); }
+        static public int LogLevel { get { return mfl.LogLevel; } }
     }
 
     public class LogConfig
     {
-        public string defaultLogLevel;
+        public int logLevel = 1;
         public List<LogConfigEntry> logConfigList = new List<LogConfigEntry>();
     }
 

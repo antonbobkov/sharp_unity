@@ -128,6 +128,9 @@ namespace ServerClient
     {
         public delegate void MessageProcessor(MessageType mt, Stream stm, Node n);
 
+        private ILog logR = null;
+        private ILog logW = null;
+
         public Node(Handshake info_, Action<Action> actionQueue_, Action<Node, Exception, DisconnectType> processDisonnect_)
         {
             info = info_;
@@ -136,6 +139,15 @@ namespace ServerClient
 
             writerStatus = WriteStatus.READY;
             readerStatus = ReadStatus.READY;
+
+            if (MasterFileLog.LogLevel > 1)
+            {
+                logR = MasterFileLog.GetLog("network", info.local.hostname.ToString(),
+                    info.remote.ToString().Replace(':', '.') + " read.xml");
+
+                logW = MasterFileLog.GetLog("network", info.local.hostname.ToString(),
+                    info.remote.ToString().Replace(':', '.') + " write.xml");
+            }
 
             //// queue up
             //SendMessage(MessageType.HANDSHAKE, info);
@@ -158,7 +170,16 @@ namespace ServerClient
             if (IsClosed)
                 throw new NodeException("SendMessage: node is disconnected " + FullDescription());
 
-            writer.SendMessage(mt, messages);
+            SocketWriterMessage swm = SocketWriter.SerializeMessage(mt, messages);
+
+            string sentMsg = mt.ToString();
+            if (MasterFileLog.LogLevel > 2)
+                sentMsg += new ChunkDebug(swm.message, Serializer.SizeSize).GetData() + "\n\n";
+
+            ILog.EntryVerbose(logW, sentMsg);
+
+            writer.SendMessage(swm);
+
         }
 
         public IPEndPoint Address { get { return info.remote.addr; } }
@@ -192,7 +213,16 @@ namespace ServerClient
                     throw new NodeException("AcceptConnection: reader is aready initialized " + FullDescription());
 
                 reader = new SocketReader(
-                    (stm, mtp) => actionQueue(() => messageProcessor(mtp, stm, this)),
+                    (stm, mtp) => actionQueue(() =>
+                    {
+                        string sentMsg = mtp.ToString();
+                        if (MasterFileLog.LogLevel > 2)
+                            sentMsg += new ChunkDebug(stm).GetData() + "\n\n";
+
+                        ILog.EntryVerbose(logR, sentMsg); 
+                        
+                        messageProcessor(mtp, stm, this);
+                    }),
                     (ioex) => actionQueue(() =>
                     {
                         readerStatus = ReadStatus.DISCONNECTED;
@@ -270,8 +300,8 @@ namespace ServerClient
                 // send handshake data
                 using (NetworkStream connectionStream = new NetworkStream(sck, false))
                 {
-                    Serializer.SendStream(connectionStream, SocketWriter.SerializeMessage(MessageType.HANDSHAKE, info));
-
+                    SocketWriter.SendNetworkMessage(connectionStream, SocketWriter.SerializeMessage(MessageType.HANDSHAKE, info));
+                    
                     if (info.hasExtraInfo)
                     {
                         info.ExtraInfo.Position = 0;

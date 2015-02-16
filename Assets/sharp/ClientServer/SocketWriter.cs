@@ -9,10 +9,16 @@ using System.Xml.Serialization;
 
 namespace ServerClient
 {
+    class SocketWriterMessage
+    {
+        public MessageType mt;
+        public MemoryStream message;
+    }
+
     class SocketWriter
     {
         Socket socketWrite;
-        BlockingCollection<Action<Stream>> bcMessages = new BlockingCollection<Action<Stream>> ();
+        BlockingCollection<SocketWriterMessage> bcMessages = new BlockingCollection<SocketWriterMessage>();
         Action<IOException> errorResponse;
 
         public bool CanWrite() { return socketWrite != null; }
@@ -37,39 +43,50 @@ namespace ServerClient
             }
         }
 
-        public static MemoryStream SerializeMessage(MessageType mt, params object[] messages)
+        public static SocketWriterMessage SerializeMessage(MessageType mt, params object[] messages)
         {
             MemoryStream ms = new MemoryStream();
 
             //Console.WriteLine("Message sent: {0}", mt);
 
-            ms.WriteByte((byte)mt);
+            //ms.WriteByte((byte)mt);
 
             Serializer.Serialize(ms, messages);
-            Serializer.lastWrite = new ChunkDebug(ms, true);
+            //Serializer.lastWrite = new ChunkDebug(ms, true);
 
             ms.Position = 0;
 
-            return ms;
+            return new SocketWriterMessage { mt = mt, message = ms };
         }
-        
+
+        public void SendMessage(SocketWriterMessage swm)
+        {
+            bcMessages.Add(swm);
+        }
+
         public void SendMessage(MessageType mt, params object[] messages)
         {
-            MemoryStream ms = SerializeMessage(mt, messages);
-            
-            bcMessages.Add(stm => Serializer.SendStream(stm, ms));
+            SendMessage(SerializeMessage(mt, messages));
         }
 
-        public void SendStream(MemoryStream stream)
-        {
-            MemoryStream ms = new MemoryStream(stream.ToArray()); // copy for sync
+        //public void SendStream(MemoryStream stream)
+        //{
+        //    MemoryStream ms = new MemoryStream(stream.ToArray()); // copy for sync
 
-            bcMessages.Add(stm => Serializer.SendStream(stm, ms));
-        }
+        //    bcMessages.Add(stm => Serializer.SendStream(stm, ms));
+        //}
 
         public void TerminateThread()
         {
             bcMessages.Add(null);
+        }
+
+        public static void SendNetworkMessage(NetworkStream connectionStream, SocketWriterMessage swm)
+        {
+            connectionStream.WriteByte((byte)swm.mt);
+
+            swm.message.Position = 0;
+            Serializer.SendStream(connectionStream, swm.message);
         }
 
         void ProcessThread()
@@ -79,13 +96,16 @@ namespace ServerClient
                 using (NetworkStream connectionStream = new NetworkStream(socketWrite, true))
                     while (true)
                     {
-                        var act = bcMessages.Take();
+                        SocketWriterMessage act = bcMessages.Take();
                         if (act == null)
                         {
                             //Log.LogWriteLine("SocketWriter terminated gracefully");
                             return;
                         }
-                        act.Invoke(connectionStream);
+
+                        SendNetworkMessage(connectionStream, act);
+
+                        //act.Invoke(connectionStream);
                         //connectionStream.Flush();
                     }
             }

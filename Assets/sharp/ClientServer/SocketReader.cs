@@ -12,10 +12,10 @@ namespace ServerClient
     class SocketReader
     {   
         Socket socketRead;
-        Action<Stream, MessageType> messageProcessor;
+        Action<MemoryStream, MessageType> messageProcessor;
         Action<IOException> errorResponse;
 
-        public SocketReader(Action<Stream, MessageType> messageProcessor_, Action<IOException> errorResponse_, Socket socketRead_)
+        public SocketReader(Action<MemoryStream, MessageType> messageProcessor_, Action<IOException> errorResponse_, Socket socketRead_)
         {
             try
             {

@@ -17,14 +17,14 @@ namespace ServerClient
     class ChunkDebug
     {
         MemoryStream ms = null;
-        bool ignorefirst = false;
+        int ignore = 0;
         string visual = "";
 
         public ChunkDebug() { }
-        public ChunkDebug(MemoryStream ms_, bool ignorefirst_)
+        public ChunkDebug(MemoryStream ms_, int ignore_ = 0)
         {
             ms = ms_;
-            ignorefirst = ignorefirst_;
+            ignore = ignore_;
             //GetData();
         }
         public string GetData()
@@ -42,10 +42,9 @@ namespace ServerClient
             
             MemoryStream chunk = new MemoryStream(ms.ToArray());
 
-            if (ignorefirst)
-                ++chunk.Position;
-            
-            List<int> pos = new List<int>();
+            chunk.Position += ignore;
+
+            HashSet<int> pos = new HashSet<int>();
             while (chunk.Position < chunk.Length)
             {
                 pos.Add((int)chunk.Position);
@@ -55,14 +54,23 @@ namespace ServerClient
 
             chunk.Position = 0;
 
-            StringBuilder sb = new StringBuilder(System.Text.Encoding.Default.GetString(chunk.ToArray()));
+            string tmp = System.Text.Encoding.Default.GetString(chunk.ToArray());
+            int tmpPos = ignore;
+            StringBuilder sb = new StringBuilder();
 
-            if (ignorefirst)
-                sb[0] = '\n';
-            
-            foreach (int l in pos)
-                for (int i = 0; i < Serializer.SizeSize; ++i)
-                    sb[l + i] = '\n';
+            while (tmpPos < tmp.Length)
+            {
+                if (pos.Contains(tmpPos))
+                {
+                    tmpPos += Serializer.SizeSize;
+                    sb.Append("\n\n");
+                    continue;
+                }
+
+                sb.Append(tmp[tmpPos]);
+                
+                ++tmpPos;
+            }
 
             return sb.ToString();
         }
@@ -153,7 +161,7 @@ namespace ServerClient
 
             MemoryStream chunk = ReadChunk(input, size);
 
-            lastRead = new ChunkDebug(chunk, false);
+            //lastRead = new ChunkDebug(chunk, false);    // thread safe???
             //Log.LogWriteLine("Received XML:\n{0}", System.Text.Encoding.Default.GetString(data));
 
             return chunk;
@@ -249,7 +257,7 @@ namespace ServerClient
 
             LogConfig lc = new LogConfig();
 
-            lc.defaultLogLevel = "normal";
+            lc.logLevel = 1;
 
             LogConfigEntry e1 = new LogConfigEntry() { logLevel = "error", name = "network", output = "console" };
             LogConfigEntry e2 = new LogConfigEntry() { logLevel = "normal", name = "world", output = "world" };

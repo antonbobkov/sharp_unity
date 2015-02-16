@@ -98,7 +98,7 @@ namespace ServerClient
 
         static void Main(string[] args)
         {
-            Serializer.Test();
+            //Serializer.Test();
             
             Aggregator all = new Aggregator();
 

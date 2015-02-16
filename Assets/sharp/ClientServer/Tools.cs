@@ -151,7 +151,7 @@ namespace ServerClient
         static public void NewThread(ThreadStart threadFunction, Action terminate, string name)
         {
             ThreadInfo ti = new ThreadInfo() { thread = new Thread(threadFunction), terminate = terminate, name = name };
-            threadLog.LogWriteLine("Thread: {0}", name);
+            ILog.EntryNormal(threadLog, "New Thread: " + name);
             ti.thread.Start();
 
             lock (threads)
@@ -183,7 +183,7 @@ namespace ServerClient
                 {
                     if ((ti.thread.ThreadState & System.Threading.ThreadState.Stopped) != 0)
                         continue;
-                    threadLog.LogWriteLine("Terminating {0}", ti.name);
+                    ILog.EntryNormal(threadLog, "Terminating " + ti.name);
                     ti.terminate.Invoke();
                 }
             }       
