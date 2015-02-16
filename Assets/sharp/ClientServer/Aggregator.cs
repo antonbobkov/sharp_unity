@@ -8,10 +8,42 @@ using System.Text;
 using System.Threading;
 using System.IO;
 using System.Diagnostics;
+using System.Xml.Serialization;
+
 
 
 namespace ServerClient
 {
+    public class GameConfig
+    {
+        public bool startServer = false;
+        public bool validate = true;
+        public int aiPlayers = 0;
+        public List<string> meshIP = new List<string>() { "default" };
+
+        public static GameConfig ReadConfig(string filename)
+        {
+            XmlSerializer ser = new XmlSerializer(typeof(GameConfig));
+            GameConfig cfg = new GameConfig();
+
+            try
+            {
+                StreamReader sw = new StreamReader(filename);
+                cfg = (GameConfig)ser.Deserialize(sw);
+                sw.Close();
+            }
+            catch (FileNotFoundException)
+            {
+                ILog.Console("Cannot find config file " + filename + ", default one will be created");
+                StreamWriter sw = new StreamWriter(filename);
+                ser.Serialize(sw, cfg);
+            }
+            
+
+            return cfg;
+        }
+    }
+
     class Aggregator
     {
         public ActionSyncronizer sync = new ActionSyncronizer();

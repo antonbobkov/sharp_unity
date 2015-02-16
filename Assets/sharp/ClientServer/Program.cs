@@ -8,7 +8,7 @@ using System.Text;
 using System.Threading;
 using System.IO;
 using System.Diagnostics;
-using System.Xml.Serialization;
+
 
 namespace ServerClient
 {
@@ -52,31 +52,44 @@ namespace ServerClient
                         Console.WriteLine(s);
             }
         }
-        static public void MeshConnect(Aggregator all)
+        static public void MeshConnect(Aggregator all, GameConfig cfg)
         {
-            all.sync.Add(() =>
-                {
-                    IPEndPoint ep = Aggregator.ParseParamForIP(new List<string>());
-                    if(all.myClient.TryConnect(ep))
-                        Log.LogWriteLine("Connecting to {0} {1}", ep.Address, ep.Port);
-                });
-
-            try
+            foreach (var s in cfg.meshIP)
             {
-                var f = new System.IO.StreamReader(File.Open("ips", FileMode.Open));
-                string line;
-                while ((line = f.ReadLine()) != null)
-                {
-                    List<string> ls = new List<string>(line.Split(' '));
-                    all.sync.Add(() =>
-                    {
-                        IPEndPoint ep = Aggregator.ParseParamForIP(ls);
-                        if (all.myClient.TryConnect(ep))
-                            Log.LogWriteLine("Connecting to {0} {1}", ep.Address, ep.Port);
-                    });
-                }
+                IPEndPoint ep;
+                
+                if (s == "default")
+                    ep = new IPEndPoint(NetTools.GetMyIP(), GlobalHost.nStartPort);
+                else
+                    ep = Aggregator.ParseParamForIP(new List<string>(s.Split(' ')));
+
+                if (all.myClient.TryConnect(ep))
+                    ILog.Console("Mesh connect to {0} {1}", ep.Address, ep.Port);
             }
-            catch (Exception){}
+
+            //all.sync.Add(() =>
+            //    {
+            //        IPEndPoint ep = Aggregator.ParseParamForIP(new List<string>());
+            //        if(all.myClient.TryConnect(ep))
+            //            Log.LogWriteLine("Connecting to {0} {1}", ep.Address, ep.Port);
+            //    });
+
+            //try
+            //{
+            //    var f = new System.IO.StreamReader(File.Open("ips", FileMode.Open));
+            //    string line;
+            //    while ((line = f.ReadLine()) != null)
+            //    {
+            //        List<string> ls = new List<string>(line.Split(' '));
+            //        all.sync.Add(() =>
+            //        {
+            //            IPEndPoint ep = Aggregator.ParseParamForIP(ls);
+            //            if (all.myClient.TryConnect(ep))
+            //                Log.LogWriteLine("Connecting to {0} {1}", ep.Address, ep.Port);
+            //        });
+            //    }
+            //}
+            //catch (Exception){}
         }
 
         //public static void GameInfoOut(GameInfo inf)
@@ -99,26 +112,29 @@ namespace ServerClient
         static void Main(string[] args)
         {
             //Serializer.Test();
+
+            GameConfig cfg = GameConfig.ReadConfig("game_config.xml");
             
             Aggregator all = new Aggregator();
 
-            MeshConnect(all);
+            bool myServer = cfg.startServer && all.host.MyAddress.Port == GlobalHost.nStartPort;
 
             all.myClient.onServerReadyHook = () =>
             {
-                all.myClient.Validate();
-                if (all.host.MyAddress.Port != GlobalHost.nStartPort)
+                if(cfg.validate)
+                    all.myClient.Validate();
+
+                if (!myServer && cfg.aiPlayers > 0)
                 {
-                    for (int i = 0; i < 10; ++i)
+                    for (int i = 0; i < cfg.aiPlayers; ++i)
                         NewAiPlayer(all);
-                }
-                else
-                {
                     all.myClient.NewWorld(new Point(0, 0));
                 }
             };
 
-            if (all.host.MyAddress.Port == GlobalHost.nStartPort)
+            MeshConnect(all, cfg);
+
+            if (myServer)
                 all.StartServer();
 
             all.sync.Start();

@@ -190,6 +190,7 @@ namespace ServerClient
         {
             if (serverHost != null)
                 n.SendMessage(MessageType.SERVER_ADDRESS, serverHost);
+            ILog.Console("New mesh point: " + n.info.remote.addr);
         }
 
         public void OnServerAddress(OverlayEndpoint serverHost_)

@@ -42,6 +42,13 @@ namespace ServerClient
             LogWrite(sb.ToString());
         }
 
+        static public void Console(string s, params object[] vars)
+        {
+            string timestamp = String.Format("{0:hh:mm:ss.fff }", DateTime.Now);
+
+            MasterFileLog.GetConsoleLog().LogWriteLine(timestamp + s, vars);
+            Log.LogWriteLine(s, vars);
+        }
         static public void Entry(ILog l, int logLevel, LogParam pr, string s, params object[] vars)
         {
             if (l == null)

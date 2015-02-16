@@ -70,18 +70,18 @@ namespace ServerClient
                     (ipaddr =>
                         ipaddr.AddressFamily.ToString() == ProtocolFamily.InterNetwork.ToString());
             }
-            catch (Exception e)
-            {
-                Log.LogWriteLine("GetMyIP Error: {0}\nWill try to read ip from file \"myip\"", e.Message);
-            }
+            //catch (Exception e)
+            //{
+            //    Log.LogWriteLine("GetMyIP Error: {0}\nWill try to read ip from file \"myip\"", e.Message);
+            //}
 
-            try
-            {
-                var f = new System.IO.StreamReader(File.Open("myip", FileMode.Open));
-                string line;
-                line = f.ReadLine();
-                return IPAddress.Parse(line);
-            }
+            //try
+            //{
+            //    var f = new System.IO.StreamReader(File.Open("myip", FileMode.Open));
+            //    string line;
+            //    line = f.ReadLine();
+            //    return IPAddress.Parse(line);
+            //}
             catch (Exception e)
             {
                 Log.LogWriteLine("GetMyIP Error: {0}\nDefault to 127.0.0.1", e.Message);
