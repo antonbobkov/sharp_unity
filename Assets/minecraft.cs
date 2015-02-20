@@ -196,24 +196,30 @@ public class minecraft : MonoBehaviour {
 	void Start () {
         Log.log = msg => Debug.Log(msg);
 
-        all = new Aggregator();
+        GameConfig cfg = GameConfig.ReadConfig("unity_config.xml");
 
-        Program.MeshConnect(all);
+        all = new Aggregator();
+        
+        bool myServer = cfg.startServer && all.host.MyAddress.Port == GlobalHost.nStartPort;
+
+        Program.MeshConnect(all, cfg);
 
         all.myClient.onServerReadyHook = () =>
         {
-            if (all.host.MyAddress.Port == GlobalHost.nStartPort)
-            {
+            if (cfg.validate)
                 all.myClient.Validate();
-                all.myClient.NewWorld(new Point(0, 0));
+
+            if (!myServer && cfg.aiPlayers > 0)
+            {
+                for (int i = 0; i < cfg.aiPlayers; ++i)
+                    Program.NewAiPlayer(all);
             }
+
+            all.myClient.NewWorld(new Point(0, 0));
 
             me = Guid.NewGuid();
             Log.LogWriteLine("Player {0}", me);
             all.myClient.NewMyPlayer(me);
-
-            Program.NewAiPlayer(all);
-
         };
 
 		all.onNewPlayerAgentHook = (pa) =>
@@ -240,10 +246,8 @@ public class minecraft : MonoBehaviour {
         all.myClient.onNewWorldHook = (w) => OnNewWorld(w);
         all.myClient.onDeleteWorldHook = (w) => OnDeleteWorld(w);
 
-        //if (all.host.MyAddress.Port == GlobalHost.nStartPort)
-        //    all.StartServer();
-
-        //all.sync.Start();
+        if (myServer)
+            all.StartServer();
 
         var light = gameObject.AddComponent<Light>();
         light.type = LightType.Point;

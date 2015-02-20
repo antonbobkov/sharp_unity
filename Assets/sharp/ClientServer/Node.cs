@@ -295,7 +295,7 @@ namespace ServerClient
         {
             try
             {
-                sck.Connect(Address, TimeSpan.FromSeconds(3));
+                sck.Connect(Address);//, TimeSpan.FromSeconds(5));
 
                 // send handshake data
                 using (NetworkStream connectionStream = new NetworkStream(sck, false))

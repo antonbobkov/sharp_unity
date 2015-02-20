@@ -53,6 +53,7 @@
      <Compile Include="Assets\sharp\ClientServer\BlockingCollection.cs" />
      <Compile Include="Assets\sharp\ClientServer\Client.cs" />
      <Compile Include="Assets\sharp\ClientServer\Game.cs" />
+     <Compile Include="Assets\sharp\ClientServer\Logging.cs" />
      <Compile Include="Assets\sharp\ClientServer\Message.cs" />
      <Compile Include="Assets\sharp\ClientServer\Node.cs" />
      <Compile Include="Assets\sharp\ClientServer\NodeHost.cs" />
@@ -72,8 +73,10 @@
      <Compile Include="Assets\sharp\ClientServer\obj\x86\Debug\TemporaryGeneratedFile_5937a670-0e60-4077-877b-f7221da3dda1.cs" />
      <Compile Include="Assets\sharp\ClientServer\obj\x86\Debug\TemporaryGeneratedFile_E7A71F73-0F8D-4B9B-B56E-8E70B10BC5D3.cs" />
      <None Include="Assets\sharp\ClientServer\obj\x86\Release\ServerClient.csproj.FileListAbsolute.txt" />
+     <None Include="Assets\sharp\ClientServer\bin\Debug\game_config.xml" />
      <None Include="Assets\sharp\ClientServer\obj\x86\Debug\ClientServer.csproj.FileListAbsolute.txt" />
      <None Include="Assets\sharp\ClientServer\obj\x86\Debug\ServerClient.csproj.FileListAbsolute.txt" />
+     <None Include="Assets\sharp\ClientServer\bin\Debug\log_config.xml" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

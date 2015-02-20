@@ -143,9 +143,17 @@ namespace ServerClient
             consoleLog = GetLog("Console.log");
         }
 
+        public string CombinePaths(params string[] folders)
+        {
+            string ret = "";
+            foreach(string fld in folders)
+                ret = System.IO.Path.Combine(ret, fld);
+            return ret;
+        }
+
         public ILog GetLog(params string[] folders)
         {
-            string path = System.IO.Path.Combine(folders);
+            string path = CombinePaths(folders);
             path = System.IO.Path.Combine(Path, path);
 
             return new FileLog(path, lc.logLevel);

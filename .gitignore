@@ -44,3 +44,4 @@ Assembly-CSharp.csproj
 sharpunity-csharp.sln
 sharpunity.sln
 Assets/sharp/ClientServer/bin/Debug/Logs/
+Logs/
