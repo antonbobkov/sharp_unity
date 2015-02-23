@@ -194,13 +194,16 @@ public class minecraft : MonoBehaviour {
     
     // Use this for initialization
 	void Start () {
-        Log.log = msg => Debug.Log(msg);
+        Log.ConsoleLog = msg => Debug.Log(msg);
 
         GameConfig cfg = GameConfig.ReadConfig("unity_config.xml");
 
         all = new Aggregator();
         
         bool myServer = cfg.startServer && all.host.MyAddress.Port == GlobalHost.nStartPort;
+
+        if (myServer)
+            cfg = GameConfig.ReadConfig("unity_server_config.xml");
 
         Program.MeshConnect(all, cfg);
 
@@ -218,7 +221,7 @@ public class minecraft : MonoBehaviour {
             all.myClient.NewWorld(new Point(0, 0));
 
             me = Guid.NewGuid();
-            Log.LogWriteLine("Player {0}", me);
+            Log.Console("Player {0}", me);
             all.myClient.NewMyPlayer(me);
         };
 
@@ -278,10 +281,10 @@ public class minecraft : MonoBehaviour {
     }
 
     void OnApplicationQuit () {
-		Log.LogWriteLine ("Terminating");
+		Log.Console ("Terminating");
 		all.host.Close();
 		System.Threading.Thread.Sleep (100);
-		Log.LogWriteLine (ThreadManager.Status ());
+		Log.Console (ThreadManager.Status ());
 		ThreadManager.Terminate();
 		//System.Threading.Thread.Sleep (100);
 		//all.sync.Add(null);

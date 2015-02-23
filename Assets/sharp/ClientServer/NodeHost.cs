@@ -85,7 +85,7 @@ namespace ServerClient
                         int nPort = nStartPort + i;
                         MyAddress = new IPEndPoint(ip, nPort);
                         sckListen.Bind(MyAddress);
-                        ILog.EntryConsole(log, "Listening at {0}:{1}", ip, nPort);
+                        Log.EntryConsole(log, "Listening at {0}:{1}", ip, nPort);
                         break;
                     }
                     catch (SocketException)
@@ -113,14 +113,14 @@ namespace ServerClient
 
         void NewIncomingConnection(Handshake info, Socket sck)
         {
-            ILog.EntryNormal(log, "New connection: " + info);
+            Log.EntryNormal(log, "New connection: " + info);
             MyAssert.Assert(hosts.ContainsKey(info.local.hostname));
             hosts.GetValue(info.local.hostname).NewIncomingConnection(info, sck);
         }
 
         public void Close()
         {
-            ILog.EntryNormal(log, "Closing all");
+            Log.EntryNormal(log, "Closing all");
             
             foreach (var h in hosts.Values)
                 h.Close();
@@ -133,7 +133,7 @@ namespace ServerClient
             OverlayHost host = new OverlayHost(hostName, MyAddress, processQueue, messageProcessor, extraHandshakeInfo);
             hosts.Add(hostName, host);
 
-            ILog.EntryNormal(log, "New host: " + hostName);
+            Log.EntryNormal(log, "New host: " + hostName);
             
             return host;
         }
@@ -193,8 +193,9 @@ namespace ServerClient
 
         void ProcessDisconnect(Node n, Exception ioex, DisconnectType ds)
         {
-            //if(ds == DisconnectType.WRITE_CONNECT_FAIL)
-            ILog.EntryError(log, "{0} disconnected on {1} ({2})", n.info.remote, ds, (ioex == null) ? "" : ioex.Message);
+            Log.Entry(log, LogLevel.ERROR, (ds == DisconnectType.WRITE_CONNECT_FAIL) ? LogParam.CONSOLE : LogParam.NO_OPTION,
+                "{0} disconnected on {1} ({2})", n.info.remote, ds, (ioex == null) ? "" : ioex.Message);
+            
             RemoveNode(n);
         }
         internal void NewIncomingConnection(Handshake info, Socket sck)
@@ -221,7 +222,7 @@ namespace ServerClient
 
                 if (targetNode.readerStatus != Node.ReadStatus.READY)
                 {
-                    Log.LogWriteLine("New connection {0} rejected: node already connected", info.remote);
+                    Log.Console("New connection {0} rejected: node already connected", info.remote);
                     sck.Close();
                     return;
                 }
@@ -260,7 +261,7 @@ namespace ServerClient
                     }
                     catch (XmlSerializerException e)
                     {
-                        Log.LogWriteLine("Error while reading from socket:\n{0}\n\nLast read:{1}", e, Serializer.lastRead.GetData());
+                        Log.Console("Error while reading from socket:\n{0}\n\nLast read:{1}", e, Serializer.lastRead.GetData());
                         throw new Exception("Fatal");
                     }
                 };
@@ -273,7 +274,7 @@ namespace ServerClient
         }
         void OnNewConnectionCompletelyReady(Node n)
         {
-            ILog.EntryError(log, "New connection: {0} -> {1}", n.info.local.hostname, n.info.remote);
+            Log.EntryError(log, "New connection: {0} -> {1}", n.info.local.hostname, n.info.remote);
         }
 
         public Node ConnectAsync(OverlayEndpoint theirInfo)

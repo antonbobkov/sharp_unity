@@ -64,7 +64,7 @@ namespace ServerClient
                     ep = Aggregator.ParseParamForIP(new List<string>(s.Split(' ')));
 
                 if (all.myClient.TryConnect(ep))
-                    ILog.Console("Mesh connect to {0} {1}", ep.Address, ep.Port);
+                    Log.Console("Mesh connect to {0} {1}", ep.Address, ep.Port);
             }
 
             //all.sync.Add(() =>
@@ -119,12 +119,15 @@ namespace ServerClient
 
             bool myServer = cfg.startServer && all.host.MyAddress.Port == GlobalHost.nStartPort;
 
+            if(myServer)
+                cfg = GameConfig.ReadConfig("game_server_config.xml");
+
             all.myClient.onServerReadyHook = () =>
             {
                 if(cfg.validate)
                     all.myClient.Validate();
 
-                if (!myServer && cfg.aiPlayers > 0)
+                if (cfg.aiPlayers > 0)
                 {
                     for (int i = 0; i < cfg.aiPlayers; ++i)
                         NewAiPlayer(all);

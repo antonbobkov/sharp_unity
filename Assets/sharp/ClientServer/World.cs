@@ -1001,7 +1001,7 @@ namespace ServerClient
                     }
                     else
                     {
-                        Log.LogWriteLine(Log.StDump(world.Info, player, "Spawn failed, remote lock rejected"));
+                        Log.Console(Log.StDump(world.Info, player, "Spawn failed, remote lock rejected"));
                     }
                 });
         }
@@ -1010,7 +1010,7 @@ namespace ServerClient
             ActionValidity v = world.CheckValidMove(inf.id, newPos);
             if (v != ActionValidity.VALID)
             {
-                Log.LogWriteLine("World {4}: Invalid move {0} from {1} to {2} by {3}", v,
+                Log.Console("World {4}: Invalid move {0} from {1} to {2} by {3}", v,
                     currPos, newPos, inf.GetShortInfo(), world.Info.GetShortInfo());
                 return;
             }
@@ -1139,7 +1139,7 @@ namespace ServerClient
             {
                 if (playerLocks.Contains(player.id))
                 {
-                    Log.LogWriteLine(Log.StDump(world.Info, player, "can't join, locked"));
+                    Log.Console(Log.StDump(world.Info, player, "can't join, locked"));
                     return;
                 }
 
@@ -1158,7 +1158,7 @@ namespace ServerClient
                     else
                         throw new Exception(Log.StDump(world.Info, player, mv, "bad tile status"));
 
-                    Log.LogWriteLine(Log.StDump(world.Info, player, mv, "can't join, blocked"));
+                    Log.Console(Log.StDump(world.Info, player, mv, "can't join, blocked"));
 
                     return;
                 }

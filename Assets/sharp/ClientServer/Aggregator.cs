@@ -17,8 +17,10 @@ namespace ServerClient
     public class GameConfig
     {
         public bool startServer = false;
+        
         public bool validate = true;
         public int aiPlayers = 0;
+
         public List<string> meshIP = new List<string>() { "default" };
 
         public static GameConfig ReadConfig(string filename)
@@ -28,18 +30,18 @@ namespace ServerClient
 
             try
             {
-                StreamReader sw = new StreamReader(filename);
-                cfg = (GameConfig)ser.Deserialize(sw);
-                sw.Close();
+                using(StreamReader sw = new StreamReader(filename))
+                    cfg = (GameConfig)ser.Deserialize(sw);
             }
             catch (FileNotFoundException)
             {
-                ILog.Console("Cannot find config file " + filename + ", default one will be created");
-                StreamWriter sw = new StreamWriter(filename);
-                ser.Serialize(sw, cfg);
+                Log.Console("Cannot find config file " + filename + ", default one will be created");
+                
+                using(StreamWriter sw = new StreamWriter(filename))
+                    ser.Serialize(sw, cfg);
             }
-            
 
+            
             return cfg;
         }
     }
@@ -92,9 +94,9 @@ namespace ServerClient
         public void ParamConnect(List<string> param, bool mesh = false)
         {
             IPEndPoint ep = ParseParamForIP(param);
-            Log.LogWriteLine("Connecting to {0} {1}", ep.Address, ep.Port);
+            Log.Console("Connecting to {0} {1}", ep.Address, ep.Port);
             if (!myClient.TryConnect(ep))
-                Log.LogWriteLine("Already connected/connecting");
+                Log.Console("Already connected/connecting");
         }
         public void StartServer()
         {

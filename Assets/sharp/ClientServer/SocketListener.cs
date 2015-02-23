@@ -107,7 +107,7 @@ namespace ServerClient
                 }
                 catch (Exception e)
                 {
-                    Log.LogWriteLine("Error while processing handshake: {0}", e.Message);
+                    Log.Console("Error while processing handshake: {0}", e.Message);
 
                     sckRead.Close();
                     return;

@@ -254,7 +254,7 @@ namespace ServerClient
 
             myHost.ConnectAsync(info.validatorHost);
 
-            Log.LogWriteLine("Player Agent {0}", info.GetShortInfo());
+            Log.Console("Player Agent {0}", info.GetShortInfo());
         }
 
         Node.MessageProcessor AssignProcessor(Node n, MemoryStream nodeInfo)

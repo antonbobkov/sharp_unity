@@ -14,51 +14,6 @@ using System.Runtime.CompilerServices;
 
 namespace ServerClient
 {
-    static class Log
-    {
-        static public Action<string> log = msg => Console.WriteLine(msg);
-
-        static public void LogWriteLine(string msg, params object[] vals)
-        {
-            StringBuilder sb = new StringBuilder();
-            sb.AppendFormat(msg, vals);
-            log(sb.ToString());
-        }
-
-        [MethodImpl(MethodImplOptions.NoInlining)]
-        static public string StDump(params object[] vals)
-        {
-            StackTrace st = new StackTrace();
-            StackFrame sf = null;
-            for (int i = 0; i < 10; ++i )
-            {
-                sf = st.GetFrame(i);
-                if (sf == null)
-                    break;
-
-                string strClass = sf.GetMethod().DeclaringType.Name;
-
-                if (strClass != typeof(Log).Name)
-                    break;
-            }
-
-            string sMethod = sf.GetMethod().Name;
-            string sClass = sf.GetMethod().DeclaringType.Name;
-
-            string ret = sClass + "." + sMethod + " ";
-
-            foreach (object o in vals)
-                ret += o.ToString() + " ";
-
-            return ret;
-        }
-
-        static public void Dump(params object[] vals)
-        {
-            LogWriteLine(StDump(vals));
-        }
-    }
-
     static class NetTools
     {
         public static IPAddress GetMyIP()
@@ -84,7 +39,7 @@ namespace ServerClient
             //}
             catch (Exception e)
             {
-                Log.LogWriteLine("GetMyIP Error: {0}\nDefault to 127.0.0.1", e.Message);
+                Log.Console("GetMyIP Error: {0}\nDefault to 127.0.0.1", e.Message);
             }
 
             return IPAddress.Parse("127.0.0.1");
@@ -151,7 +106,7 @@ namespace ServerClient
         static public void NewThread(ThreadStart threadFunction, Action terminate, string name)
         {
             ThreadInfo ti = new ThreadInfo() { thread = new Thread(threadFunction), terminate = terminate, name = name };
-            ILog.EntryNormal(threadLog, "New Thread: " + name);
+            Log.EntryNormal(threadLog, "New Thread: " + name);
             ti.thread.Start();
 
             lock (threads)
@@ -183,7 +138,7 @@ namespace ServerClient
                 {
                     if ((ti.thread.ThreadState & System.Threading.ThreadState.Stopped) != 0)
                         continue;
-                    ILog.EntryNormal(threadLog, "Terminating " + ti.name);
+                    Log.EntryNormal(threadLog, "Terminating " + ti.name);
                     ti.terminate.Invoke();
                 }
             }       
@@ -192,11 +147,19 @@ namespace ServerClient
 
     static class MyAssert
     {
+        static private ILog assertLog = MasterFileLog.GetLog("Assert.log");
+        
         static public void Assert(bool b)
         {
-            Debug.Assert(b);
             if (!b)
+            {
+                Log.EntryError(assertLog, "Assert failed\n" + new System.Diagnostics.StackTrace() + "\n\n");
+                Log.EntryError(assertLog, "Assert failed\n" + System.Environment.StackTrace + "\n\n");
+
+                Debug.Assert(b);
+
                 throw new Exception("Assert failed");
+            }
         }
     }
 

@@ -176,7 +176,7 @@ namespace ServerClient
             if (MasterFileLog.LogLevel > 2)
                 sentMsg += new ChunkDebug(swm.message, Serializer.SizeSize).GetData() + "\n\n";
 
-            ILog.EntryVerbose(logW, sentMsg);
+            Log.EntryVerbose(logW, sentMsg);
 
             writer.SendMessage(swm);
 
@@ -219,7 +219,7 @@ namespace ServerClient
                         if (MasterFileLog.LogLevel > 2)
                             sentMsg += new ChunkDebug(stm).GetData() + "\n\n";
 
-                        ILog.EntryVerbose(logR, sentMsg); 
+                        Log.EntryVerbose(logR, sentMsg); 
                         
                         messageProcessor(mtp, stm, this);
                     }),

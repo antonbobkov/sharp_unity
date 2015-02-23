@@ -75,6 +75,7 @@
      <None Include="Assets\sharp\ClientServer\obj\x86\Release\ServerClient.csproj.FileListAbsolute.txt" />
      <None Include="Assets\sharp\ClientServer\bin\Debug\game_config.xml" />
      <None Include="Assets\sharp\ClientServer\obj\x86\Debug\ClientServer.csproj.FileListAbsolute.txt" />
+     <None Include="Assets\sharp\ClientServer\bin\Debug\game_server_config.xml" />
      <None Include="Assets\sharp\ClientServer\obj\x86\Debug\ServerClient.csproj.FileListAbsolute.txt" />
      <None Include="Assets\sharp\ClientServer\bin\Debug\log_config.xml" />
   </ItemGroup>

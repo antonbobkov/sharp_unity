@@ -190,7 +190,7 @@ namespace ServerClient
         {
             if (serverHost != null)
                 n.SendMessage(MessageType.SERVER_ADDRESS, serverHost);
-            ILog.Console("New mesh point: " + n.info.remote.addr);
+            Log.Console("New mesh point: " + n.info.remote.addr);
         }
 
         public void OnServerAddress(OverlayEndpoint serverHost_)
@@ -199,7 +199,7 @@ namespace ServerClient
             {
                 serverHost = serverHost_;
 
-                Log.LogWriteLine("Server at {0}", serverHost);
+                Log.Console("Server at {0}", serverHost);
 
                 server = myHost.ConnectAsync(serverHost);
                 myHost.BroadcastGroup(Client.hostName, MessageType.SERVER_ADDRESS, serverHost);

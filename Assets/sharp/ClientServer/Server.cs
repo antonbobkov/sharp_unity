@@ -229,7 +229,7 @@ namespace ServerClient
                 {
                     //gameInfo.NET_AddPlayer(playerInfo);
                     myHost.ConnectSendMessage(playerClient, MessageType.NEW_PLAYER_REQUEST_SUCCESS, playerInfo);
-                    Log.LogWriteLine("New player " + name + " validated by " + validatorHost.addr);
+                    Log.Console("New player " + name + " validated by " + validatorHost.addr);
                 }
             };
 
