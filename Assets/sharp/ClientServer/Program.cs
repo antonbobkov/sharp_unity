@@ -195,7 +195,13 @@ namespace ServerClient
                 string sCommand = param.First();
                 param.RemoveRange(0, 1);
                 inputProc.Process(sCommand, param);
+
+                if (sCommand == "exit")
+                    break;
             }
+
+            System.Threading.Thread.Sleep(100);
+            all.sync.Add(null);
         }
 
     }
