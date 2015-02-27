@@ -16,30 +16,26 @@ namespace ServerClient
 {
     static class NetTools
     {
+        public static ILog errorLog = null;
+
         public static IPAddress GetMyIP()
         {
             try
             {
-                IPHostEntry localDnsEntry = Dns.GetHostEntry(Dns.GetHostName());
+                IPHostEntry localDnsEntry = Dns.GetHostEntry(
+                    Dns.GetHostName());
                 return localDnsEntry.AddressList.First
                     (ipaddr =>
                         ipaddr.AddressFamily.ToString() == ProtocolFamily.InterNetwork.ToString());
             }
-            //catch (Exception e)
-            //{
-            //    Log.LogWriteLine("GetMyIP Error: {0}\nWill try to read ip from file \"myip\"", e.Message);
-            //}
-
-            //try
-            //{
-            //    var f = new System.IO.StreamReader(File.Open("myip", FileMode.Open));
-            //    string line;
-            //    line = f.ReadLine();
-            //    return IPAddress.Parse(line);
-            //}
             catch (Exception e)
             {
                 Log.Console("GetMyIP Error: {0}\nDefault to 127.0.0.1", e.Message);
+
+                if (errorLog == null)
+                    errorLog = MasterFileLog.GetLog("GetMyIP_exception.log");
+
+                Log.EntryError(errorLog, e.ToString());
             }
 
             return IPAddress.Parse("127.0.0.1");
@@ -138,7 +134,7 @@ namespace ServerClient
                 {
                     if ((ti.thread.ThreadState & System.Threading.ThreadState.Stopped) != 0)
                         continue;
-                    Log.EntryNormal(threadLog, "Terminating " + ti.name);
+                    Log.EntryError(threadLog, "Terminating " + ti.name);
                     ti.terminate.Invoke();
                 }
             }       

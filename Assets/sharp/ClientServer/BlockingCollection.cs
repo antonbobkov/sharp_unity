@@ -8,11 +8,6 @@ namespace ServerClient.Concurrent
 {
     class BlockingCollection<T>
     {
-        object syncLock = new object();
-        
-        Queue<T> q = new Queue<T>();
-        ManualResetEvent arrayReady = new ManualResetEvent(false);
-
         public void Add(T t)
         {
             lock (syncLock)
@@ -45,5 +40,9 @@ namespace ServerClient.Concurrent
                 return ret;
             }        
         }
+
+        private object syncLock = new object();
+        private Queue<T> q = new Queue<T>();
+        private ManualResetEvent arrayReady = new ManualResetEvent(false);
     }
 }

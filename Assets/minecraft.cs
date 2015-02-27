@@ -197,24 +197,25 @@ public class minecraft : MonoBehaviour {
         Log.ConsoleLog = msg => Debug.Log(msg);
 
         GameConfig cfg = GameConfig.ReadConfig("unity_config.xml");
+        GameInstanceConifg cfg_local = cfg.clientConfig;
 
         all = new Aggregator();
         
         bool myServer = cfg.startServer && all.host.MyAddress.Port == GlobalHost.nStartPort;
 
         if (myServer)
-            cfg = GameConfig.ReadConfig("unity_server_config.xml");
+            cfg_local = cfg.serverConfig;
 
         Program.MeshConnect(all, cfg);
 
         all.myClient.onServerReadyHook = () =>
         {
-            if (cfg.validate)
+            if (cfg_local.validate)
                 all.myClient.Validate();
 
-            if (!myServer && cfg.aiPlayers > 0)
+            if (!myServer && cfg_local.aiPlayers > 0)
             {
-                for (int i = 0; i < cfg.aiPlayers; ++i)
+                for (int i = 0; i < cfg_local.aiPlayers; ++i)
                     Program.NewAiPlayer(all);
             }
 

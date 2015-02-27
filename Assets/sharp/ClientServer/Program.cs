@@ -52,52 +52,21 @@ namespace ServerClient
                         Console.WriteLine(s);
             }
         }
-        static public void MeshConnect(Aggregator all, GameConfig cfg)
+        static public void MeshConnect(Aggregator all, GameConfig cfg, IPAddress myIP)
         {
-            foreach (var s in cfg.meshIP)
+            foreach (var s in cfg.meshIPs)
             {
                 IPEndPoint ep;
                 
                 if (s == "default")
                     ep = new IPEndPoint(NetTools.GetMyIP(), GlobalHost.nStartPort);
                 else
-                    ep = Aggregator.ParseParamForIP(new List<string>(s.Split(' ')));
+                    ep = Aggregator.ParseParamForIP(new List<string>(s.Split(' ')), myIP);
 
                 if (all.myClient.TryConnect(ep))
                     Log.Console("Mesh connect to {0} {1}", ep.Address, ep.Port);
             }
-
-            //all.sync.Add(() =>
-            //    {
-            //        IPEndPoint ep = Aggregator.ParseParamForIP(new List<string>());
-            //        if(all.myClient.TryConnect(ep))
-            //            Log.LogWriteLine("Connecting to {0} {1}", ep.Address, ep.Port);
-            //    });
-
-            //try
-            //{
-            //    var f = new System.IO.StreamReader(File.Open("ips", FileMode.Open));
-            //    string line;
-            //    while ((line = f.ReadLine()) != null)
-            //    {
-            //        List<string> ls = new List<string>(line.Split(' '));
-            //        all.sync.Add(() =>
-            //        {
-            //            IPEndPoint ep = Aggregator.ParseParamForIP(ls);
-            //            if (all.myClient.TryConnect(ep))
-            //                Log.LogWriteLine("Connecting to {0} {1}", ep.Address, ep.Port);
-            //        });
-            //    }
-            //}
-            //catch (Exception){}
         }
-
-        //public static void GameInfoOut(GameInfo inf)
-        //{
-        //    GameInfoSerialized infoser = inf.Serialize();
-        //    foreach (WorldInfo pi in infoser.worlds)
-        //        Console.WriteLine(pi.GetFullInfo());
-        //}
 
         static public Guid NewAiPlayer(Aggregator all)
         {
@@ -113,29 +82,32 @@ namespace ServerClient
         {
             //Serializer.Test();
 
-            GameConfig cfg = GameConfig.ReadConfig("game_config.xml");
-            
-            Aggregator all = new Aggregator();
+            GameConfig cfg_total = GameConfig.ReadConfig("game_config.xml");
+            GameInstanceConifg cfg_local = cfg_total.clientConfig;
 
-            bool myServer = cfg.startServer && all.host.MyAddress.Port == GlobalHost.nStartPort;
+            IPAddress myIP = GameConfig.GetIP(cfg_total);
 
-            if(myServer)
-                cfg = GameConfig.ReadConfig("game_server_config.xml");
+            Aggregator all = new Aggregator(myIP);
+
+            bool myServer = cfg_total.startServer && all.host.MyAddress.Port == GlobalHost.nStartPort;
+
+            if (myServer)
+                cfg_local = cfg_total.serverConfig;
 
             all.myClient.onServerReadyHook = () =>
             {
-                if(cfg.validate)
+                if (cfg_local.validate)
                     all.myClient.Validate();
 
-                if (cfg.aiPlayers > 0)
+                if (cfg_local.aiPlayers > 0)
                 {
-                    for (int i = 0; i < cfg.aiPlayers; ++i)
+                    for (int i = 0; i < cfg_local.aiPlayers; ++i)
                         NewAiPlayer(all);
                     all.myClient.NewWorld(new Point(0, 0));
                 }
             };
 
-            MeshConnect(all, cfg);
+            MeshConnect(all, cfg_total, myIP);
 
             if (myServer)
                 all.StartServer();
@@ -144,7 +116,7 @@ namespace ServerClient
 
             InputProcessor inputProc = new InputProcessor(all.sync.GetAsDelegate());
 
-            inputProc.commands.Add("connect", (param) => all.ParamConnect(param));
+            inputProc.commands.Add("connect", (param) => all.ParamConnect(param, myIP));
 
             inputProc.commands.Add("server", (param) =>
             {
@@ -184,6 +156,8 @@ namespace ServerClient
                 all.host.Close();
                 System.Threading.Thread.Sleep(100);
                 ThreadManager.Terminate();
+                System.Threading.Thread.Sleep(100);
+                all.sync.Add(null);
             });
 
             while (true)
@@ -200,8 +174,6 @@ namespace ServerClient
                     break;
             }
 
-            System.Threading.Thread.Sleep(100);
-            all.sync.Add(null);
         }
 
     }

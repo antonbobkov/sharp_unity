@@ -54,12 +54,15 @@ namespace ServerClient
         SocketListener sl;
         Action<Action> processQueue;
 
+        private IPAddress myIP;
+
         public IPEndPoint MyAddress { get; private set; }
 
         private ILog log;
 
-        public GlobalHost(Action<Action> processQueue_)
+        public GlobalHost(Action<Action> processQueue_, IPAddress myIP)
         {
+            this.myIP = myIP;
             processQueue = processQueue_;
             log = MasterFileLog.GetLog("network", "globalhost.log");
 
@@ -68,7 +71,7 @@ namespace ServerClient
 
         void StartListening()
         {
-            IPAddress ip = NetTools.GetMyIP();
+            IPAddress ip = myIP;
 
             Socket sckListen = new Socket(
                     ip.AddressFamily,
@@ -184,12 +187,6 @@ namespace ServerClient
 
             log = MasterFileLog.GetLog("network", hostName.ToString() + ".log");
         }
-
-        /*
-        public OverlayHost(OverlayHostName hostName_, IPEndPoint address_, Action<Action> processQueue_,
-        MessageProcessor messageProcessor)
-            :this(hostName_, address_, processQueue_, (n) => messageProcessor){}
-        */
 
         void ProcessDisconnect(Node n, Exception ioex, DisconnectType ds)
         {

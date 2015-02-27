@@ -14,14 +14,21 @@ using System.Xml.Serialization;
 
 namespace ServerClient
 {
+    public class GameInstanceConifg
+    {
+        public bool validate = true;
+        public int aiPlayers = 0;
+    }
+    
     public class GameConfig
     {
         public bool startServer = false;
-        
-        public bool validate = true;
-        public int aiPlayers = 0;
 
-        public List<string> meshIP = new List<string>() { "default" };
+        public GameInstanceConifg serverConfig = new GameInstanceConifg();
+        public GameInstanceConifg clientConfig = new GameInstanceConifg();
+
+        public List<string> meshIPs = new List<string>() { "default" };
+        public string myIP = "default";
 
         public static GameConfig ReadConfig(string filename)
         {
@@ -44,6 +51,13 @@ namespace ServerClient
             
             return cfg;
         }
+        public static IPAddress GetIP(GameConfig cfg)
+        {
+            if (cfg.myIP == "default")
+                return NetTools.GetMyIP();
+            else
+                return IPAddress.Parse(cfg.myIP);
+        }
     }
 
     class Aggregator
@@ -59,16 +73,16 @@ namespace ServerClient
         public Dictionary<Guid, PlayerAgent> playerAgents = new Dictionary<Guid, PlayerAgent>();
 
         public Action<PlayerAgent> onNewPlayerAgentHook = (a) => { };
-        
-        public Aggregator()
+
+        public Aggregator(IPAddress myIP)
         {
-            host = new GlobalHost(sync.GetAsDelegate());
+            host = new GlobalHost(sync.GetAsDelegate(), myIP);
             myClient = new Client(host, this);
         }
 
-        public static IPEndPoint ParseParamForIP(List<string> param)
+        public static IPEndPoint ParseParamForIP(List<string> param, IPAddress defaultIP)
         {
-            IPAddress ip = NetTools.GetMyIP();
+            IPAddress ip = defaultIP;
             int port = GlobalHost.nStartPort;
 
             foreach (var s in param)
@@ -91,9 +105,9 @@ namespace ServerClient
             return new IPEndPoint(ip, port);
         }
 
-        public void ParamConnect(List<string> param, bool mesh = false)
+        public void ParamConnect(List<string> param, IPAddress defaultIP)
         {
-            IPEndPoint ep = ParseParamForIP(param);
+            IPEndPoint ep = ParseParamForIP(param, defaultIP);
             Log.Console("Connecting to {0} {1}", ep.Address, ep.Port);
             if (!myClient.TryConnect(ep))
                 Log.Console("Already connected/connecting");

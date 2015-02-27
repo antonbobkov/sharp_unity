@@ -1,9 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <GameConfig xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
   <startServer>false</startServer>
-  <validate>false</validate>
-  <aiPlayers>0</aiPlayers>
-  <meshIP>
+  <serverConfig>
+    <validate>true</validate>
+    <aiPlayers>0</aiPlayers>
+  </serverConfig>
+  <clientConfig>
+    <validate>true</validate>
+    <aiPlayers>0</aiPlayers>
+  </clientConfig>
+  <meshIPs>
     <string>default</string>
-  </meshIP>
+  </meshIPs>
+  <myIP>default</myIP>
 </GameConfig>
