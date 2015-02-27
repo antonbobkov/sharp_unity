@@ -233,11 +233,7 @@ namespace ServerClient
                     onNewConnectionHook.Invoke(targetNode);
 
                 if (targetNode.writerStatus == Node.WriteStatus.READY)
-                    ConnectNodeAsync(targetNode);
-
-                if (targetNode.AreBothConnected())
-                    OnNewConnectionCompletelyReady(targetNode);
-                    
+                    targetNode.ConnectAsync();
             }
             catch (NodeException) // FIXME
             {
@@ -267,16 +263,6 @@ namespace ServerClient
                 };
         }
         
-        void OutgoingConnectionReady(Node n)
-        {
-            if (n.AreBothConnected())
-                OnNewConnectionCompletelyReady(n);        
-        }
-        void OnNewConnectionCompletelyReady(Node n)
-        {
-            Log.EntryError(log, "New connection: {0} -> {1}", n.info.local.hostname, n.info.remote);
-        }
-
         public Node ConnectAsync(OverlayEndpoint theirInfo)
         {
             Node targetNode = FindNode(theirInfo);
@@ -294,12 +280,10 @@ namespace ServerClient
             MyAssert.Assert(targetNode.writerStatus != Node.WriteStatus.DISCONNECTED);
             MyAssert.Assert(!targetNode.IsClosed);
 
-            if (targetNode.writerStatus == Node.WriteStatus.CONNECTED)
-                throw new NodeException("Already connected to " + targetNode.Address);
-            else if (targetNode.writerStatus == Node.WriteStatus.CONNECTING)
-                throw new NodeException("Connection in progress " + targetNode.Address);
+            if (targetNode.writerStatus == Node.WriteStatus.WRITING)
+                throw new NodeException("Already connected/connecting to " + targetNode.Address);
             else
-                ConnectNodeAsync(targetNode);
+                targetNode.ConnectAsync();
 
             if (newConnection)
                 onNewConnectionHook.Invoke(targetNode);
@@ -316,13 +300,6 @@ namespace ServerClient
             {
                 return null;
             }
-        }
-
-        void ConnectNodeAsync(Node n)
-        {
-            n.ConnectAsync(
-                            () => this.OutgoingConnectionReady(n)
-                          );
         }
 
         void DisconnectNode(Node n)

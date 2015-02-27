@@ -139,6 +139,7 @@ namespace ServerClient
 
             writerStatus = WriteStatus.READY;
             readerStatus = ReadStatus.READY;
+            IsClosed = false;
 
             if (MasterFileLog.LogLevel > 1)
             {
@@ -169,6 +170,8 @@ namespace ServerClient
         {
             if (IsClosed)
                 throw new NodeException("SendMessage: node is disconnected " + FullDescription());
+            if (writerStatus != WriteStatus.WRITING)
+                ConnectAsync();
 
             SocketWriterMessage swm = SocketWriter.SerializeMessage(mt, messages);
 
@@ -187,19 +190,17 @@ namespace ServerClient
 
         // --- private ---
 
-        internal enum ReadStatus { READY, CONNECTED, DISCONNECTED };
-        internal enum WriteStatus { READY, CONNECTING, CONNECTED, DISCONNECTED };
+        internal enum ReadStatus { READY, READING, DISCONNECTED };
+        internal enum WriteStatus { READY, WRITING, DISCONNECTED };
 
-        SocketWriter writer = new SocketWriter();
+        SocketWriter writer = null;
         internal WriteStatus writerStatus { get; private set; }
 
-        SocketReader reader;
+        SocketReader reader = null;
         internal ReadStatus readerStatus { get; private set; }
 
         Action<Action> actionQueue;
         Action<Node, Exception, DisconnectType> notifyDisonnect;
-
-        internal bool AreBothConnected() { return writerStatus == WriteStatus.CONNECTED && readerStatus == ReadStatus.CONNECTED; }
 
         internal void AcceptReaderConnection(Socket readingSocket,
             MessageProcessor messageProcessor)
@@ -231,7 +232,7 @@ namespace ServerClient
 
                 readingSocket);
 
-                readerStatus = ReadStatus.CONNECTED;
+                readerStatus = ReadStatus.READING;
             }
             catch (Exception)
             {
@@ -240,39 +241,23 @@ namespace ServerClient
             }
         }
 
-        /*internal void Connect(Handshake myInfo)
+        internal void ConnectAsync()
         {
-            Socket sck = GetReadyForNewWritingConnection(myInfo);
+            if(IsClosed)
+                throw new NodeException("SendMessage: node is closed " + FullDescription());
+            if (writerStatus != WriteStatus.READY)
+                throw new NodeException("SendMessage: node is not ready " + FullDescription());
 
-            try
-            {
-                sck.Connect(Address.Addr);
-            }
-            catch (Exception e)
-            {
-                sck.Close();
-                Close(e, DisconnectType.WRITE_CONNECT_FAIL);
-                throw;
-            }
+            MyAssert.Assert(writer == null);
 
-            AcceptWritingConnection(sck);
-        }
-        */
-        internal void ConnectAsync(Action onSuccess)
-        {
-            Socket sck = GetReadyForNewWritingConnection();
+            Action<Exception, DisconnectType> errorResponse = (e, dt) => actionQueue(() =>
+            {
+                writerStatus = WriteStatus.DISCONNECTED;
+                Close(e, dt);
+            });
 
-            try
-            {
-                ThreadManager.NewThread(() => ConnectingThread(sck, onSuccess),
-                    () => sck.Close(), "connect to " + info.ToString());
-                //new Thread( () => ConnectingThread(sck, onSuccess) ).Start();
-            }
-            catch (Exception)
-            {
-                sck.Close();
-                throw;
-            }
+            writerStatus = WriteStatus.WRITING;
+            writer = new SocketWriter(Address, errorResponse, info);
         }
 
         internal void Disconnect()
@@ -291,75 +276,12 @@ namespace ServerClient
             notifyDisonnect(this, ex, dt);
         }
 
-        void ConnectingThread(Socket sck, Action onSuccess)
-        {
-            try
-            {
-                sck.Connect(Address);//, TimeSpan.FromSeconds(5));
-
-                // send handshake data
-                using (NetworkStream connectionStream = new NetworkStream(sck, false))
-                {
-                    SocketWriter.SendNetworkMessage(connectionStream, SocketWriter.SerializeMessage(MessageType.HANDSHAKE, info));
-                    
-                    if (info.hasExtraInfo)
-                    {
-                        info.ExtraInfo.Position = 0;
-                        Serializer.SendStream(connectionStream, info.ExtraInfo);
-                    }
-                }
-
-            }
-            catch (Exception e)
-            {
-                sck.Close();
-
-                actionQueue(() =>
-                {
-                    Close(e, DisconnectType.WRITE_CONNECT_FAIL);
-                });
-
-                return;
-            }
-
-            actionQueue(() =>
-            {
-                AcceptWritingConnection(sck);
-                onSuccess.Invoke();
-            });
-        }
-        Socket GetReadyForNewWritingConnection()
-        {
-            if (IsClosed)
-                throw new NodeException("GetReadyForNewWritingConnection: node is disconnected " + FullDescription());
-
-            if (writerStatus != WriteStatus.READY)
-                throw new NodeException("Unexpected connection request in " + FullDescription());
-
-            writerStatus = WriteStatus.CONNECTING;
-
-            return new Socket(
-                    Address.AddressFamily,
-                    SocketType.Stream,
-                    ProtocolType.Tcp);
-        }
-        void AcceptWritingConnection(Socket sck)
-        {
-            writerStatus = WriteStatus.CONNECTED;
-
-            writer.StartWriting(sck,
-                                (ioex) => actionQueue( () =>
-                                    {
-                                        writerStatus = WriteStatus.DISCONNECTED;
-                                        Close(ioex, DisconnectType.WRITE);
-                                    })
-                               );
-        }
         void TerminateThreads()
         {
             if(reader != null)
                 reader.TerminateThread();
-            writer.TerminateThread();
+            if(writer != null)
+                writer.TerminateThread();
         }
     }
 }
