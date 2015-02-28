@@ -59,7 +59,7 @@ namespace ServerClient
                 IPEndPoint ep;
                 
                 if (s == "default")
-                    ep = new IPEndPoint(NetTools.GetMyIP(), GlobalHost.nStartPort);
+                    ep = new IPEndPoint(myIP, GlobalHost.nStartPort);
                 else
                     ep = Aggregator.ParseParamForIP(new List<string>(s.Split(' ')), myIP);
 
