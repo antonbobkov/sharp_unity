@@ -6,6 +6,8 @@ using System.IO;
 using System.Threading;
 using System.Diagnostics;
 using System.Xml.Serialization;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace ServerClient
 {
@@ -229,7 +231,7 @@ namespace ServerClient
                         readerStatus = ReadStatus.DISCONNECTED;
                         Close(ioex, DisconnectType.READ);
                     }),
-                    () => actionQueue(OnSoftDisconnect),
+                    () => actionQueue(OnSoftDisconnectReader),
                     readingSocket);
 
                 readerStatus = ReadStatus.READING;
@@ -257,7 +259,7 @@ namespace ServerClient
             });
 
             writerStatus = WriteStatus.WRITING;
-            writer = new SocketWriter(Address, errorResponse, info);
+            writer = new SocketWriter(Address, errorResponse, () => actionQueue(OnSoftDisconnectWriter), info);
         }
 
         internal void Disconnect()
@@ -284,10 +286,26 @@ namespace ServerClient
                 writer.TerminateThread();
         }
 
-        private void OnSoftDisconnect()
+        private void OnSoftDisconnectReader()
         {
             reader = null;
             readerStatus = ReadStatus.READY;
+        }
+        
+        private void OnSoftDisconnectWriter()
+        {
+            Queue<SocketWriterMessage> msgs = writer.ExtractAllMessages();
+            
+            writer = null;
+            writerStatus = WriteStatus.READY;
+
+            if(msgs.Any())
+            {
+                ConnectAsync();
+
+                while (msgs.Any())
+                    writer.SendMessage(msgs.Dequeue());
+            }
         }
     }
 }
