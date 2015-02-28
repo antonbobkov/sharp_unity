@@ -139,19 +139,20 @@ namespace ServerClient
 
     class FileLog : ILog
     {
-        StreamWriter fs;
+        private string path;
 
         public FileLog(string path, int logLevel_arg)
             :base(logLevel_arg)
         {
+            this.path = path;
+            
             Directory.CreateDirectory(Path.GetDirectoryName(path));
-            fs = new StreamWriter(path, false);
         }
 
         public override void LogWrite(string s)
         {
-            fs.Write(s);
-            fs.Flush();
+            using(var fs = new StreamWriter(path, true))
+                fs.Write(s);
         }
     }
 

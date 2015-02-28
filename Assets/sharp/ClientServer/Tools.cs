@@ -95,6 +95,7 @@ namespace ServerClient
 
     static class ThreadManager
     {
+        static object syncLock = new object();
         static List<ThreadInfo> threads = new List<ThreadInfo>();
 
         static ILog threadLog = MasterFileLog.GetLog("Threads.log");
@@ -102,7 +103,8 @@ namespace ServerClient
         static public void NewThread(ThreadStart threadFunction, Action terminate, string name)
         {
             ThreadInfo ti = new ThreadInfo() { thread = new Thread(threadFunction), terminate = terminate, name = name };
-            Log.EntryNormal(threadLog, "New Thread: " + name);
+            lock(syncLock)
+                Log.EntryNormal(threadLog, "New Thread: " + name);
             ti.thread.Start();
 
             lock (threads)
