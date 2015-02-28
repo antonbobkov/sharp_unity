@@ -199,14 +199,16 @@ public class minecraft : MonoBehaviour {
         GameConfig cfg = GameConfig.ReadConfig("unity_config.xml");
         GameInstanceConifg cfg_local = cfg.clientConfig;
 
-        all = new Aggregator();
+        IPAddress myIP = GameConfig.GetIP(cfg);
+
+        all = new Aggregator(myIP);
         
         bool myServer = cfg.startServer && all.host.MyAddress.Port == GlobalHost.nStartPort;
 
         if (myServer)
             cfg_local = cfg.serverConfig;
 
-        Program.MeshConnect(all, cfg);
+        Program.MeshConnect(all, cfg, myIP);
 
         all.myClient.onServerReadyHook = () =>
         {

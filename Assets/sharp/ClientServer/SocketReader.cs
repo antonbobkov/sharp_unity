@@ -14,11 +14,14 @@ namespace ServerClient
         Socket socketRead;
         Action<MemoryStream, MessageType> messageProcessor;
         Action<IOException> errorResponse;
+        Action onSoftDisconnect;
 
-        public SocketReader(Action<MemoryStream, MessageType> messageProcessor_, Action<IOException> errorResponse_, Socket socketRead_)
+        public SocketReader(Action<MemoryStream, MessageType> messageProcessor_, Action<IOException> errorResponse_,
+            Action onSoftDisconnect_, Socket socketRead_)
         {
             try
             {
+                onSoftDisconnect = onSoftDisconnect_;
                 messageProcessor = messageProcessor_;
                 socketRead = socketRead_;
                 errorResponse = errorResponse_;
@@ -51,6 +54,14 @@ namespace ServerClient
 
                         if (bt == -1)
                             throw new IOException("End of stream");
+                        if (bt == (int)MessageType.SOFT_DISCONNECT)
+                        {
+                            readStream.WriteByte((byte)MessageType.SOFT_DISCONNECT);
+                            
+                            onSoftDisconnect.Invoke();
+                            
+                            return;
+                        }
 
                         //Console.WriteLine("Message received: {0}", (MessageType)bt);
 

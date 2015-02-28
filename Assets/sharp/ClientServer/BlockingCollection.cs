@@ -16,14 +16,25 @@ namespace ServerClient.Concurrent
                 arrayReady.Set();
             }
         }
-        public T Take()
+        
+        public T Take() { return GetFront(true); }
+        public T Peek() { return GetFront(false); }
+
+        private T GetFront(bool remove)
         {
             while (true)
             {
                 lock (syncLock)
                 {
                     if (q.Any())
-                        return q.Dequeue();
+                    {
+                        T ret = q.Peek();
+                        
+                        if (remove)
+                            q.Dequeue();
+
+                        return ret;
+                    }
                     else
                         arrayReady.Reset();
                 }
@@ -31,6 +42,7 @@ namespace ServerClient.Concurrent
                 arrayReady.WaitOne();
             }
         }
+
         public Queue<T> TakeAll()
         {
             lock (syncLock)
@@ -40,6 +52,7 @@ namespace ServerClient.Concurrent
                 return ret;
             }        
         }
+        public bool IsEmpty { get { lock (syncLock) return !q.Any(); } }
 
         private object syncLock = new object();
         private Queue<T> q = new Queue<T>();

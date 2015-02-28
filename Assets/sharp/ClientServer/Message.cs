@@ -16,7 +16,7 @@ using System.Runtime.Remoting.Messaging;
 
 namespace ServerClient
 {
-    public enum MessageType : byte { HANDSHAKE, ROLE,
+    public enum MessageType : byte { HANDSHAKE, ROLE, SOFT_DISCONNECT,
     SERVER_ADDRESS, NEW_VALIDATOR,
     NEW_PLAYER_REQUEST, NEW_WORLD_REQUEST, NEW_PLAYER_REQUEST_SUCCESS,
     PLAYER_VALIDATOR_ASSIGN, WORLD_VALIDATOR_ASSIGN, ACCEPT,

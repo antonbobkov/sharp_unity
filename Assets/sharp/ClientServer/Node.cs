@@ -229,8 +229,8 @@ namespace ServerClient
                         readerStatus = ReadStatus.DISCONNECTED;
                         Close(ioex, DisconnectType.READ);
                     }),
-
-                readingSocket);
+                    () => actionQueue(OnSoftDisconnect),
+                    readingSocket);
 
                 readerStatus = ReadStatus.READING;
             }
@@ -282,6 +282,12 @@ namespace ServerClient
                 reader.TerminateThread();
             if(writer != null)
                 writer.TerminateThread();
+        }
+
+        private void OnSoftDisconnect()
+        {
+            reader = null;
+            readerStatus = ReadStatus.READY;
         }
     }
 }

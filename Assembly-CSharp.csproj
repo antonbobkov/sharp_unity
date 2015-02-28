@@ -67,7 +67,6 @@
      <Compile Include="Assets\sharp\ClientServer\SocketListener.cs" />
      <Compile Include="Assets\sharp\ClientServer\SocketReader.cs" />
      <Compile Include="Assets\sharp\ClientServer\SocketWriter.cs" />
-     <Compile Include="Assets\sharp\ClientServer\Tools.cs" />
      <Compile Include="Assets\sharp\ClientServer\World.cs" />
      <Compile Include="Assets\sharp\ClientServer\obj\x86\Debug\TemporaryGeneratedFile_036C0B5B-1481-4323-8D20-8F5ADCB23D92.cs" />
      <Compile Include="Assets\sharp\ClientServer\obj\x86\Debug\TemporaryGeneratedFile_5937a670-0e60-4077-877b-f7221da3dda1.cs" />
