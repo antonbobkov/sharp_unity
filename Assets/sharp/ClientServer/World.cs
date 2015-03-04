@@ -432,7 +432,7 @@ namespace ServerClient
         static public readonly Point worldSize = new Point(10, 10);
         private void Generate(WorldInitializer init)
         {
-            ServerClient.MyRandom seededRandom = new ServerClient.MyRandom(init.seed);
+            MyRandom seededRandom = new MyRandom(init.seed);
 
             // random terrain
             foreach (Tile t in map.GetTiles())
