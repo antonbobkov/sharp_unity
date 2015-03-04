@@ -10,6 +10,8 @@ using System.Diagnostics;
 using System.Xml.Serialization;
 
 using Tools;
+using Network;
+
 
 namespace ServerClient
 {

@@ -9,75 +9,11 @@ using System.IO;
 using System.Diagnostics;
 
 using Tools;
+using Network;
+
 
 namespace ServerClient
 {
-    //[Serializable]
-    //public class GameInfoSerialized
-    //{
-    //    public WorldInfo[] worlds;
-
-    //    public GameInfoSerialized() { }
-    //}
-
-    //class GameInfo : MarshalByRefObject
-    //{
-    //    // ----- constructors -----
-    //    public GameInfo() { }
-
-    //    public GameInfoSerialized Serialize()
-    //    {
-    //        return new GameInfoSerialized() { worlds = worldByPoint.Values.ToArray() };
-    //    }
-    //    public void Deserialize(GameInfoSerialized info)
-    //    {
-    //        foreach (WorldInfo w in info.worlds)
-    //            NET_AddWorld(w);
-    //    }
-
-    //    // ----- read only infromation -----
-    //    public NodeRole GetRoleOfHost(OverlayEndpoint host) { return roles.GetValue(host); }
-    //    public NodeRole? TryGetRoleOfHost(OverlayEndpoint host)
-    //    {
-    //        if (roles.ContainsKey(host))
-    //            return roles[host];
-    //        else
-    //            return null;
-    //    }
-
-    //    public WorldInfo GetWorldByHost(OverlayEndpoint host) { return worldByHost.GetValue(host); }
-
-    //    public WorldInfo GetWorldByPos(Point pos) { return worldByPoint.GetValue(pos); }
-    //    public WorldInfo? TryGetWorldByPos(Point pos)
-    //    {
-    //        if (worldByPoint.ContainsKey(pos))
-    //            return worldByPoint[pos];
-    //        else
-    //            return null;
-    //    }
-
-    //    public OverlayEndpoint GetWorldHost(Point worldPos) { return worldByPoint.GetValue(worldPos).host; }
-
-    //    // ----- modifiers -----
-    //    [Forward] public void NET_AddWorld(WorldInfo info)
-    //    {
-    //        roles.Add(info.host, NodeRole.WORLD_VALIDATOR);
-
-    //        worldByPoint.Add(info.position, info);
-    //        worldByHost.Add(info.host, info);
-
-    //        onNewWorld.Invoke(info);
-    //    }
-
-    //    // ----- hooks -----
-    //    public Action<WorldInfo> onNewWorld = (inf) => { };
-
-    //    // ----- private data -----
-    //    Dictionary<OverlayEndpoint, NodeRole> roles = new Dictionary<OverlayEndpoint, NodeRole>();
-    //    Dictionary<Point, WorldInfo> worldByPoint = new Dictionary<Point, WorldInfo>();
-    //    Dictionary<OverlayEndpoint, WorldInfo> worldByHost = new Dictionary<OverlayEndpoint, WorldInfo>();
-    //}
-
     class DelayedAction
     {
         public OverlayEndpoint ep;

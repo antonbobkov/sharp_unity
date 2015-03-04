@@ -12,7 +12,7 @@ using System.Collections.Generic;
 
 using Tools;
 
-namespace ServerClient
+namespace Network
 {
     class ChunkDebug
     {

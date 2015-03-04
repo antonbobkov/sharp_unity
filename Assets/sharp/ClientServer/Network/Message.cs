@@ -16,7 +16,7 @@ using System.Runtime.Remoting.Messaging;
 using Tools;
 
 
-namespace ServerClient
+namespace Network
 {
     public enum MessageType : byte { HANDSHAKE, ROLE, SOFT_DISCONNECT,
     SERVER_ADDRESS, NEW_VALIDATOR,

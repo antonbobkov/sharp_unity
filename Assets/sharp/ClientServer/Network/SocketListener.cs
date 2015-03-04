@@ -6,7 +6,7 @@ using System.Threading;
 
 using Tools;
 
-namespace ServerClient
+namespace Network
 {
     class SocketListener
     {

@@ -10,7 +10,7 @@ using System.Collections.Generic;
 
 using Tools;
 
-namespace ServerClient
+namespace Network
 {
     enum SocketWriterMessageType { MESSAGE, TERMINATE, SOFT_DISCONNECT }
 

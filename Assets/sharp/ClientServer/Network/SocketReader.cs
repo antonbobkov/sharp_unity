@@ -9,7 +9,7 @@ using System.Xml.Serialization;
 
 using Tools;
 
-namespace ServerClient
+namespace Network
 {
     class SocketReader
     {   

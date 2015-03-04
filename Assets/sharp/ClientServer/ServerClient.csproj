@@ -55,16 +55,16 @@
     <Compile Include="Player.cs" />
     <Compile Include="Server.cs" />
     <Compile Include="Tools\Tools.cs" />
-    <Compile Include="Message.cs" />
-    <Compile Include="Node.cs" />
-    <Compile Include="NodeHost.cs" />
+    <Compile Include="Network\Message.cs" />
+    <Compile Include="Network\Node.cs" />
+    <Compile Include="Network\NodeHost.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Tools\Random.cs" />
-    <Compile Include="Serializer.cs" />
-    <Compile Include="SocketListener.cs" />
-    <Compile Include="SocketReader.cs" />
-    <Compile Include="SocketWriter.cs" />
+    <Compile Include="Network\Serializer.cs" />
+    <Compile Include="Network\SocketListener.cs" />
+    <Compile Include="Network\SocketReader.cs" />
+    <Compile Include="Network\SocketWriter.cs" />
     <Compile Include="World.cs" />
   </ItemGroup>
   <ItemGroup>

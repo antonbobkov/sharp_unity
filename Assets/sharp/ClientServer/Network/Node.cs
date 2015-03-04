@@ -11,7 +11,7 @@ using System.Linq;
 
 using Tools;
 
-namespace ServerClient
+namespace Network
 {
     [Serializable]
     public class IPEndPointSer

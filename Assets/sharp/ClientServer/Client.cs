@@ -10,6 +10,8 @@ using System.IO;
 using System.Diagnostics;
 
 using Tools;
+using Network;
+
 
 namespace ServerClient
 {
