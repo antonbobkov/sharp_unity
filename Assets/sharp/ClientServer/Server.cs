@@ -1,5 +1,4 @@
 ﻿using System;
-using ServerClient.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
@@ -8,6 +7,8 @@ using System.Text;
 using System.Threading;
 using System.IO;
 using System.Diagnostics;
+
+using Tools;
 
 namespace ServerClient
 {
@@ -246,7 +247,7 @@ namespace ServerClient
             float fScale = .1f;
             Point pShift = new Point(10, 10);
 
-            Func<Point, byte> gen = (pos) => Convert.ToByte(Math.Round((SimplexNoise.Noise.Generate((float)pos.x * fScale, (float)pos.y * fScale) + 1f) / 2 * 255));
+            Func<Point, byte> gen = (pos) => Convert.ToByte(Math.Round((Noise.Generate((float)pos.x * fScale, (float)pos.y * fScale) + 1f) / 2 * 255));
 
             //p += pShift;
             Byte R = gen(p);

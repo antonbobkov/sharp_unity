@@ -1,18 +1,13 @@
 ﻿using System;
-using ServerClient.Concurrent;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
 using System.Diagnostics;
 using System.Text;
-using System.Runtime.Serialization.Formatters.Binary;
-using System.Xml.Serialization;
-using System.Runtime.CompilerServices;
 
-namespace ServerClient
+namespace Tools
 {
     static class NetTools
     {

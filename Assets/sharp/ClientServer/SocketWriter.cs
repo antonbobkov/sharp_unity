@@ -1,5 +1,4 @@
-﻿using ServerClient.Concurrent;
-using System.Net;
+﻿using System.Net;
 using System.Net.Sockets;
 using System.Threading;
 using System;
@@ -8,6 +7,8 @@ using System.Runtime.Serialization.Formatters.Binary;
 using System.Runtime.Serialization;
 using System.Xml.Serialization;
 using System.Collections.Generic;
+
+using Tools;
 
 namespace ServerClient
 {

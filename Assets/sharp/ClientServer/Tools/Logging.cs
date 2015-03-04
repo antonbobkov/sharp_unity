@@ -7,7 +7,7 @@ using System.Xml.Serialization;
 using System.Runtime.CompilerServices;
 using System.Diagnostics;
 
-namespace ServerClient
+namespace Tools
 {
     static class Log
     {

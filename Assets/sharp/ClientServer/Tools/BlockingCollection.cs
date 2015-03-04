@@ -4,7 +4,7 @@ using System.Threading;
 using System.Linq;
 using System.Text;
 
-namespace ServerClient.Concurrent
+namespace Tools
 {
     class BlockingCollection<T>
     {
