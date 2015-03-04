@@ -47,14 +47,14 @@
   <ItemGroup>
     <Compile Include="Aggregator.cs" />
     <Compile Include="Ai.cs" />
-    <Compile Include="BlockingCollection.cs" />
+    <Compile Include="Tools\BlockingCollection.cs" />
     <Compile Include="Client.cs" />
     <Compile Include="Game.cs" />
-    <Compile Include="Logging.cs" />
-    <Compile Include="PerlinNoise.cs" />
+    <Compile Include="Tools\Logging.cs" />
+    <Compile Include="Tools\PerlinNoise.cs" />
     <Compile Include="Player.cs" />
     <Compile Include="Server.cs" />
-    <Compile Include="Tools.cs" />
+    <Compile Include="Tools\Tools.cs" />
     <Compile Include="Message.cs" />
     <Compile Include="Node.cs" />
     <Compile Include="NodeHost.cs" />
