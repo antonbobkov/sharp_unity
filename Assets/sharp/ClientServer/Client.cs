@@ -21,7 +21,7 @@ namespace ServerClient
 
         //public GameInfo gameInfo = null;
         public OverlayEndpoint serverHost = null;
-        Node server = null;
+        //Node server = null;
 
         OverlayHost myHost;
 
@@ -96,7 +96,7 @@ namespace ServerClient
             all = all_;
 
             myHost = globalHost.NewHost(Client.hostName, AssignProcessor,
-                OverlayHost.GenerateHandshake(NodeRole.CLIENT));
+                BasicInfo.GenerateHandshake(NodeRole.CLIENT));
 
             myHost.onNewConnectionHook = ProcessNewConnection;
         }
@@ -205,7 +205,7 @@ namespace ServerClient
 
                 Log.Console("Server at {0}", serverHost);
 
-                server = myHost.ConnectAsync(serverHost);
+                /*server = */myHost.ConnectAsync(serverHost);
                 myHost.BroadcastGroup(Client.hostName, MessageType.SERVER_ADDRESS, serverHost);
 
                 onServerReadyHook();
@@ -258,13 +258,13 @@ namespace ServerClient
         {
             all.AddPlayerValidator(info);
             //Log.LogWriteLine("Validating for {0}", info);
-            server.SendMessage(MessageType.ACCEPT, actionId);
+            myHost.SendMessage(serverHost, MessageType.ACCEPT, actionId);
         }
         void OnWorldValidateRequest(Guid actionId, WorldInfo info, WorldInitializer init)
         {
             all.AddWorldValidator(info, init);
             //Log.LogWriteLine("Validating for world {0}", info.worldPos);
-            server.SendMessage(MessageType.ACCEPT, actionId);
+            myHost.SendMessage(serverHost, MessageType.ACCEPT, actionId);
         }
 
         public bool TryConnect(IPEndPoint ep)
@@ -274,15 +274,15 @@ namespace ServerClient
         public void NewMyPlayer(Guid id)
         {
             myPlayerAgents.Add(id);
-            server.SendMessage(MessageType.NEW_PLAYER_REQUEST, id);
+            myHost.SendMessage(serverHost, MessageType.NEW_PLAYER_REQUEST, id);
         }
         public void NewWorld(Point pos)
         {
-            server.SendMessage(MessageType.NEW_WORLD_REQUEST, pos);
+            myHost.SendMessage(serverHost, MessageType.NEW_WORLD_REQUEST, pos);
         }
         public void Validate()
         {
-            server.SendMessage(MessageType.NEW_VALIDATOR);
+            myHost.SendMessage(serverHost, MessageType.NEW_VALIDATOR);
         }
     }
 }

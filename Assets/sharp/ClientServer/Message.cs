@@ -14,25 +14,12 @@ using System.Runtime.Remoting.Proxies;
 using System.Runtime.Remoting.Messaging;
 
 using Tools;
+using Network;
 
 
-namespace Network
+namespace ServerClient
 {
-    public enum MessageType : byte { HANDSHAKE, ROLE, SOFT_DISCONNECT,
-    SERVER_ADDRESS, NEW_VALIDATOR,
-    NEW_PLAYER_REQUEST, NEW_WORLD_REQUEST, NEW_PLAYER_REQUEST_SUCCESS,
-    PLAYER_VALIDATOR_ASSIGN, WORLD_VALIDATOR_ASSIGN, ACCEPT,
-    WORLD_VAR_INIT, WORLD_VAR_CHANGE, NEW_NEIGHBOR,
-    MOVE_REQUEST, REALM_MOVE,
-    PICKUP_TELEPORT, PICKUP_BLOCK,
-    PLAYER_INFO_VAR,
-    SPAWN_REQUEST,
-    RESPONSE, LOCK_VAR, UNLOCK_VAR,
-    PLACE_BLOCK, TAKE_BLOCK};
-    
-    public enum NodeRole { CLIENT, SERVER, PLAYER_AGENT, PLAYER_VALIDATOR, WORLD_VALIDATOR };
 
-    public enum WorldMove { LEAVE, JOIN };
 
     [Serializable]
     public class ForwardFunctionCall

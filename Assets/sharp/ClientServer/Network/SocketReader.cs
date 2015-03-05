@@ -14,11 +14,11 @@ namespace Network
     class SocketReader
     {   
         Socket socketRead;
-        Action<MemoryStream, MessageType> messageProcessor;
+        Action<MemoryStream, byte> messageProcessor;
         Action<IOException> errorResponse;
         Action onSoftDisconnect;
 
-        public SocketReader(Action<MemoryStream, MessageType> messageProcessor_, Action<IOException> errorResponse_,
+        public SocketReader(Action<MemoryStream, byte> messageProcessor_, Action<IOException> errorResponse_,
             Action onSoftDisconnect_, Socket socketRead_)
         {
             try
@@ -67,7 +67,7 @@ namespace Network
 
                         //Console.WriteLine("Message received: {0}", (MessageType)bt);
 
-                        messageProcessor(Serializer.DeserializeChunk(readStream), (MessageType)bt);
+                        messageProcessor(Serializer.DeserializeChunk(readStream), (byte)bt);
                     }
                 }
             }

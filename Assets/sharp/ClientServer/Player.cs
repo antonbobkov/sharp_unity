@@ -15,6 +15,27 @@ using Network;
 
 namespace ServerClient
 {
+    public enum NodeRole { CLIENT, SERVER, PLAYER_AGENT, PLAYER_VALIDATOR, WORLD_VALIDATOR };
+
+    static class BasicInfo
+    {
+        static public MemoryStream GenerateHandshake(NodeRole nr, params object[] info)
+        {
+            MemoryStream ms = new MemoryStream();
+
+            List<object> args = new List<object>();
+            args.Add(nr);
+            args.AddRange(info);
+
+            Serializer.Serialize(ms, args.ToArray());
+
+            return ms;
+        }
+
+    }
+
+    public enum WorldMove { LEAVE, JOIN };
+    
     [Serializable]
     public struct PlayerInfo
     {
@@ -122,7 +143,7 @@ namespace ServerClient
             info = info_;
 
             myHost = globalHost.NewHost(info.validatorHost.hostname, AssignProcessor,
-                OverlayHost.GenerateHandshake(NodeRole.PLAYER_VALIDATOR, info));
+                BasicInfo.GenerateHandshake(NodeRole.PLAYER_VALIDATOR, info));
             myHost.onNewConnectionHook = ProcessNewConnection;
         }
 
@@ -253,7 +274,7 @@ namespace ServerClient
             myClient = myClient_;
 
             myHost = globalHost.NewHost(info.playerHost.hostname, AssignProcessor,
-                OverlayHost.GenerateHandshake(NodeRole.PLAYER_AGENT, info));
+                BasicInfo.GenerateHandshake(NodeRole.PLAYER_AGENT, info));
 
             myHost.ConnectAsync(info.validatorHost);
 

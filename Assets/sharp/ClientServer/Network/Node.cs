@@ -13,6 +13,21 @@ using Tools;
 
 namespace Network
 {
+    public enum MessageType : byte
+    {
+        HANDSHAKE, ROLE, SOFT_DISCONNECT,
+        SERVER_ADDRESS, NEW_VALIDATOR,
+        NEW_PLAYER_REQUEST, NEW_WORLD_REQUEST, NEW_PLAYER_REQUEST_SUCCESS,
+        PLAYER_VALIDATOR_ASSIGN, WORLD_VALIDATOR_ASSIGN, ACCEPT,
+        WORLD_VAR_INIT, WORLD_VAR_CHANGE, NEW_NEIGHBOR,
+        MOVE_REQUEST, REALM_MOVE,
+        PICKUP_TELEPORT, PICKUP_BLOCK,
+        PLAYER_INFO_VAR,
+        SPAWN_REQUEST,
+        RESPONSE, LOCK_VAR, UNLOCK_VAR,
+        PLACE_BLOCK, TAKE_BLOCK
+    };
+    
     [Serializable]
     public class IPEndPointSer
     {
@@ -132,8 +147,8 @@ namespace Network
     {
         public delegate void MessageProcessor(MessageType mt, Stream stm, Node n);
 
-        private ILog logR = null;
-        private ILog logW = null;
+        public ILog LogR { get; private set; }
+        public ILog LogW { get; private set; }
 
         public Node(Handshake info_, Action<Action> actionQueue_, Action<Node, Exception, DisconnectType> processDisonnect_)
         {
@@ -147,10 +162,10 @@ namespace Network
 
             if (MasterFileLog.LogLevel > 1)
             {
-                logR = MasterFileLog.GetLog("network", info.local.hostname.ToString(),
+                LogR = MasterFileLog.GetLog("network", info.local.hostname.ToString(),
                     info.remote.ToString().Replace(':', '.') + " read.xml");
 
-                logW = MasterFileLog.GetLog("network", info.local.hostname.ToString(),
+                LogW = MasterFileLog.GetLog("network", info.local.hostname.ToString(),
                     info.remote.ToString().Replace(':', '.') + " write.xml");
             }
 
@@ -170,24 +185,41 @@ namespace Network
             return sb.ToString();
         }
 
-        public void SendMessage(MessageType mt, params object[] messages)
+        public void SendMessage(SocketWriterMessage swm)
         {
             if (IsClosed)
                 throw new NodeException("SendMessage: node is disconnected " + FullDescription());
             if (writerStatus != WriteStatus.WRITING)
                 ConnectAsync();
-
-            SocketWriterMessage swm = SocketWriter.SerializeMessage(mt, messages);
-
-            string sentMsg = mt.ToString();
-            if (MasterFileLog.LogLevel > 2)
-                sentMsg += new ChunkDebug(swm.message, Serializer.SizeSize).GetData() + "\n\n";
-
-            Log.EntryVerbose(logW, sentMsg);
-
+            
             writer.SendMessage(swm);
-
         }
+
+        //public void SendMessage(NetworkMessage nm)
+        //{
+        //    SocketWriterMessage swm = new SocketWriterMessage()
+
+        //    string sentMsg = mt.ToString();
+        //    if (MasterFileLog.LogLevel > 2)
+        //        sentMsg += new ChunkDebug(swm.message, Serializer.SizeSize).GetData() + "\n\n";
+
+        //    Log.EntryVerbose(LogW, sentMsg);
+
+        //    SendMessage(swm);
+        //}
+
+        //public void SendMessage(MessageType mt, params object[] messages)
+        //{
+        //    SocketWriterMessage swm = SocketWriter.SerializeMessage(mt, messages);
+
+        //    string sentMsg = mt.ToString();
+        //    if (MasterFileLog.LogLevel > 2)
+        //        sentMsg += new ChunkDebug(swm.message, Serializer.SizeSize).GetData() + "\n\n";
+
+        //    Log.EntryVerbose(LogW, sentMsg);
+
+        //    SendMessage(swm);
+        //}
 
         public IPEndPoint Address { get { return info.remote.addr; } }
         public readonly Handshake info;
@@ -224,9 +256,9 @@ namespace Network
                         if (MasterFileLog.LogLevel > 2)
                             sentMsg += new ChunkDebug(stm).GetData() + "\n\n";
 
-                        Log.EntryVerbose(logR, sentMsg); 
+                        Log.EntryVerbose(LogR, sentMsg); 
                         
-                        messageProcessor(mtp, stm, this);
+                        messageProcessor((MessageType)mtp, stm, this);
                     }),
                     (ioex) => actionQueue(() =>
                     {

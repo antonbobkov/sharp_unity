@@ -64,7 +64,7 @@ namespace ServerClient
         public Server(GlobalHost globalHost)
         {
             myHost = globalHost.NewHost(Server.hostName, AssignProcessor,
-                OverlayHost.GenerateHandshake(NodeRole.SERVER));
+                BasicInfo.GenerateHandshake(NodeRole.SERVER));
             myHost.onNewConnectionHook = ProcessNewConnection;
 
             //Action<ForwardFunctionCall> onChange = (ffc) => myHost.BroadcastGroup(Client.hostName, MessageType.GAME_INFO_VAR_CHANGE, ffc.Serialize());

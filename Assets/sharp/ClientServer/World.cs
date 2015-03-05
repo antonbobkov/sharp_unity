@@ -606,7 +606,7 @@ namespace ServerClient
             world = new ForwardProxy<World>(newWorld, onChange).GetProxy();
 
             myHost = globalHost.NewHost(info.host.hostname, AssignProcessor,
-                OverlayHost.GenerateHandshake(NodeRole.WORLD_VALIDATOR, info));
+                BasicInfo.GenerateHandshake(NodeRole.WORLD_VALIDATOR, info));
             myHost.onNewConnectionHook = ProcessNewConnection;
 
             newWorld.onLootHook = OnLootPickup;

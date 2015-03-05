@@ -6,6 +6,8 @@ using System.Diagnostics;
 using System.Xml.Serialization;
 using System.ComponentModel;
 
+using Tools;
+using Network;
 
 namespace ServerClient
 {
@@ -102,6 +104,51 @@ namespace ServerClient
         {
             foreach(Point p in Point.Range(Size))
                 yield return new KeyValuePair<Point, T>(p, this[p]);
+        }
+    }
+
+    static class NodeExtension
+    {
+        public static void SendMessage(this Node n, MessageType mt, params object[] messages)
+        {
+            SocketWriterMessage swm = SocketWriter.SerializeMessage(mt, messages);
+
+            string sentMsg = mt.ToString();
+            if (MasterFileLog.LogLevel > 2)
+                sentMsg += new ChunkDebug(swm.message, Serializer.SizeSize).GetData() + "\n\n";
+
+            Log.EntryVerbose(n.LogW, sentMsg);
+
+            n.SendMessage(swm);
+        }
+
+        public static void SendMessage(this OverlayHost host, OverlayEndpoint remote, MessageType mt, params object[] objs)
+        {
+            Node n = host.FindNode(remote);
+
+            MyAssert.Assert(n != null);
+
+            n.SendMessage(mt, objs);
+        }
+
+        public static void ConnectSendMessage(this OverlayHost host, OverlayEndpoint remote, MessageType mt, params object[] objs)
+        {
+            Node n = host.FindNode(remote);
+            if (n == null)
+                n = host.ConnectAsync(remote);
+
+            n.SendMessage(mt, objs);
+        }
+
+        public static void BroadcastGroup(this OverlayHost host, Func<Node, bool> group, MessageType mt, params object[] objs)
+        {
+            foreach (Node n in host.GetAllNodes().Where(group))
+                n.SendMessage(mt, objs);
+        }
+
+        public static void BroadcastGroup(this OverlayHost host, OverlayHostName name, MessageType mt, params object[] objs)
+        {
+            host.BroadcastGroup((n) => n.info.remote.hostname == name, mt, objs);
         }
     }
 }

@@ -76,6 +76,13 @@ namespace Network
         }
     }
 
+    abstract class NetworkMessage
+    {
+        public MemoryStream ms = null;
+
+        public abstract string GetLogData();
+    }
+
     class XmlSerializerException : Exception
     {
         public XmlSerializerException(Exception e)

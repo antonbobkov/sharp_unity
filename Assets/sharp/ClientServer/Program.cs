@@ -81,9 +81,13 @@ namespace ServerClient
             return newPlayer;
         }
 
+        //static public void dostuff(byte b) { }
+
         static void Main(string[] args)
         {
             //Serializer.Test();
+
+            //dostuff(MessageType.ACCEPT);
 
             GameConfig cfg_total = GameConfig.ReadConfig("game_config.xml");
             GameInstanceConifg cfg_local = cfg_total.clientConfig;

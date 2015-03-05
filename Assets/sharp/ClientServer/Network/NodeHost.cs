@@ -145,19 +145,6 @@ namespace Network
 
     class OverlayHost
     {
-        static public MemoryStream GenerateHandshake(NodeRole nr, params object[] info)
-        {
-            MemoryStream ms = new MemoryStream();
-
-            List<object> args = new List<object>();
-            args.Add(nr);
-            args.AddRange(info);
-
-            Serializer.Serialize(ms, args.ToArray());
-
-            return ms;
-        }
-
         OverlayHostName hostName;
         MemoryStream extraHandshakeInfo;
 
@@ -345,39 +332,39 @@ namespace Network
             return false;
         }
 
-        public void SendMessage(OverlayEndpoint remote, MessageType mt, params object[] objs)
-        {
-            Node n = FindNode(remote);
+        //public void SendMessage(OverlayEndpoint remote, MessageType mt, params object[] objs)
+        //{
+        //    Node n = FindNode(remote);
 
-            MyAssert.Assert(n != null);
+        //    MyAssert.Assert(n != null);
 
-            n.SendMessage(mt, objs);
-        }
+        //    n.SendMessage(mt, objs);
+        //}
 
-        public void ConnectSendMessage(OverlayEndpoint remote, MessageType mt, params object[] objs)
-        {
-            Node n = FindNode(remote);
-            if (n == null)
-                n = ConnectAsync(remote);
+        //public void ConnectSendMessage(OverlayEndpoint remote, MessageType mt, params object[] objs)
+        //{
+        //    Node n = FindNode(remote);
+        //    if (n == null)
+        //        n = ConnectAsync(remote);
 
-            n.SendMessage(mt, objs);
-        }
+        //    n.SendMessage(mt, objs);
+        //}
 
-        public void BroadcastGroup(Func<Node, bool> group, MessageType mt, params object[] objs)
-        {
-            foreach (Node n in GetAllNodes().Where(group))
-                    n.SendMessage(mt, objs);
-        }
+        //public void BroadcastGroup(Func<Node, bool> group, MessageType mt, params object[] objs)
+        //{
+        //    foreach (Node n in GetAllNodes().Where(group))
+        //            n.SendMessage(mt, objs);
+        //}
 
-        public void BroadcastGroup(OverlayHostName name, MessageType mt, params object[] objs)
-        {
-            BroadcastGroup((n) => n.info.remote.hostname == name, mt, objs);
-        }
+        //public void BroadcastGroup(OverlayHostName name, MessageType mt, params object[] objs)
+        //{
+        //    BroadcastGroup((n) => n.info.remote.hostname == name, mt, objs);
+        //}
 
-        public void Broadcast(MessageType mt, params object[] objs)
-        {
-            BroadcastGroup((n) => true, mt, objs);
-        }
+        //public void Broadcast(MessageType mt, params object[] objs)
+        //{
+        //    BroadcastGroup((n) => true, mt, objs);
+        //}
 
         void AddNode(Node n)
         {
