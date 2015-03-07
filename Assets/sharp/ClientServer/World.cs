@@ -605,7 +605,7 @@ namespace ServerClient
             Action<ForwardFunctionCall> onChange = (ffc) => myHost.BroadcastGroup(Client.hostName, MessageType.WORLD_VAR_CHANGE, ffc.Serialize());
             world = new ForwardProxy<World>(newWorld, onChange).GetProxy();
 
-            myHost = globalHost.NewHost(info.host.hostname, AssignProcessor,
+            myHost = globalHost.NewHost(info.host.hostname, Game.Convert(AssignProcessor),
                 BasicInfo.GenerateHandshake(NodeRole.WORLD_VALIDATOR, info));
             myHost.onNewConnectionHook = ProcessNewConnection;
 
@@ -613,7 +613,7 @@ namespace ServerClient
             newWorld.onMoveHook = OnMoveHook;
         }
 
-        Node.MessageProcessor AssignProcessor(Node n, MemoryStream nodeInfo)
+        Game.MessageProcessor AssignProcessor(Node n, MemoryStream nodeInfo)
         {
             NodeRole role = Serializer.Deserialize<NodeRole>(nodeInfo);
 

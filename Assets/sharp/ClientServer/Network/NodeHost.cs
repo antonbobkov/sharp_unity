@@ -103,10 +103,8 @@ namespace Network
                 sckListen.Listen(10);
 
                 sl = new SocketListener(
-                    ConnectionProcessor.ProcessWithHandshake(
-                        (info, sck) =>
-                            processQueue(() => this.NewIncomingConnection(info, sck))
-                    ), sckListen);
+                        (info, sck) => processQueue(() => this.NewIncomingConnection(info, sck)),
+                        sckListen);
             }
             catch (Exception)
             {
@@ -141,6 +139,11 @@ namespace Network
             
             return host;
         }
+
+        //private void OnHandshakeError(Exception e)
+        //{
+        //    Log.EntryConsole
+        //}
     }
 
     class OverlayHost
@@ -231,14 +234,14 @@ namespace Network
         {
             //return messageProcessor;
 
-            return (mt, str, n) =>
+            return (str, n) =>
                 {
                     if (n.IsClosed)
                         return;
                     
                     try
                     {
-                        messageProcessor(mt, str, n);
+                        messageProcessor(str, n);
                     }
                     catch (XmlSerializerException e)
                     {
@@ -332,39 +335,39 @@ namespace Network
             return false;
         }
 
-        //public void SendMessage(OverlayEndpoint remote, MessageType mt, params object[] objs)
-        //{
-        //    Node n = FindNode(remote);
+        public void SendMessage(OverlayEndpoint remote, NetworkMessage nm)
+        {
+            Node n = FindNode(remote);
 
-        //    MyAssert.Assert(n != null);
+            MyAssert.Assert(n != null);
 
-        //    n.SendMessage(mt, objs);
-        //}
+            n.SendMessage(nm);
+        }
 
-        //public void ConnectSendMessage(OverlayEndpoint remote, MessageType mt, params object[] objs)
-        //{
-        //    Node n = FindNode(remote);
-        //    if (n == null)
-        //        n = ConnectAsync(remote);
+        public void ConnectSendMessage(OverlayEndpoint remote, NetworkMessage nm)
+        {
+            Node n = FindNode(remote);
+            if (n == null)
+                n = ConnectAsync(remote);
 
-        //    n.SendMessage(mt, objs);
-        //}
+            n.SendMessage(nm);
+        }
 
-        //public void BroadcastGroup(Func<Node, bool> group, MessageType mt, params object[] objs)
-        //{
-        //    foreach (Node n in GetAllNodes().Where(group))
-        //            n.SendMessage(mt, objs);
-        //}
+        public void BroadcastGroup(Func<Node, bool> group, NetworkMessage nm)
+        {
+            foreach (Node n in GetAllNodes().Where(group))
+                n.SendMessage(nm);
+        }
 
-        //public void BroadcastGroup(OverlayHostName name, MessageType mt, params object[] objs)
-        //{
-        //    BroadcastGroup((n) => n.info.remote.hostname == name, mt, objs);
-        //}
+        public void BroadcastGroup(OverlayHostName name, NetworkMessage nm)
+        {
+            BroadcastGroup((n) => n.info.remote.hostname == name, nm);
+        }
 
-        //public void Broadcast(MessageType mt, params object[] objs)
-        //{
-        //    BroadcastGroup((n) => true, mt, objs);
-        //}
+        public void Broadcast(NetworkMessage nm)
+        {
+            BroadcastGroup((n) => true, nm);
+        }
 
         void AddNode(Node n)
         {

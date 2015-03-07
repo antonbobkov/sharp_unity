@@ -5,6 +5,8 @@ using System.Net;
 using System.Linq;
 
 using ServerClient;
+using Network;
+using Tools;
 
 public class RotateSlowly : MonoBehaviour {
     void Start () {}
@@ -103,7 +105,7 @@ class WorldDraw
 
         var avatar = GameObject.CreatePrimitive(PrimitiveType.Sphere);
 
-        var r = new ServerClient.MyRandom(BitConverter.ToInt32(player.ToByteArray(), 0));
+        var r = new MyRandom(BitConverter.ToInt32(player.ToByteArray(), 0));
 
         avatar.renderer.material.color = new Color(
             (float)r.NextDouble(),

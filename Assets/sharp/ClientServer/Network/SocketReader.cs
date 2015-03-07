@@ -14,11 +14,11 @@ namespace Network
     class SocketReader
     {   
         Socket socketRead;
-        Action<MemoryStream, byte> messageProcessor;
+        Action<MemoryStream> messageProcessor;
         Action<IOException> errorResponse;
         Action onSoftDisconnect;
 
-        public SocketReader(Action<MemoryStream, byte> messageProcessor_, Action<IOException> errorResponse_,
+        public SocketReader(Action<MemoryStream> messageProcessor_, Action<IOException> errorResponse_,
             Action onSoftDisconnect_, Socket socketRead_)
         {
             try
@@ -56,18 +56,23 @@ namespace Network
 
                         if (bt == -1)
                             throw new IOException("End of stream");
-                        if (bt == (int)MessageType.SOFT_DISCONNECT)
+                        else if ((NetworkMessageType)bt == NetworkMessageType.SOFT_DISCONNECT)
                         {
-                            readStream.WriteByte((byte)MessageType.SOFT_DISCONNECT);
+                            readStream.WriteByte((byte)NetworkMessageType.SOFT_DISCONNECT);
                             
                             onSoftDisconnect.Invoke();
                             
                             return;
                         }
+                        else if ((NetworkMessageType)bt == NetworkMessageType.MESSAGE)
+                        {
 
-                        //Console.WriteLine("Message received: {0}", (MessageType)bt);
+                            //Console.WriteLine("Message received: {0}", (MessageType)bt);
 
-                        messageProcessor(Serializer.DeserializeChunk(readStream), (byte)bt);
+                            messageProcessor(Serializer.DeserializeChunk(readStream));
+                        }
+                        else
+                            throw new Exception(Log.StDump("Unexpected", bt, (NetworkMessageType)bt));
                     }
                 }
             }

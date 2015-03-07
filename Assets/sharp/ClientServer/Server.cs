@@ -63,7 +63,7 @@ namespace ServerClient
 
         public Server(GlobalHost globalHost)
         {
-            myHost = globalHost.NewHost(Server.hostName, AssignProcessor,
+            myHost = globalHost.NewHost(Server.hostName, Game.Convert(AssignProcessor),
                 BasicInfo.GenerateHandshake(NodeRole.SERVER));
             myHost.onNewConnectionHook = ProcessNewConnection;
 
@@ -71,7 +71,7 @@ namespace ServerClient
             //gameInfo = new ForwardProxy<GameInfo>(new GameInfo(), onChange).GetProxy();
         }
 
-        Node.MessageProcessor AssignProcessor(Node n, MemoryStream nodeInfo)
+        Game.MessageProcessor AssignProcessor(Node n, MemoryStream nodeInfo)
         {
             NodeRole role = Serializer.Deserialize<NodeRole>(nodeInfo);
 

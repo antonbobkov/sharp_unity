@@ -16,12 +16,15 @@ namespace Network
 
     class SocketWriterMessage
     {
-        public SocketWriterMessageType swmt = SocketWriterMessageType.MESSAGE;
+        public SocketWriterMessageType type = SocketWriterMessageType.MESSAGE;
+        public MemoryStream message = null;
 
-        public MessageType mt;
-        public MemoryStream message;
+        public SocketWriterMessage(SocketWriterMessageType swmt) { this.type = swmt; }
+        public SocketWriterMessage(MemoryStream message) { this.message = message; }
     }
 
+
+    
     class SocketWriter
     {
         public SocketWriter(IPEndPoint address, Action<Exception, DisconnectType> errorResponse, Action onSoftDisconnect, Handshake info)
@@ -41,18 +44,7 @@ namespace Network
         }
         public void TerminateThread()
         {
-            bcMessages.Add(new SocketWriterMessage() { swmt = SocketWriterMessageType.TERMINATE });
-        }
-
-        public static SocketWriterMessage SerializeMessage(MessageType mt, params object[] messages)
-        {
-            MemoryStream ms = new MemoryStream();
-
-            Serializer.Serialize(ms, messages);
-
-            ms.Position = 0;
-
-            return new SocketWriterMessage { mt = mt, message = ms };
+            bcMessages.Add(new SocketWriterMessage(SocketWriterMessageType.TERMINATE));
         }
 
         private void WritingThread()
@@ -69,13 +61,12 @@ namespace Network
                     // send handshake data
                     using (NetworkStream connectionStream = new NetworkStream(writeSocket, false))
                     {
-                        SocketWriter.SendNetworkMessage(connectionStream, SocketWriter.SerializeMessage(MessageType.HANDSHAKE, info));
+                        connectionStream.WriteByte((byte)NetworkMessageType.HANDSHAKE);
+
+                        Serializer.SendMemoryStream(connectionStream, Serializer.SerializeGet(info));                        
 
                         if (info.hasExtraInfo)
-                        {
-                            info.ExtraInfo.Position = 0;
-                            Serializer.SendStream(connectionStream, info.ExtraInfo);
-                        }
+                            Serializer.SendMemoryStream(connectionStream, info.ExtraInfo);
                     }
 
                 }
@@ -90,24 +81,26 @@ namespace Network
                     using (NetworkStream connectionStream = new NetworkStream(writeSocket, false))
                         while (true)
                         {
-                            SocketWriterMessage act = bcMessages.Take();
-                            if (act.swmt == SocketWriterMessageType.TERMINATE)
+                            SocketWriterMessage swm = bcMessages.Take();
+                            if (swm.type == SocketWriterMessageType.TERMINATE)
                             {
                                 //Log.LogWriteLine("SocketWriter terminated gracefully");
                                 return;
                             }
-                            else if (act.swmt == SocketWriterMessageType.MESSAGE)
+                            else if (swm.type == SocketWriterMessageType.MESSAGE)
                             {
-                                SendNetworkMessage(connectionStream, act);
+                                connectionStream.WriteByte((byte)NetworkMessageType.MESSAGE);
+
+                                Serializer.SendMemoryStream(connectionStream, swm.message);
                             }
-                            else if (act.swmt == SocketWriterMessageType.SOFT_DISCONNECT)
+                            else if (swm.type == SocketWriterMessageType.SOFT_DISCONNECT)
                             {
                                 if (!bcMessages.IsEmpty)
                                     continue;
 
-                                connectionStream.WriteByte((byte)MessageType.SOFT_DISCONNECT);
+                                connectionStream.WriteByte((byte)SocketWriterMessageType.SOFT_DISCONNECT);
                                 int bt = connectionStream.ReadByte();
-                                MyAssert.Assert(bt == (byte)MessageType.SOFT_DISCONNECT);
+                                MyAssert.Assert(bt == (byte)SocketWriterMessageType.SOFT_DISCONNECT);
                                 writeSocket.Close();
 
                                 onSoftDisconnect.Invoke();
@@ -116,7 +109,7 @@ namespace Network
                             }
                             else
                             {
-                                throw new Exception(Log.StDump("Unexpected", act.swmt));
+                                throw new Exception(Log.StDump("Unexpected", swm.type));
                             }
                         }
                 }
@@ -126,13 +119,6 @@ namespace Network
                 }
 
             }
-        }
-        private static void SendNetworkMessage(NetworkStream connectionStream, SocketWriterMessage swm)
-        {
-            connectionStream.WriteByte((byte)swm.mt);
-
-            swm.message.Position = 0;
-            Serializer.SendStream(connectionStream, swm.message);
         }
 
         public Queue<SocketWriterMessage> ExtractAllMessages() { return bcMessages.TakeAll(); }

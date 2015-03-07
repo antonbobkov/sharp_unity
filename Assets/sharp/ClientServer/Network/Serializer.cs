@@ -76,12 +76,7 @@ namespace Network
         }
     }
 
-    abstract class NetworkMessage
-    {
-        public MemoryStream ms = null;
 
-        public abstract string GetLogData();
-    }
 
     class XmlSerializerException : Exception
     {
@@ -96,6 +91,14 @@ namespace Network
 
         public const int SizeSize = 4;
 
+        public static MemoryStream SerializeGet(params object[] objs)
+        {
+            MemoryStream ms = new MemoryStream();
+
+            Serialize(ms, objs);
+
+            return ms;
+        }
         public static void Serialize(MemoryStream output, params object[] objs)
         {
             long initialPosition = output.Position;
@@ -161,7 +164,6 @@ namespace Network
             return new MemoryStream(data);
         }
 
-
         public static MemoryStream DeserializeChunk(Stream input)
         {
             int size = ReadSize(input);
@@ -219,9 +221,9 @@ namespace Network
             return (T)Deserialize(input, typeof(T));
         }
         
-        public static void SendStream(Stream network, Stream message)
+        public static void SendMemoryStream(Stream network, MemoryStream message)
         {
-            //message.CopyTo(network);
+            message.Position = 0;
             CopyStream(message, network);
         }
 

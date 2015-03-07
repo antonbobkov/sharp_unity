@@ -13,20 +13,7 @@ using Tools;
 
 namespace Network
 {
-    public enum MessageType : byte
-    {
-        HANDSHAKE, ROLE, SOFT_DISCONNECT,
-        SERVER_ADDRESS, NEW_VALIDATOR,
-        NEW_PLAYER_REQUEST, NEW_WORLD_REQUEST, NEW_PLAYER_REQUEST_SUCCESS,
-        PLAYER_VALIDATOR_ASSIGN, WORLD_VALIDATOR_ASSIGN, ACCEPT,
-        WORLD_VAR_INIT, WORLD_VAR_CHANGE, NEW_NEIGHBOR,
-        MOVE_REQUEST, REALM_MOVE,
-        PICKUP_TELEPORT, PICKUP_BLOCK,
-        PLAYER_INFO_VAR,
-        SPAWN_REQUEST,
-        RESPONSE, LOCK_VAR, UNLOCK_VAR,
-        PLACE_BLOCK, TAKE_BLOCK
-    };
+    public enum NetworkMessageType : byte { HANDSHAKE, SOFT_DISCONNECT, MESSAGE }
     
     [Serializable]
     public class IPEndPointSer
@@ -62,7 +49,7 @@ namespace Network
         public static bool operator !=(OverlayHostName o1, OverlayHostName o2) { return !(o1 == o2); }
     }
     
-    [Serializable]
+    [Serializable ]
     public class OverlayEndpoint
     {
         [XmlIgnore]
@@ -135,6 +122,13 @@ namespace Network
         public static bool operator ==(Handshake o1, Handshake o2) { return Object.Equals(o1, o2); }
         public static bool operator !=(Handshake o1, Handshake o2) { return !(o1 == o2); }
     }
+
+    abstract class NetworkMessage
+    {
+        public MemoryStream ms = null;
+
+        public abstract void LogData(ILog l);
+    }
     
     enum DisconnectType { READ, WRITE, WRITE_CONNECT_FAIL, CLOSED }
 
@@ -145,7 +139,7 @@ namespace Network
 
     class Node
     {
-        public delegate void MessageProcessor(MessageType mt, Stream stm, Node n);
+        public delegate void MessageProcessor(Stream stm, Node n);
 
         public ILog LogR { get; private set; }
         public ILog LogW { get; private set; }
@@ -185,12 +179,21 @@ namespace Network
             return sb.ToString();
         }
 
-        public void SendMessage(SocketWriterMessage swm)
+        public void SendMessage(NetworkMessage nm)
         {
             if (IsClosed)
                 throw new NodeException("SendMessage: node is disconnected " + FullDescription());
             if (writerStatus != WriteStatus.WRITING)
                 ConnectAsync();
+
+            SocketWriterMessage swm = new SocketWriterMessage(nm.ms);
+
+            //string sentMsg = nm.ToString();
+            //if (MasterFileLog.LogLevel > 2)
+            //    sentMsg += new ChunkDebug(swm.message, Serializer.SizeSize).GetData() + "\n\n";
+
+            //Log.EntryVerbose(LogW, nm.GetLogData());
+            nm.LogData(LogW);
             
             writer.SendMessage(swm);
         }
@@ -250,15 +253,15 @@ namespace Network
                     throw new NodeException("AcceptConnection: reader is aready initialized " + FullDescription());
 
                 reader = new SocketReader(
-                    (stm, mtp) => actionQueue(() =>
+                    (stm) => actionQueue(() =>
                     {
-                        string sentMsg = mtp.ToString();
-                        if (MasterFileLog.LogLevel > 2)
-                            sentMsg += new ChunkDebug(stm).GetData() + "\n\n";
+                        //string sentMsg = mtp.ToString();
+                        //if (MasterFileLog.LogLevel > 2)
+                        //    sentMsg += new ChunkDebug(stm).GetData() + "\n\n";
 
-                        Log.EntryVerbose(LogR, sentMsg); 
+                        //Log.EntryVerbose(LogR, sentMsg); 
                         
-                        messageProcessor((MessageType)mtp, stm, this);
+                        messageProcessor(stm, this);
                     }),
                     (ioex) => actionQueue(() =>
                     {

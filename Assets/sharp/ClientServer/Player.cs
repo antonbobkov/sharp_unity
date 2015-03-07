@@ -142,12 +142,12 @@ namespace ServerClient
         {
             info = info_;
 
-            myHost = globalHost.NewHost(info.validatorHost.hostname, AssignProcessor,
+            myHost = globalHost.NewHost(info.validatorHost.hostname, Game.Convert(AssignProcessor),
                 BasicInfo.GenerateHandshake(NodeRole.PLAYER_VALIDATOR, info));
             myHost.onNewConnectionHook = ProcessNewConnection;
         }
 
-        Node.MessageProcessor AssignProcessor(Node n, MemoryStream nodeInfo)
+        Game.MessageProcessor AssignProcessor(Node n, MemoryStream nodeInfo)
         {
             NodeRole role = Serializer.Deserialize<NodeRole>(nodeInfo);
     
@@ -273,7 +273,7 @@ namespace ServerClient
             serverHost = serverHost_;
             myClient = myClient_;
 
-            myHost = globalHost.NewHost(info.playerHost.hostname, AssignProcessor,
+            myHost = globalHost.NewHost(info.playerHost.hostname, Game.Convert(AssignProcessor),
                 BasicInfo.GenerateHandshake(NodeRole.PLAYER_AGENT, info));
 
             myHost.ConnectAsync(info.validatorHost);
@@ -281,7 +281,7 @@ namespace ServerClient
             Log.Console("Player Agent {0}", info.GetShortInfo());
         }
 
-        Node.MessageProcessor AssignProcessor(Node n, MemoryStream nodeInfo)
+        Game.MessageProcessor AssignProcessor(Node n, MemoryStream nodeInfo)
         {
             NodeRole role = Serializer.Deserialize<NodeRole>(nodeInfo);
 

@@ -95,13 +95,13 @@ namespace ServerClient
         {
             all = all_;
 
-            myHost = globalHost.NewHost(Client.hostName, AssignProcessor,
+            myHost = globalHost.NewHost(Client.hostName, Game.Convert(AssignProcessor),
                 BasicInfo.GenerateHandshake(NodeRole.CLIENT));
 
             myHost.onNewConnectionHook = ProcessNewConnection;
         }
 
-        Node.MessageProcessor AssignProcessor(Node n, MemoryStream nodeInfo)
+        Game.MessageProcessor AssignProcessor(Node n, MemoryStream nodeInfo)
         {
             NodeRole role = Serializer.Deserialize<NodeRole>(nodeInfo);
 

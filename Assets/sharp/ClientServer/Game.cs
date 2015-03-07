@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.IO;
 using System.Text;
 using System.Diagnostics;
 using System.Xml.Serialization;
@@ -11,6 +12,21 @@ using Network;
 
 namespace ServerClient
 {
+    public enum MessageType : byte
+    {
+        ROLE, 
+        SERVER_ADDRESS, NEW_VALIDATOR,
+        NEW_PLAYER_REQUEST, NEW_WORLD_REQUEST, NEW_PLAYER_REQUEST_SUCCESS,
+        PLAYER_VALIDATOR_ASSIGN, WORLD_VALIDATOR_ASSIGN, ACCEPT,
+        WORLD_VAR_INIT, WORLD_VAR_CHANGE, NEW_NEIGHBOR,
+        MOVE_REQUEST, REALM_MOVE,
+        PICKUP_TELEPORT, PICKUP_BLOCK,
+        PLAYER_INFO_VAR,
+        SPAWN_REQUEST,
+        RESPONSE, LOCK_VAR, UNLOCK_VAR,
+        PLACE_BLOCK, TAKE_BLOCK
+    };
+    
     [Serializable]
     public struct Point
     {
@@ -107,48 +123,92 @@ namespace ServerClient
         }
     }
 
+    static class Game
+    {
+        public delegate void MessageProcessor(MessageType mt, Stream stm, Node n);
+
+        public delegate Game.MessageProcessor ProcessorAssigner(Node n, MemoryStream extraInfo);
+
+        public static OverlayHost.ProcessorAssigner Convert(Game.ProcessorAssigner pa)
+        {
+            return (node, handshake) =>
+            {
+                Game.MessageProcessor gmp = pa(node, handshake);
+                
+                return (stm, nd) => 
+                    {
+                        MessageType mt = Serializer.Deserialize<MessageType>(stm);
+
+                        gmp(mt, stm, nd);
+                    };
+            };
+        }
+    }
+
+    class GameMessage: NetworkMessage
+    {
+        string loggedMessage = "";
+        MessageType mt;
+        object[] data;
+
+        public GameMessage(MessageType mt, object[] data)
+        {
+            this.mt = mt;
+            this.data = data;
+
+            ms = new MemoryStream();
+
+            List<object> lst = new List<object>();
+            lst.Add(mt);
+            lst.AddRange(data);
+            
+            //ms.WriteByte((byte)mt);
+            Serializer.Serialize(ms, lst.ToArray());
+        }
+
+        public override void LogData(ILog l)
+        {
+            if(l == null)
+                return;
+
+            if (l.LogLevel <= 2)
+            {
+                Log.EntryVerbose(l, mt.ToString());
+                return;
+            }
+            
+            if(loggedMessage == "")
+                loggedMessage = mt.ToString() + new ChunkDebug(ms, Serializer.SizeSize+1).GetData() + "\n\n";
+
+            Log.EntryVerbose(l, loggedMessage);
+        }
+    }
+
     static class NodeExtension
     {
-        public static void SendMessage(this Node n, MessageType mt, params object[] messages)
+        public static void SendMessage(this Node n, MessageType mt, params object[] objs)
         {
-            SocketWriterMessage swm = SocketWriter.SerializeMessage(mt, messages);
-
-            string sentMsg = mt.ToString();
-            if (MasterFileLog.LogLevel > 2)
-                sentMsg += new ChunkDebug(swm.message, Serializer.SizeSize).GetData() + "\n\n";
-
-            Log.EntryVerbose(n.LogW, sentMsg);
-
-            n.SendMessage(swm);
+            n.SendMessage(new GameMessage(mt, objs));
         }
 
         public static void SendMessage(this OverlayHost host, OverlayEndpoint remote, MessageType mt, params object[] objs)
         {
-            Node n = host.FindNode(remote);
-
-            MyAssert.Assert(n != null);
-
-            n.SendMessage(mt, objs);
+            host.SendMessage(remote, new GameMessage(mt, objs));
         }
 
         public static void ConnectSendMessage(this OverlayHost host, OverlayEndpoint remote, MessageType mt, params object[] objs)
         {
-            Node n = host.FindNode(remote);
-            if (n == null)
-                n = host.ConnectAsync(remote);
-
-            n.SendMessage(mt, objs);
+            host.ConnectSendMessage(remote, new GameMessage(mt, objs));
         }
 
         public static void BroadcastGroup(this OverlayHost host, Func<Node, bool> group, MessageType mt, params object[] objs)
         {
-            foreach (Node n in host.GetAllNodes().Where(group))
-                n.SendMessage(mt, objs);
+            host.BroadcastGroup(group, new GameMessage(mt, objs));
         }
 
         public static void BroadcastGroup(this OverlayHost host, OverlayHostName name, MessageType mt, params object[] objs)
         {
-            host.BroadcastGroup((n) => n.info.remote.hostname == name, mt, objs);
+            host.BroadcastGroup(name, new GameMessage(mt, objs));
         }
     }
 }
