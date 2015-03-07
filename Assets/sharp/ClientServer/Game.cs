@@ -137,9 +137,31 @@ namespace ServerClient
                 
                 return (stm, nd) => 
                     {
-                        MessageType mt = Serializer.Deserialize<MessageType>(stm);
+                        //if (nd.IsClosed)  done elsewhere
+                        //    return;
 
-                        gmp(mt, stm, nd);
+                        ChunkDebug lastRead = new ChunkDebug(stm);
+
+                        try
+                        {
+                            MessageType mt = Serializer.Deserialize<MessageType>(stm);
+
+                            if (nd.LogR != null && nd.LogR.LogLevel >= 2)
+                            {
+                                string sentMsg = mt.ToString();
+                                if (MasterFileLog.LogLevel > 2)
+                                    sentMsg += lastRead.GetData() + "\n\n";
+
+                                Log.EntryVerbose(nd.LogR, sentMsg); 
+                            }
+
+                            gmp(mt, stm, nd);
+                        }
+                        catch (XmlSerializerException e)
+                        {
+                            Log.Console("Error while reading from socket:\n{0}\n\nLast read:{1}", e, lastRead.GetData());
+                            throw new Exception("Fatal");
+                        }
                     };
             };
         }

@@ -139,7 +139,7 @@ namespace Network
 
     class Node
     {
-        public delegate void MessageProcessor(Stream stm, Node n);
+        public delegate void MessageProcessor(MemoryStream stm, Node n);
 
         public ILog LogR { get; private set; }
         public ILog LogW { get; private set; }

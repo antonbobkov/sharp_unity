@@ -86,9 +86,6 @@ namespace Network
     
     static class Serializer
     {
-        public static ChunkDebug lastRead = new ChunkDebug();
-        public static ChunkDebug lastWrite = new ChunkDebug();
-
         public const int SizeSize = 4;
 
         public static MemoryStream SerializeGet(params object[] objs)

@@ -238,16 +238,18 @@ namespace Network
                 {
                     if (n.IsClosed)
                         return;
-                    
-                    try
-                    {
-                        messageProcessor(str, n);
-                    }
-                    catch (XmlSerializerException e)
-                    {
-                        Log.Console("Error while reading from socket:\n{0}\n\nLast read:{1}", e, Serializer.lastRead.GetData());
-                        throw new Exception("Fatal");
-                    }
+
+                    messageProcessor(str, n);
+
+                    //try
+                    //{
+                    //    messageProcessor(str, n);
+                    //}
+                    //catch (XmlSerializerException e)
+                    //{
+                    //    Log.Console("Error while reading from socket:\n{0}\n\nLast read:{1}", e, Serializer.lastRead.GetData());
+                    //    throw new Exception("Fatal");
+                    //}
                 };
         }
         
