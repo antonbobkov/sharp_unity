@@ -86,6 +86,7 @@ namespace ServerClient
         static void Main(string[] args)
         {
             //Serializer.Test();
+            DisposeHandle.Test();
 
             //dostuff(MessageType.ACCEPT);
 

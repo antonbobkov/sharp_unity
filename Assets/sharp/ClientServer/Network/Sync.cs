@@ -40,7 +40,7 @@ namespace Network
         public void Add(Action a)
         {
             lock (syncLock) 
-                if (executeThreadId != null)
+                if (a != null && executeThreadId != null)
                     MyAssert.Assert(executeThreadId != Thread.CurrentThread.ManagedThreadId);
 
             msgs.Add(a);

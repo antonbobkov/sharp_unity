@@ -16,7 +16,7 @@ namespace Network
 
         public SocketListener(ActionSyncronizerProxy sync, Action<Handshake, Socket> processConnection, Socket sckListen)
         {
-            try
+            using (var h = DisposeHandle.Get(sckListen))
             {
                 this.sckListen = sckListen;
                 this.processConnection = sync.Convert(processConnection);
@@ -24,12 +24,10 @@ namespace Network
 
                 ThreadManager.NewThread(() => ProcessThread(),
                     () => TerminateThread(), "SocketListener " + NetTools.GetLocalIP(sckListen).ToString());
+
+                h.Disengage();
             }
-            catch (Exception)
-            {
-                sckListen.Close();
-                throw;
-            }
+
         }
 
         public void TerminateThread()
@@ -56,24 +54,20 @@ namespace Network
 
         private void ProcessHandshakeAsync(Socket sckRead)
         {
-            try
+            using (var h = DisposeHandle.Get(sckListen))
             {
                 ThreadManager.NewThread(() => HandshakeThread(sckRead),
                     () => sckRead.Close(), "Incoming connection " + NetTools.GetRemoteIP(sckRead).ToString());
+                h.Disengage();
             }
-            catch (Exception)
-            {
-                sckRead.Close();
-                throw;
-            }
-
         }
 
         private void HandshakeThread(Socket sckRead)
         {
-            using (NetworkStream connectionStream = new NetworkStream(sckRead, false))
+            try
             {
-                try
+                using (var h = DisposeHandle.Get(sckRead))
+                using (NetworkStream connectionStream = new NetworkStream(sckRead, false))
                 {
                     int nTp = connectionStream.ReadByte();
 
@@ -99,14 +93,14 @@ namespace Network
                         info.ExtraInfo = Serializer.DeserializeChunk(connectionStream);
 
                     processConnection.Invoke(info, sckRead);
+                    h.Disengage();
                 }
-                catch (Exception e)
-                {
-                    Log.Console("Error while processing handshake: {0}", e.Message);
-                    //onHandshakeError(e);
-                    sckRead.Close();
-                    throw;
-                }
+            }
+            catch (Exception e)
+            {
+                Log.Console("Error while processing handshake: {0}", e.Message);
+                //onHandshakeError(e);
+                throw;
             }
         }
     }

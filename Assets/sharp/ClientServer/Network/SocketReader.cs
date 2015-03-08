@@ -23,7 +23,7 @@ namespace Network
             Action<MemoryStream> messageProcessor, Action<IOException> errorResponse, Action onSoftDisconnect,
             Socket socketRead)
         {
-            try
+            using (var h = DisposeHandle.Get(socketRead))
             {
                 this.onSoftDisconnect = sync.Convert(onSoftDisconnect);
                 this.messageProcessor = sync.Convert(messageProcessor);
@@ -33,12 +33,7 @@ namespace Network
                 
                 ThreadManager.NewThread(() => this.ProcessThread(),
                     () => TerminateThread(), "SocketReader " + NetTools.GetRemoteIP(socketRead).ToString());
-                //new Thread(() => this.ProcessThread()).Start();
-            }
-            catch (Exception)
-            {
-                socketRead.Close();
-                throw;
+                h.Disengage();
             }
         }
 

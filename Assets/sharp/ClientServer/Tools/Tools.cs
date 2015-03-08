@@ -205,4 +205,39 @@ namespace Tools
             b = b_;
         }
     }
+
+    class TestHandle : IDisposable
+    {
+        public void Dispose() { Console.WriteLine("disposing"); }
+    }
+
+    public static class DisposeHandle
+    {
+        public static DisposeHandle<T> Get<T>(T t)
+            where T : class, IDisposable
+        { return new DisposeHandle<T>(t); }
+
+        public static void Test()
+        {
+            using (var h = DisposeHandle.Get(new TestHandle())) {
+                h.Disengage();
+            }
+        }
+    }
+
+    public class DisposeHandle<T> : IDisposable
+        where T : class, IDisposable
+        
+    {
+        private T handle;
+        
+        public DisposeHandle(T handle) { this.handle = handle; }
+        public void Disengage() { handle = null; }
+
+        public void Dispose()
+        {
+            if (handle != null)
+                handle.Dispose();
+        }
+    }
 }
