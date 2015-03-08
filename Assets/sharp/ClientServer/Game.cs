@@ -171,12 +171,12 @@ namespace ServerClient
     {
         string loggedMessage = "";
         MessageType mt;
-        object[] data;
+        //object[] data;
 
         public GameMessage(MessageType mt, object[] data)
         {
             this.mt = mt;
-            this.data = data;
+            //this.data = data;
 
             ms = new MemoryStream();
 

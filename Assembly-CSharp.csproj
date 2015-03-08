@@ -59,6 +59,7 @@
      <Compile Include="Assets\sharp\ClientServer\Network\SocketListener.cs" />
      <Compile Include="Assets\sharp\ClientServer\Network\SocketReader.cs" />
      <Compile Include="Assets\sharp\ClientServer\Network\SocketWriter.cs" />
+     <Compile Include="Assets\sharp\ClientServer\Network\Sync.cs" />
      <Compile Include="Assets\sharp\ClientServer\Player.cs" />
      <Compile Include="Assets\sharp\ClientServer\Program.cs" />
      <Compile Include="Assets\sharp\ClientServer\Properties\AssemblyInfo.cs" />

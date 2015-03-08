@@ -64,7 +64,7 @@ namespace ServerClient
 
     class Aggregator
     {
-        public ActionSyncronizer sync = new ActionSyncronizer();
+        public ActionSyncronizer sync;
         public GlobalHost host;
 
         public Client myClient;
@@ -78,6 +78,7 @@ namespace ServerClient
 
         public Aggregator(IPAddress myIP)
         {
+            sync = new ActionSyncronizer();
             host = new GlobalHost(sync.GetProxy(), myIP);
             myClient = new Client(host, this);
         }
