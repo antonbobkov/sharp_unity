@@ -11,15 +11,15 @@ namespace Network
     class SocketListener
     {
         Socket sckListen;
-        Action<Handshake, Socket> processConnection;
+        SyncAction<Handshake, Socket> processConnection;
         //Action<Exception> onHandshakeError;
 
-        public SocketListener(Action<Handshake, Socket> processConnection, Socket sckListen)
+        public SocketListener(ActionSyncronizerProxy sync, Action<Handshake, Socket> processConnection, Socket sckListen)
         {
             try
             {
                 this.sckListen = sckListen;
-                this.processConnection = processConnection;
+                this.processConnection = sync.Convert(processConnection);
                 //this.onHandshakeError = onHandshakeError;
 
                 ThreadManager.NewThread(() => ProcessThread(),
@@ -98,7 +98,7 @@ namespace Network
                     if (info.hasExtraInfo)
                         info.ExtraInfo = Serializer.DeserializeChunk(connectionStream);
 
-                    processConnection(info, sckRead);
+                    processConnection.Invoke(info, sckRead);
                 }
                 catch (Exception e)
                 {

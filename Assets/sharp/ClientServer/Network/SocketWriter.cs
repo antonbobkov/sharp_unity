@@ -27,12 +27,15 @@ namespace Network
     
     class SocketWriter
     {
-        public SocketWriter(IPEndPoint address, Action<Exception, DisconnectType> errorResponse, Action onSoftDisconnect, Handshake info)
+        public SocketWriter(IPEndPoint address, ActionSyncronizerProxy sync,
+            Action<Exception, DisconnectType> errorResponse, Action onSoftDisconnect,
+            Handshake info)
         {
             this.address = address;
-            this.errorResponse = errorResponse;
             this.info = info;
-            this.onSoftDisconnect = onSoftDisconnect;
+           
+            this.errorResponse = sync.Convert(errorResponse);
+            this.onSoftDisconnect = sync.Convert(onSoftDisconnect);
 
             ThreadManager.NewThread(WritingThread, TerminateThread,
                 "SocketWriter " + address);
@@ -72,7 +75,7 @@ namespace Network
                 }
                 catch (Exception e)
                 {
-                    errorResponse(e, DisconnectType.WRITE_CONNECT_FAIL);
+                    errorResponse.Invoke(e, DisconnectType.WRITE_CONNECT_FAIL);
                     return;
                 }
 
@@ -115,7 +118,7 @@ namespace Network
                 }
                 catch (IOException ioe)
                 {
-                    errorResponse(ioe, DisconnectType.WRITE);
+                    errorResponse.Invoke(ioe, DisconnectType.WRITE);
                 }
 
             }
@@ -125,8 +128,10 @@ namespace Network
 
         private IPEndPoint address;
         private BlockingCollection<SocketWriterMessage> bcMessages = new BlockingCollection<SocketWriterMessage>();
-        private Action<Exception, DisconnectType> errorResponse;
-        private Action onSoftDisconnect;
+        
+        private SyncAction<Exception, DisconnectType> errorResponse;
+        private SyncAction onSoftDisconnect;
+        
         private Handshake info;
     }
 }

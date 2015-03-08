@@ -78,7 +78,7 @@ namespace ServerClient
 
         public Aggregator(IPAddress myIP)
         {
-            host = new GlobalHost(sync.GetAsDelegate(), myIP);
+            host = new GlobalHost(sync.GetProxy(), myIP);
             myClient = new Client(host, this);
         }
 

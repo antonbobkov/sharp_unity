@@ -144,10 +144,10 @@ namespace Network
         public ILog LogR { get; private set; }
         public ILog LogW { get; private set; }
 
-        public Node(Handshake info_, Action<Action> actionQueue_, Action<Node, Exception, DisconnectType> processDisonnect_)
+        public Node(Handshake info_, ActionSyncronizerProxy actionQueue_, Action<Node, Exception, DisconnectType> processDisonnect_)
         {
             info = info_;
-            actionQueue = actionQueue_;
+            sync = actionQueue_;
             notifyDisonnect = processDisonnect_;
 
             writerStatus = WriteStatus.READY;
@@ -162,12 +162,6 @@ namespace Network
                 LogW = MasterFileLog.GetLog("network", info.local.hostname.ToString(),
                     info.remote.ToString().Replace(':', '.') + " write.xml");
             }
-
-            //// queue up
-            //SendMessage(MessageType.HANDSHAKE, info);
-
-            //if (info.hasExtraInfo)
-            //    writer.SendStream(info.ExtraInfo);
         }
 
         public bool IsClosed { get; private set; }
@@ -238,7 +232,7 @@ namespace Network
         SocketReader reader = null;
         internal ReadStatus readerStatus { get; private set; }
 
-        Action<Action> actionQueue;
+        ActionSyncronizerProxy sync;
         Action<Node, Exception, DisconnectType> notifyDisonnect;
 
         internal void AcceptReaderConnection(Socket readingSocket,
@@ -252,8 +246,8 @@ namespace Network
                 if (readerStatus != ReadStatus.READY)
                     throw new NodeException("AcceptConnection: reader is aready initialized " + FullDescription());
 
-                reader = new SocketReader(
-                    (stm) => actionQueue(() =>
+                reader = new SocketReader(sync,
+                    (stm) => 
                     {
                         //string sentMsg = mtp.ToString();
                         //if (MasterFileLog.LogLevel > 2)
@@ -262,13 +256,13 @@ namespace Network
                         //Log.EntryVerbose(LogR, sentMsg); 
                         
                         messageProcessor(stm, this);
-                    }),
-                    (ioex) => actionQueue(() =>
+                    },
+                    (ioex) =>
                     {
                         readerStatus = ReadStatus.DISCONNECTED;
                         Close(ioex, DisconnectType.READ);
-                    }),
-                    () => actionQueue(OnSoftDisconnectReader),
+                    },
+                    OnSoftDisconnectReader,
                     readingSocket);
 
                 readerStatus = ReadStatus.READING;
@@ -289,14 +283,14 @@ namespace Network
 
             MyAssert.Assert(writer == null);
 
-            Action<Exception, DisconnectType> errorResponse = (e, dt) => actionQueue(() =>
+            Action<Exception, DisconnectType> errorResponse = (e, dt) =>
             {
                 writerStatus = WriteStatus.DISCONNECTED;
                 Close(e, dt);
-            });
+            };
 
             writerStatus = WriteStatus.WRITING;
-            writer = new SocketWriter(Address, errorResponse, () => actionQueue(OnSoftDisconnectWriter), info);
+            writer = new SocketWriter(Address, sync, errorResponse, OnSoftDisconnectWriter, info);
         }
 
         internal void Disconnect()

@@ -12,39 +12,6 @@ using Tools;
 
 namespace Network
 {
-    class ActionSyncronizer
-    {
-        public object syncLock = new object();
-        
-        void ExecuteThread()
-        {
-            while (true)
-            {
-                var a = msgs.Take();
-                if (a == null)
-                    return;
-                lock(syncLock)
-                    a.Invoke();
-            }
-        }
-        
-        BlockingCollection<Action> msgs = new BlockingCollection<Action>();
-
-        public void Add(Action a) { msgs.Add(a); }
-        public Queue<Action> TakeAll() { return msgs.TakeAll(); }
-
-        public Action<Action> GetAsDelegate() { return (a) => this.Add(a); }
-
-        public void Start()
-        {
-            ThreadManager.NewThread(() => this.ExecuteThread(),
-                //() => msgs.Add(null),
-                () => { },
-                "global syncronizer");
-        }
-
-    }
-
     class GlobalHost
     {
         public const int nStartPort = 3000;
@@ -53,7 +20,7 @@ namespace Network
         Dictionary<OverlayHostName, OverlayHost> hosts = new Dictionary<OverlayHostName, OverlayHost>();
 
         SocketListener sl;
-        Action<Action> processQueue;
+        ActionSyncronizerProxy processQueue;
 
         private IPAddress myIP;
 
@@ -61,7 +28,7 @@ namespace Network
 
         private ILog log;
 
-        public GlobalHost(Action<Action> processQueue_, IPAddress myIP)
+        public GlobalHost(ActionSyncronizerProxy processQueue_, IPAddress myIP)
         {
             this.myIP = myIP;
             processQueue = processQueue_;
@@ -102,8 +69,8 @@ namespace Network
                 }
                 sckListen.Listen(10);
 
-                sl = new SocketListener(
-                        (info, sck) => processQueue(() => this.NewIncomingConnection(info, sck)),
+                sl = new SocketListener(processQueue,
+                        (info, sck) => this.NewIncomingConnection(info, sck),
                         sckListen);
             }
             catch (Exception)
@@ -159,14 +126,14 @@ namespace Network
         
         ProcessorAssigner messageProcessorAssigner;
 
-        Action<Action> processQueue;
+        ActionSyncronizerProxy processQueue;
 
         public IPEndPoint IpAddress { get; private set; }
         public OverlayEndpoint Address { get { return new OverlayEndpoint(IpAddress, hostName); } }
 
         private ILog log;
-        
-        public OverlayHost(OverlayHostName hostName_, IPEndPoint address_, Action<Action> processQueue_,
+
+        public OverlayHost(OverlayHostName hostName_, IPEndPoint address_, ActionSyncronizerProxy processQueue_,
             ProcessorAssigner messageProcessorAssigner_, MemoryStream extraHandshakeInfo_)
         {
             hostName = hostName_;

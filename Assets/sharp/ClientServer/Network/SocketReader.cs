@@ -14,27 +14,30 @@ namespace Network
     class SocketReader
     {   
         Socket socketRead;
-        Action<MemoryStream> messageProcessor;
-        Action<IOException> errorResponse;
-        Action onSoftDisconnect;
+        
+        SyncAction<MemoryStream> messageProcessor;
+        SyncAction<IOException> errorResponse;
+        SyncAction onSoftDisconnect;
 
-        public SocketReader(Action<MemoryStream> messageProcessor_, Action<IOException> errorResponse_,
-            Action onSoftDisconnect_, Socket socketRead_)
+        public SocketReader(ActionSyncronizerProxy sync,
+            Action<MemoryStream> messageProcessor, Action<IOException> errorResponse, Action onSoftDisconnect,
+            Socket socketRead)
         {
             try
             {
-                onSoftDisconnect = onSoftDisconnect_;
-                messageProcessor = messageProcessor_;
-                socketRead = socketRead_;
-                errorResponse = errorResponse_;
+                this.onSoftDisconnect = sync.Convert(onSoftDisconnect);
+                this.messageProcessor = sync.Convert(messageProcessor);
+                this.errorResponse = sync.Convert(errorResponse);
 
+                this.socketRead = socketRead;
+                
                 ThreadManager.NewThread(() => this.ProcessThread(),
                     () => TerminateThread(), "SocketReader " + NetTools.GetRemoteIP(socketRead).ToString());
                 //new Thread(() => this.ProcessThread()).Start();
             }
             catch (Exception)
             {
-                socketRead_.Close();
+                socketRead.Close();
                 throw;
             }
         }
@@ -69,7 +72,7 @@ namespace Network
 
                             //Console.WriteLine("Message received: {0}", (MessageType)bt);
 
-                            messageProcessor(Serializer.DeserializeChunk(readStream));
+                            messageProcessor.Invoke(Serializer.DeserializeChunk(readStream));
                         }
                         else
                             throw new Exception(Log.StDump("Unexpected", bt, (NetworkMessageType)bt));
@@ -78,7 +81,7 @@ namespace Network
             }
             catch (IOException ioe)
             {
-                errorResponse(ioe);
+                errorResponse.Invoke(ioe);
                 //Log.LogWriteLine("SocketReader terminated");
             }
         }
