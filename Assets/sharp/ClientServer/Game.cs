@@ -149,7 +149,7 @@ namespace ServerClient
                             if (nd.LogR != null && nd.LogR.LogLevel >= 2)
                             {
                                 string sentMsg = mt.ToString();
-                                if (MasterFileLog.LogLevel > 2)
+                                if (MasterLog.LogLevel > 2)
                                     sentMsg += lastRead.GetData() + "\n\n";
 
                                 Log.EntryVerbose(nd.LogR, sentMsg); 

@@ -9,18 +9,16 @@ using System.Diagnostics;
 
 namespace Tools
 {
-    static class Log
+    [Flags]
+    enum LogParam
     {
-        static private Action<string> log_ = msg => System.Console.WriteLine(msg);
-        static private void LogWriteLineDirect(string msg, params object[] vals)
-        {
-            StringBuilder sb = new StringBuilder();
-            sb.AppendFormat(msg, vals);
-            ConsoleLog(sb.ToString());
-        }
-        
-        static public Action<string> ConsoleLog { set { log_ = value; } get { return log_; } }
-
+        NO_OPTION = 0,
+        NO_CONSOLE = 1,
+        CONSOLE = 2,
+    }
+    
+    static class Log
+    {       
         [MethodImpl(MethodImplOptions.NoInlining)]
         static public string StDump(params object[] vals)
         {
@@ -53,60 +51,38 @@ namespace Tools
             Console(StDump(vals));
         }
 
+        static string GetTimestamp() { return String.Format("{0:hh:mm:ss.fff }", DateTime.Now); }       
+
         static public void Console(string s, params object[] vars)
         {
-            string timestamp = String.Format("{0:hh:mm:ss.fff }", DateTime.Now);
-
-            MasterFileLog.GetConsoleFileLog().LogWriteLine(timestamp + s, vars);
-            Log.LogWriteLineDirect(s, vars);
+            MasterLog.ConsoleWrite(s, GetTimestamp(), true, vars);
         }
-        static public void Entry(ILog l, LogLevel logLevel, LogParam pr, string s, params object[] vars)
+
+        static public void Entry(ILog l, int logLevel, LogParam pr, string s, params object[] vars)
         {
             if (l == null)
                 return;
 
             bool useConsole = (pr & LogParam.CONSOLE) != 0 && (pr & LogParam.NO_CONSOLE) == 0;
-            bool writeIntoLog = l.LogLevel >= (int)logLevel;
+            bool writeIntoLog = l.LogLevel >= logLevel;
 
             if (!useConsole && !writeIntoLog)
                 return;
 
-            string timestamp = "";
-            if (l.Timestamp)
-                timestamp = String.Format("{0:hh:mm:ss.fff }", DateTime.Now);
-
+            string timestamp = l.Timestamp ? GetTimestamp() : "";
 
             if (useConsole)
-            {
-                MasterFileLog.GetConsoleFileLog().LogWriteLine(timestamp + s, vars);
-                Log.LogWriteLineDirect(s, vars);
-            }
+                MasterLog.ConsoleWrite(s, timestamp, true, vars);
 
             if (writeIntoLog)
                 l.LogWriteLine(timestamp + s, vars);
         }
 
-        static public void EntryError(ILog l, string s, params object[] vars) { Entry(l, LogLevel.ERROR, LogParam.NO_OPTION, s, vars); }
-        static public void EntryNormal(ILog l, string s, params object[] vars) { Entry(l, LogLevel.NORMAL, LogParam.NO_OPTION, s, vars); }
-        static public void EntryVerbose(ILog l, string s, params object[] vars) { Entry(l, LogLevel.VERBOSE, LogParam.NO_OPTION, s, vars); }
+        static public void EntryError(ILog l, string s, params object[] vars) { Entry(l, 0, LogParam.NO_OPTION, s, vars); }
+        static public void EntryNormal(ILog l, string s, params object[] vars) { Entry(l, 1, LogParam.NO_OPTION, s, vars); }
+        static public void EntryVerbose(ILog l, string s, params object[] vars) { Entry(l, 2, LogParam.NO_OPTION, s, vars); }
 
-        static public void EntryConsole(ILog l, string s, params object[] vars) { Entry(l, LogLevel.NORMAL, LogParam.CONSOLE, s, vars); }
-    }
-
-    [Flags]
-    enum LogParam
-    {
-        NO_OPTION = 0,
-        NO_CONSOLE = 1,
-        CONSOLE = 2,
-    }
-
-    enum LogLevel : int
-    {
-        ERROR = 0,
-        NORMAL = 1,
-        VERBOSE = 2,
-        ALL = 3
+        static public void EntryConsole(ILog l, string s, params object[] vars) { Entry(l, 1, LogParam.CONSOLE, s, vars); }
     }
 
     abstract class ILog
@@ -156,24 +132,62 @@ namespace Tools
         }
     }
 
-    //class MultiLog : ILog
-    //{
-    //    private List<ILog> logs;
-
-    //    public MultiLog(params ILog[] logs_arg) { logs = new List<ILog>(logs_arg); }
-    //    public void AddLog(ILog l) { logs.Add(l); }
-
-    //    public override void LogWrite(string s)
-    //    {
-    //        foreach(var l in logs)
-    //            l.LogWrite(s);
-    //    }
-
-    //}
-
-    class MasterFileLogger
+    class UTIL_Logger
     {
-        static string GetPath(string rootPath)
+        public string Path { get; private set; }
+        public int LogLevel { get { return lc.logLevel; } }
+
+        public ILog GetFileLog(params string[] folders)
+        {
+            lock (locker)
+            {
+                string path = CombinePaths(folders);
+                path = System.IO.Path.Combine(Path, path);
+
+                return new FileLog(path, LogLevel);
+            }
+        }
+
+        public void ConsoleWrite(string msg, string timestamp, bool fileWrite, params object[] vars)
+        {
+            lock (locker)
+            {
+                StringBuilder sb = new StringBuilder();
+                sb.AppendFormat(msg, vars);
+
+                string message = sb.ToString();
+
+                consoleLog(message);
+
+                if (fileWrite)
+                    consoleFileLog.LogWrite(timestamp + message);
+            }
+        }
+
+        public UTIL_Logger(string configName, Action<string> consoleLog)
+        {
+            this.consoleLog = consoleLog;
+            
+            XmlSerializer ser = new XmlSerializer(typeof(LogConfig));
+
+            try
+            {
+                using (StreamReader sr = new StreamReader(configName))
+                    lc = (LogConfig)ser.Deserialize(sr);
+            }
+            catch (FileNotFoundException)
+            {
+                consoleLog("Cannot open " + configName + ", creating default");
+
+                using (StreamWriter sw = new StreamWriter(configName))
+                    ser.Serialize(sw, lc);
+            }
+
+            Path = GetPath(lc.rootName);
+            consoleFileLog = GetFileLog("Console.log");
+        }
+
+        private string GetPath(string rootPath)
         {
             String s = String.Format("{0:MM-dd HH.mm.ss}", DateTime.Now);
 
@@ -184,31 +198,7 @@ namespace Tools
 
             return path;
         }
-
-        public string Path{ get; private set; }
-
-        public MasterFileLogger(string configName = "log_config.xml")
-        {
-            XmlSerializer ser = new XmlSerializer(typeof(LogConfig));
-
-            try
-            {
-                using(StreamReader sr = new StreamReader(configName))
-                    lc = (LogConfig)ser.Deserialize(sr);
-            }
-            catch (FileNotFoundException)
-            {
-                Log.ConsoleLog("Cannot open " + configName + ", creating default");
-                
-                using(StreamWriter sw = new StreamWriter(configName))
-                    ser.Serialize(sw, lc);
-            }
-
-            Path = GetPath(lc.rootName);
-            consoleLog = GetLog("Console.log");
-        }
-
-        public string CombinePaths(params string[] folders)
+        private string CombinePaths(params string[] folders)
         {
             string ret = "";
             foreach(string fld in folders)
@@ -216,34 +206,24 @@ namespace Tools
             return ret;
         }
 
-        public ILog GetLog(params string[] folders)
-        {
-            string path = CombinePaths(folders);
-            path = System.IO.Path.Combine(Path, path);
+        private object locker = new object();
+        private readonly ILog consoleFileLog;
+        private readonly Action<string> consoleLog;// = msg => System.Console.WriteLine(msg);
 
-            return new FileLog(path, lc.logLevel);
-        }
-
-        private ILog consoleLog;
-        public ILog GetConsoleLog()
-        {
-            return consoleLog;
-        }
-
-        LogConfig lc = new LogConfig();
-
-        public int LogLevel { get { return lc.logLevel; } }
+        private readonly LogConfig lc = new LogConfig();
     }
 
-    static class MasterFileLog
+    static class MasterLog
     {
-        static private MasterFileLogger mfl = new MasterFileLogger();
-        static public ILog GetLog(params string[] folders)
-        {
-            return mfl.GetLog(folders);
-        }
-        static public ILog GetConsoleFileLog() { return mfl.GetConsoleLog(); }
+        static private UTIL_Logger mfl = null;
+
+        static public void Initialize(string configName, Action<string> consoleLog) { mfl = new UTIL_Logger(configName, consoleLog); }
+        
+        static public ILog GetFileLog(params string[] folders) { return mfl.GetFileLog(folders); }
         static public int LogLevel { get { return mfl.LogLevel; } }
+
+        static public void ConsoleWrite(string msg, string timestamp, bool fileWrite, params object[] vars) 
+            { mfl.ConsoleWrite(msg, timestamp, fileWrite, vars); }
     }
 
     public class LogConfig

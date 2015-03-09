@@ -86,9 +86,11 @@ namespace ServerClient
         static void Main(string[] args)
         {
             //Serializer.Test();
-            DisposeHandle.Test();
+            //DisposeHandle.Test();
 
             //dostuff(MessageType.ACCEPT);
+
+            MasterLog.Initialize("log_config.xml", (msg) => Console.WriteLine(msg));
 
             GameConfig cfg_total = GameConfig.ReadConfig("game_config.xml");
             GameInstanceConifg cfg_local = cfg_total.clientConfig;

@@ -154,12 +154,12 @@ namespace Network
             readerStatus = ReadStatus.READY;
             IsClosed = false;
 
-            if (MasterFileLog.LogLevel > 1)
+            if (MasterLog.LogLevel > 1)
             {
-                LogR = MasterFileLog.GetLog("network", info.local.hostname.ToString(),
+                LogR = MasterLog.GetFileLog("network", info.local.hostname.ToString(),
                     info.remote.ToString().Replace(':', '.') + " read.xml");
 
-                LogW = MasterFileLog.GetLog("network", info.local.hostname.ToString(),
+                LogW = MasterLog.GetFileLog("network", info.local.hostname.ToString(),
                     info.remote.ToString().Replace(':', '.') + " write.xml");
             }
         }

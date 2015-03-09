@@ -32,7 +32,7 @@ namespace Network
         {
             this.myIP = myIP;
             processQueue = processQueue_;
-            log = MasterFileLog.GetLog("network", "globalhost.log");
+            log = MasterLog.GetFileLog("network", "globalhost.log");
 
             StartListening();
         }
@@ -143,12 +143,12 @@ namespace Network
 
             extraHandshakeInfo = extraHandshakeInfo_;
 
-            log = MasterFileLog.GetLog("network", hostName.ToString() + ".log");
+            log = MasterLog.GetFileLog("network", hostName.ToString() + ".log");
         }
 
         void ProcessDisconnect(Node n, Exception ioex, DisconnectType ds)
         {
-            Log.Entry(log, LogLevel.ERROR, (ds == DisconnectType.WRITE_CONNECT_FAIL) ? LogParam.CONSOLE : LogParam.NO_OPTION,
+            Log.Entry(log, 0, (ds == DisconnectType.WRITE_CONNECT_FAIL) ? LogParam.CONSOLE : LogParam.NO_OPTION,
                 "{0} disconnected on {1} ({2})", n.info.remote, ds, (ioex == null) ? "" : ioex.Message);
             
             RemoveNode(n);

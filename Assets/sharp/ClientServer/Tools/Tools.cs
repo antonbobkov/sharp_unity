@@ -28,7 +28,7 @@ namespace Tools
                 Log.Console("GetMyIP Error: {0}\nDefault to 127.0.0.1", e.Message);
 
                 if (errorLog == null)
-                    errorLog = MasterFileLog.GetLog("GetMyIP_exception.log");
+                    errorLog = MasterLog.GetFileLog("GetMyIP_exception.log");
 
                 Log.EntryError(errorLog, e.ToString());
             }
@@ -90,20 +90,20 @@ namespace Tools
 
     static class ThreadManager
     {
-        static object syncLock = new object();
         static List<ThreadInfo> threads = new List<ThreadInfo>();
 
-        static ILog threadLog = MasterFileLog.GetLog("Threads.log");
+        static ILog threadLog = MasterLog.GetFileLog("Threads.log");
 
         static public void NewThread(ThreadStart threadFunction, Action terminate, string name)
         {
-            ThreadInfo ti = new ThreadInfo() { thread = new Thread(threadFunction), terminate = terminate, name = name };
-            lock(syncLock)
-                Log.EntryNormal(threadLog, "New Thread: " + name);
-            ti.thread.Start();
-
             lock (threads)
+            {
+                ThreadInfo ti = new ThreadInfo() { thread = new Thread(threadFunction), terminate = terminate, name = name };
+                Log.EntryNormal(threadLog, "New Thread: " + name);
+                ti.thread.Start();
+
                 threads.Add(ti);
+            }
         }
 
         static public string Status()
@@ -140,14 +140,19 @@ namespace Tools
 
     static class MyAssert
     {
-        static private ILog assertLog = MasterFileLog.GetLog("Assert.log");
-        
+        //static private ILog assertLog = MasterLog.GetFileLog("Assert.log");
+
+        static private void LogEntry(ILog log)
+        {
+            Log.EntryError(log, "Assert failed\n" + new System.Diagnostics.StackTrace() + "\n\n");
+            Log.EntryError(log, "Assert failed\n" + System.Environment.StackTrace + "\n\n");
+        }
+
         static public void Assert(bool b)
         {
             if (!b)
             {
-                Log.EntryError(assertLog, "Assert failed\n" + new System.Diagnostics.StackTrace() + "\n\n");
-                Log.EntryError(assertLog, "Assert failed\n" + System.Environment.StackTrace + "\n\n");
+                LogEntry(MasterLog.GetFileLog("Assert " + Thread.CurrentThread.ManagedThreadId + ".log"));
 
                 Debug.Assert(b);
 
