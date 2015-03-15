@@ -196,7 +196,7 @@ public class minecraft : MonoBehaviour {
     
     // Use this for initialization
 	void Start () {
-        Log.ConsoleLog = msg => Debug.Log(msg);
+        MasterLog.Initialize("log_config.xml", msg => Debug.Log(msg));
 
         GameConfig cfg = GameConfig.ReadConfig("unity_config.xml");
         GameInstanceConifg cfg_local = cfg.clientConfig;

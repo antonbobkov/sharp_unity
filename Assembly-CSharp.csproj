@@ -82,6 +82,7 @@
      <None Include="Assets\sharp\ClientServer\bin\Debug\Logs\03-07 13.29.44\network\client\192.168.1.66.3000 server write.xml" />
      <None Include="Assets\sharp\ClientServer\bin\Debug\Logs\03-07 13.33.53\network\client\192.168.1.66.3001 client write.xml" />
      <None Include="Assets\sharp\ClientServer\obj\x86\Debug\ServerClient.csproj.FileListAbsolute.txt" />
+     <None Include="Assets\sharp\ClientServer\bin\Debug\log_config.txt" />
      <None Include="Assets\sharp\ClientServer\bin\Debug\Logs\03-07 13.33.53\network\client\192.168.1.66.3000 client write.xml" />
      <None Include="Assets\sharp\ClientServer\bin\Debug\Logs\03-07 13.34.24\network\client\192.168.1.66.3000 client write.xml" />
      <None Include="Assets\sharp\ClientServer\bin\Debug\Logs\03-07 13.34.24\network\client\192.168.1.66.3000 server write.xml" />

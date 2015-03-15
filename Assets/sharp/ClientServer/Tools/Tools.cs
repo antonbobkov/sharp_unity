@@ -15,25 +15,41 @@ namespace Tools
 
         public static IPAddress GetMyIP()
         {
-            try
+            IPHostEntry localDnsEntry = null;
+
+            if (localDnsEntry == null)
+                try { localDnsEntry = Dns.GetHostEntry(string.Empty); }
+                catch (Exception) { }
+
+            if (localDnsEntry == null)
+                try { localDnsEntry = Dns.GetHostEntry(Dns.GetHostName()); }
+                catch (Exception) { }
+
+            if (localDnsEntry == null)
             {
-                IPHostEntry localDnsEntry = Dns.GetHostEntry(string.Empty);
-                //IPHostEntry localDnsEntry = Dns.GetHostEntry(Dns.GetHostName());
-                return localDnsEntry.AddressList.First
-                    (ipaddr =>
-                        ipaddr.AddressFamily.ToString() == ProtocolFamily.InterNetwork.ToString());
+                Log.Console("GetMyIP Error, Default to 127.0.0.1");
+                return IPAddress.Parse("127.0.0.1");
             }
-            catch (Exception e)
-            {
-                Log.Console("GetMyIP Error: {0}\nDefault to 127.0.0.1", e.Message);
+            return localDnsEntry.AddressList.First
+                (ipaddr =>
+                    ipaddr.AddressFamily.ToString() == ProtocolFamily.InterNetwork.ToString());
 
-                if (errorLog == null)
-                    errorLog = MasterLog.GetFileLog("GetMyIP_exception.log");
+            //try
+            //{
+            //    IPHostEntry localDnsEntry = Dns.GetHostEntry(string.Empty);
+            //    //IPHostEntry localDnsEntry = Dns.GetHostEntry(Dns.GetHostName());
+            //}
+            //catch (Exception e)
+            //{
+            //    Log.Console("GetMyIP Error: {0}\nDefault to 127.0.0.1", e.Message);
 
-                Log.EntryError(errorLog, e.ToString());
-            }
+            //    if (errorLog == null)
+            //        errorLog = MasterLog.GetFileLog("GetMyIP_exception.log");
 
-            return IPAddress.Parse("127.0.0.1");
+            //    Log.EntryError(errorLog, e.ToString());
+            //}
+
+            //return IPAddress.Parse("127.0.0.1");
         }
         public static IPEndPoint GetRemoteIP(Socket sck)
         {
