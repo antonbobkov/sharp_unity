@@ -101,9 +101,9 @@ namespace Network
                                 if (!bcMessages.IsEmpty)
                                     continue;
 
-                                connectionStream.WriteByte((byte)SocketWriterMessageType.SOFT_DISCONNECT);
+                                connectionStream.WriteByte((byte)NetworkMessageType.SOFT_DISCONNECT);
                                 int bt = connectionStream.ReadByte();
-                                MyAssert.Assert(bt == (byte)SocketWriterMessageType.SOFT_DISCONNECT);
+                                MyAssert.Assert(bt == (byte)NetworkMessageType.SOFT_DISCONNECT);
                                 writeSocket.Close();
 
                                 onSoftDisconnect.Invoke();

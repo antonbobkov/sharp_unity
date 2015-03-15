@@ -56,9 +56,9 @@ namespace Network
                             throw new IOException("End of stream");
                         else if ((NetworkMessageType)bt == NetworkMessageType.SOFT_DISCONNECT)
                         {
-                            readStream.WriteByte((byte)NetworkMessageType.SOFT_DISCONNECT);
-                            
                             onSoftDisconnect.Invoke();
+
+                            readStream.WriteByte((byte)NetworkMessageType.SOFT_DISCONNECT);
                             
                             return;
                         }

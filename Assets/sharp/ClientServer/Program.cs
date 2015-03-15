@@ -161,6 +161,12 @@ namespace ServerClient
                     () => { }, "console drawer");
             });
 
+            inputProc.commands.Add("status", (param) =>
+            {
+                if (all.myServer != null)
+                    all.myServer.PrintStats();
+            });
+            
             inputProc.commands.Add("exit", (param) =>
             {
                 all.host.Close();

@@ -165,6 +165,7 @@ namespace Network
         }
 
         public bool IsClosed { get; private set; }
+        public bool IsConnected() { return readerStatus == ReadStatus.READING || writerStatus == WriteStatus.WRITING; }
         
         public string FullDescription()
         {
@@ -190,6 +191,23 @@ namespace Network
             nm.LogData(LogW);
             
             writer.SendMessage(swm);
+        }
+
+        public void SoftDisconnect()
+        {
+            if (IsClosed)
+                throw new NodeException("SoftDisconnect: node is disconnected " + FullDescription());
+            if (writerStatus != WriteStatus.WRITING)
+            {
+                if(readerStatus != ReadStatus.READING)
+                    return;
+                else
+                    ConnectAsync();
+            }
+
+            Log.Dump(info);
+
+            writer.SendMessage(new SocketWriterMessage(SocketWriterMessageType.SOFT_DISCONNECT));
         }
 
         //public void SendMessage(NetworkMessage nm)
@@ -319,17 +337,26 @@ namespace Network
 
         private void OnSoftDisconnectReader()
         {
+            Log.EntryNormal(LogR, "Reader soft disconnect");
+
             reader = null;
             readerStatus = ReadStatus.READY;
+
+            SoftDisconnect();
         }
         
         private void OnSoftDisconnectWriter()
         {
+            Log.EntryNormal(LogW, "Writer soft disconnect");
+
             Queue<SocketWriterMessage> msgs = writer.ExtractAllMessages();
             
             writer = null;
             writerStatus = WriteStatus.READY;
 
+            while (msgs.Any() && msgs.Peek().type == SocketWriterMessageType.SOFT_DISCONNECT)
+                msgs.Dequeue();
+            
             if(msgs.Any())
             {
                 ConnectAsync();

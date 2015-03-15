@@ -120,6 +120,7 @@ namespace ServerClient
             {
                 Point worldPos = Serializer.Deserialize<Point>(stm);
                 OnNewWorldRequest(worldPos);
+                n.SoftDisconnect();
             }
             else
                 throw new Exception("Client.ProcessWorldMessage bad message type " + mt.ToString());
@@ -127,7 +128,10 @@ namespace ServerClient
         void ProcessPlayerMessage(MessageType mt, Stream stm, Node n, PlayerInfo inf)
         {
             if (mt == MessageType.SPAWN_REQUEST)
+            {
                 OnSpawnRequest(inf);
+                n.SoftDisconnect();
+            }
             else
                 throw new Exception(Log.StDump("unexpected", mt));
         }
@@ -281,6 +285,11 @@ namespace ServerClient
             MyAssert.Assert(da.ep == remote);
 
             da.a();
+        }
+
+        public void PrintStats()
+        {
+            myHost.PrintStats();
         }
     }
 }

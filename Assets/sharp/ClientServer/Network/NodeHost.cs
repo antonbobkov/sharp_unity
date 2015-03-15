@@ -259,6 +259,15 @@ namespace Network
             }
         }
 
+        public void SoftDisconnect(OverlayEndpoint theirInfo)
+        {
+            Node targetNode = FindNode(theirInfo);
+
+            MyAssert.Assert(targetNode != null);
+
+            targetNode.SoftDisconnect();
+        }
+
         void DisconnectNode(Node n)
         {
             n.Disconnect();
@@ -336,6 +345,13 @@ namespace Network
         public void Broadcast(NetworkMessage nm)
         {
             BroadcastGroup((n) => true, nm);
+        }
+
+        public void PrintStats()
+        {
+            foreach (var n in nodes.Values)
+                if (n.IsConnected())
+                    Console.WriteLine(n.info.remote);
         }
 
         void AddNode(Node n)
