@@ -17,8 +17,8 @@ namespace Tools
         {
             try
             {
-                //IPHostEntry localDnsEntry = Dns.GetHostEntry(string.Empty);
-                IPHostEntry localDnsEntry = Dns.GetHostEntry(Dns.GetHostName());
+                IPHostEntry localDnsEntry = Dns.GetHostEntry(string.Empty);
+                //IPHostEntry localDnsEntry = Dns.GetHostEntry(Dns.GetHostName());
                 return localDnsEntry.AddressList.First
                     (ipaddr =>
                         ipaddr.AddressFamily.ToString() == ProtocolFamily.InterNetwork.ToString());
