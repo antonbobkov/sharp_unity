@@ -61,11 +61,12 @@ namespace ServerClient
 
         public OverlayEndpoint Address { get { return myHost.Address; } }
 
-        public Server(GlobalHost globalHost)
+        public Server(GlobalHost globalHost, ActionSyncronizer sync)
         {
             myHost = globalHost.NewHost(Server.hostName, Game.Convert(AssignProcessor),
                 BasicInfo.GenerateHandshake(NodeRole.SERVER));
             myHost.onNewConnectionHook = ProcessNewConnection;
+            myHost.AddInactivityTimeout(sync, TimeSpan.FromSeconds(5));
 
             //Action<ForwardFunctionCall> onChange = (ffc) => myHost.BroadcastGroup(Client.hostName, MessageType.GAME_INFO_VAR_CHANGE, ffc.Serialize());
             //gameInfo = new ForwardProxy<GameInfo>(new GameInfo(), onChange).GetProxy();
@@ -120,7 +121,7 @@ namespace ServerClient
             {
                 Point worldPos = Serializer.Deserialize<Point>(stm);
                 OnNewWorldRequest(worldPos);
-                n.SoftDisconnect();
+                //n.SoftDisconnect();
             }
             else
                 throw new Exception("Client.ProcessWorldMessage bad message type " + mt.ToString());
@@ -130,7 +131,7 @@ namespace ServerClient
             if (mt == MessageType.SPAWN_REQUEST)
             {
                 OnSpawnRequest(inf);
-                n.SoftDisconnect();
+                //n.SoftDisconnect();
             }
             else
                 throw new Exception(Log.StDump("unexpected", mt));

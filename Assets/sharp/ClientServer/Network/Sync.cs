@@ -12,12 +12,13 @@ namespace Network
     {
         private int? executeThreadId;
         public object syncLock = new object();
+        private TimerThread tt;
 
         public ActionSyncronizer(int? executeThreadId = null)
         {
             this.executeThreadId = executeThreadId;
+            this.tt = new TimerThread(this);
         }
-
 
         void ExecuteThread()
         {
@@ -58,6 +59,8 @@ namespace Network
         }
 
         public ActionSyncronizerProxy GetProxy() { return new ActionSyncronizerProxy(this); }
+
+        public void AddTimedAction(Action a, int period = 1) { tt.AddAction(a, period); }
     }
 
     class ActionSyncronizerProxy
@@ -118,5 +121,71 @@ namespace Network
         {
             sync.Add(() => a(t,s));
         }
+    }
+
+
+    class TimedAction
+    {
+        private int ticksLeft;
+        private int period;
+        private Action a;
+
+        public TimedAction(Action a, int period = 1)
+        {
+            MyAssert.Assert(period >= 1);
+            
+            this.a = a;
+            this.period = period;
+            this.ticksLeft = period;
+        }
+
+        public void Tick()
+        {
+            if (--ticksLeft == 0)
+            {
+                a.Invoke();
+                ticksLeft = period;
+            }
+        }
+    };
+
+    class TimerThread
+    {
+        public TimerThread(ActionSyncronizer sync)
+        {
+            this.sync = sync;
+
+            ThreadManager.NewThread(this.TimingThread, () => { lock (synclock) endThread = true; }, "TimerThread");
+        }
+        public void AddAction(Action a, int period = 1)
+        {
+            actions.Add(new TimedAction(a, period));
+        }
+
+        private object synclock = new object();
+        private bool endThread = false;
+
+        private ActionSyncronizer sync;
+        private List<TimedAction> actions = new List<TimedAction>();
+
+        private void ProcessTick()
+        {
+            foreach (var ta in actions)
+                ta.Tick();
+        }
+        private void TimingThread()
+        {
+            while (true)
+            {
+                Thread.Sleep(TimeSpan.FromSeconds(1));
+
+                lock (synclock)
+                    if (endThread)
+                        return;
+
+                sync.Add(this.ProcessTick);
+            }
+        }
+
     }
 }

@@ -146,6 +146,28 @@ namespace Network
             log = MasterLog.GetFileLog("network", hostName.ToString() + ".log");
         }
 
+        public void AddInactivityTimeout(ActionSyncronizer sync, TimeSpan ts)
+        {
+            sync.AddTimedAction(() => DisconnectInactiveNodes(ts), 1);
+        }
+
+        private void DisconnectInactiveNodes(TimeSpan ts)
+        {
+            DateTime timeNow = DateTime.Now;
+            
+            foreach(Node n in nodes.Values)
+                if (n.IsConnected())
+                {
+                    if (timeNow.Subtract(n.LastUsed) > ts)
+                    {
+                        Log.Console(n.info.remote + " disconnecting due to inactivity");
+
+                        n.UpdateUseTime();
+                        n.SoftDisconnect();
+                    }
+                }
+        }
+
         void ProcessDisconnect(Node n, Exception ioex, DisconnectType ds)
         {
             Log.Entry(log, 0, (ds == DisconnectType.WRITE_CONNECT_FAIL) ? LogParam.CONSOLE : LogParam.NO_OPTION,
@@ -205,6 +227,8 @@ namespace Network
                 {
                     if (n.IsClosed)
                         return;
+
+                    n.UpdateUseTime();
 
                     messageProcessor(str, n);
 

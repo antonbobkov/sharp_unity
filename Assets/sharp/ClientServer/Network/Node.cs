@@ -162,6 +162,8 @@ namespace Network
                 LogW = MasterLog.GetFileLog("network", info.local.hostname.ToString(),
                     info.remote.ToString().Replace(':', '.') + " write.xml");
             }
+
+            UpdateUseTime();
         }
 
         public bool IsClosed { get; private set; }
@@ -191,6 +193,8 @@ namespace Network
             nm.LogData(LogW);
             
             writer.SendMessage(swm);
+
+            UpdateUseTime();
         }
 
         public void SoftDisconnect()
@@ -205,7 +209,7 @@ namespace Network
                     ConnectAsync();
             }
 
-            Log.Dump(info);
+            Log.Console(info.remote + " SoftDisconnect() called");
 
             writer.SendMessage(new SocketWriterMessage(SocketWriterMessageType.SOFT_DISCONNECT));
         }
@@ -238,6 +242,9 @@ namespace Network
 
         public IPEndPoint Address { get { return info.remote.addr; } }
         public readonly Handshake info;
+
+        public DateTime LastUsed { get; private set; }
+        public void UpdateUseTime() { LastUsed = DateTime.Now; }
 
         // --- private ---
 
@@ -338,6 +345,7 @@ namespace Network
         private void OnSoftDisconnectReader()
         {
             Log.EntryNormal(LogR, "Reader soft disconnect");
+            Log.Console(info.remote + " reader softly disconnected");
 
             reader = null;
             readerStatus = ReadStatus.READY;
@@ -348,6 +356,7 @@ namespace Network
         private void OnSoftDisconnectWriter()
         {
             Log.EntryNormal(LogW, "Writer soft disconnect");
+            Log.Console(info.remote + " writer softly disconnected");
 
             Queue<SocketWriterMessage> msgs = writer.ExtractAllMessages();
             

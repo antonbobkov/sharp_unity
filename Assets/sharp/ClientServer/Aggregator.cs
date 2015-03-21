@@ -118,7 +118,7 @@ namespace ServerClient
         public void StartServer()
         {
             MyAssert.Assert(myServer == null);
-            myServer = new Server(host);
+            myServer = new Server(host, sync);
             myClient.OnServerAddress(myServer.Address);
         }
 
