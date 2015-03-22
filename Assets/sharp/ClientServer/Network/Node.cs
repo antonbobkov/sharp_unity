@@ -209,7 +209,7 @@ namespace Network
                     ConnectAsync();
             }
 
-            Log.Console(info.remote + " SoftDisconnect() called");
+            //Log.Console(info.remote + " SoftDisconnect() called");
 
             writer.SendMessage(new SocketWriterMessage(SocketWriterMessageType.SOFT_DISCONNECT));
         }
@@ -345,7 +345,7 @@ namespace Network
         private void OnSoftDisconnectReader()
         {
             Log.EntryNormal(LogR, "Reader soft disconnect");
-            Log.Console(info.remote + " reader softly disconnected");
+            //Log.Console(info.remote + " reader softly disconnected");
 
             reader = null;
             readerStatus = ReadStatus.READY;
@@ -356,7 +356,7 @@ namespace Network
         private void OnSoftDisconnectWriter()
         {
             Log.EntryNormal(LogW, "Writer soft disconnect");
-            Log.Console(info.remote + " writer softly disconnected");
+            //Log.Console(info.remote + " writer softly disconnected");
 
             Queue<SocketWriterMessage> msgs = writer.ExtractAllMessages();
             

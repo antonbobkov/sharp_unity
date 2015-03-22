@@ -108,7 +108,7 @@ namespace Network
 
             hosts.Add(hostName, host);
 
-            Log.EntryNormal(log, "New host: " + hostName);
+            Log.EntryConsole(log, "New host: " + hostName);
             
             return host;
         }
@@ -169,7 +169,7 @@ namespace Network
                 {
                     if (timeNow.Subtract(n.LastUsed) > inactivityPeriod)
                     {
-                        Log.Console(n.info.remote + " disconnecting due to inactivity");
+                        Log.Console(hostName + " -> " + n.info.remote.hostname + " disconnecting due to inactivity");
 
                         n.UpdateUseTime();
                         n.SoftDisconnect();
