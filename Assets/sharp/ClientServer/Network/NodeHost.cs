@@ -15,12 +15,13 @@ namespace Network
     class GlobalHost
     {
         public const int nStartPort = 3000;
-        const int nPortTries = 25;
+        private const int nPortTries = 25;
 
-        Dictionary<OverlayHostName, OverlayHost> hosts = new Dictionary<OverlayHostName, OverlayHost>();
+        private Dictionary<OverlayHostName, OverlayHost> hosts = new Dictionary<OverlayHostName, OverlayHost>();
 
-        SocketListener sl;
-        ActionSyncronizerProxy processQueue;
+        private SocketListener sl;
+        private ActionSyncronizerProxy processQueue;
+        private TimerThread tt;
 
         private IPAddress myIP;
 
@@ -28,16 +29,17 @@ namespace Network
 
         private ILog log;
 
-        public GlobalHost(ActionSyncronizerProxy processQueue_, IPAddress myIP)
+        public GlobalHost(ActionSyncronizerProxy processQueue_, IPAddress myIP, TimerThread tt)
         {
             this.myIP = myIP;
+            this.tt = tt;
             processQueue = processQueue_;
             log = MasterLog.GetFileLog("network", "globalhost.log");
 
             StartListening();
         }
 
-        void StartListening()
+        private void StartListening()
         {
             IPAddress ip = myIP;
 
@@ -80,7 +82,7 @@ namespace Network
             }
         }
 
-        void NewIncomingConnection(Handshake info, Socket sck)
+        private void NewIncomingConnection(Handshake info, Socket sck)
         {
             Log.EntryNormal(log, "New connection: " + info);
             MyAssert.Assert(hosts.ContainsKey(info.local.hostname));
@@ -96,10 +98,14 @@ namespace Network
 
             sl.TerminateThread();
         }
-        public OverlayHost NewHost(OverlayHostName hostName, OverlayHost.ProcessorAssigner messageProcessor, MemoryStream extraHandshakeInfo)
+        public OverlayHost NewHost(OverlayHostName hostName, OverlayHost.ProcessorAssigner messageProcessor, MemoryStream extraHandshakeInfo,
+            TimeSpan inactivityPeriod)
         {
             MyAssert.Assert(!hosts.ContainsKey(hostName));
-            OverlayHost host = new OverlayHost(hostName, MyAddress, processQueue, messageProcessor, extraHandshakeInfo);
+            
+            OverlayHost host = new OverlayHost(hostName, MyAddress, processQueue, messageProcessor, extraHandshakeInfo,
+                tt, inactivityPeriod);
+
             hosts.Add(hostName, host);
 
             Log.EntryNormal(log, "New host: " + hostName);
@@ -132,33 +138,36 @@ namespace Network
         public OverlayEndpoint Address { get { return new OverlayEndpoint(IpAddress, hostName); } }
 
         private ILog log;
+        private TimeSpan inactivityPeriod;
 
-        public OverlayHost(OverlayHostName hostName_, IPEndPoint address_, ActionSyncronizerProxy processQueue_,
-            ProcessorAssigner messageProcessorAssigner_, MemoryStream extraHandshakeInfo_)
+        public OverlayHost(OverlayHostName hostName, IPEndPoint address, ActionSyncronizerProxy processQueue,
+            ProcessorAssigner messageProcessorAssigner, MemoryStream extraHandshakeInfo,
+            TimerThread tt, TimeSpan inactivityPeriod)
         {
-            hostName = hostName_;
-            IpAddress = address_;
-            processQueue = processQueue_;
-            messageProcessorAssigner = messageProcessorAssigner_;
+            this.inactivityPeriod = inactivityPeriod;
+            this.hostName = hostName;
+            this.IpAddress = address;
+            this.processQueue = processQueue;
+            this.messageProcessorAssigner = messageProcessorAssigner;
 
-            extraHandshakeInfo = extraHandshakeInfo_;
+            this.extraHandshakeInfo = extraHandshakeInfo;
 
             log = MasterLog.GetFileLog("network", hostName.ToString() + ".log");
+
+            tt.AddAction(this.DisconnectInactiveNodes);
         }
 
-        public void AddInactivityTimeout(ActionSyncronizer sync, TimeSpan ts)
+        private void DisconnectInactiveNodes()
         {
-            sync.AddTimedAction(() => DisconnectInactiveNodes(ts), 1);
-        }
-
-        private void DisconnectInactiveNodes(TimeSpan ts)
-        {
+            if (inactivityPeriod == TimeSpan.Zero)
+                return;
+            
             DateTime timeNow = DateTime.Now;
             
             foreach(Node n in nodes.Values)
                 if (n.IsConnected())
                 {
-                    if (timeNow.Subtract(n.LastUsed) > ts)
+                    if (timeNow.Subtract(n.LastUsed) > inactivityPeriod)
                     {
                         Log.Console(n.info.remote + " disconnecting due to inactivity");
 

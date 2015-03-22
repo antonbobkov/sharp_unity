@@ -12,12 +12,12 @@ namespace Network
     {
         private int? executeThreadId;
         public object syncLock = new object();
-        private TimerThread tt;
+        public TimerThread TimedAction{ get; private set;}
 
         public ActionSyncronizer(int? executeThreadId = null)
         {
             this.executeThreadId = executeThreadId;
-            this.tt = new TimerThread(this);
+            TimedAction = new TimerThread(this);
         }
 
         void ExecuteThread()
@@ -60,7 +60,7 @@ namespace Network
 
         public ActionSyncronizerProxy GetProxy() { return new ActionSyncronizerProxy(this); }
 
-        public void AddTimedAction(Action a, int period = 1) { tt.AddAction(a, period); }
+        //public void AddTimedAction(Action a, int period = 1) { tt.AddAction(a, period); }
     }
 
     class ActionSyncronizerProxy

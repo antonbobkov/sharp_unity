@@ -64,9 +64,8 @@ namespace ServerClient
         public Server(GlobalHost globalHost, ActionSyncronizer sync)
         {
             myHost = globalHost.NewHost(Server.hostName, Game.Convert(AssignProcessor),
-                BasicInfo.GenerateHandshake(NodeRole.SERVER));
+                BasicInfo.GenerateHandshake(NodeRole.SERVER), Aggregator.shortInactivityWait);
             myHost.onNewConnectionHook = ProcessNewConnection;
-            myHost.AddInactivityTimeout(sync, TimeSpan.FromSeconds(5));
 
             //Action<ForwardFunctionCall> onChange = (ffc) => myHost.BroadcastGroup(Client.hostName, MessageType.GAME_INFO_VAR_CHANGE, ffc.Serialize());
             //gameInfo = new ForwardProxy<GameInfo>(new GameInfo(), onChange).GetProxy();

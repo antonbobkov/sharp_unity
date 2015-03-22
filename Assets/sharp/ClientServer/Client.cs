@@ -96,7 +96,7 @@ namespace ServerClient
             all = all_;
 
             myHost = globalHost.NewHost(Client.hostName, Game.Convert(AssignProcessor),
-                BasicInfo.GenerateHandshake(NodeRole.CLIENT));
+                BasicInfo.GenerateHandshake(NodeRole.CLIENT), Aggregator.longInactivityWait);
 
             myHost.onNewConnectionHook = ProcessNewConnection;
         }

@@ -64,6 +64,10 @@ namespace ServerClient
 
     class Aggregator
     {
+        public static readonly TimeSpan longInactivityWait = TimeSpan.FromSeconds(5);
+        public static readonly TimeSpan shortInactivityWait = TimeSpan.FromSeconds(2);
+        public static readonly TimeSpan disableInactivityWait = TimeSpan.Zero;
+
         public ActionSyncronizer sync;
         public GlobalHost host;
 
@@ -79,7 +83,7 @@ namespace ServerClient
         public Aggregator(IPAddress myIP)
         {
             sync = new ActionSyncronizer();
-            host = new GlobalHost(sync.GetProxy(), myIP);
+            host = new GlobalHost(sync.GetProxy(), myIP, sync.TimedAction);
             myClient = new Client(host, this);
         }
 

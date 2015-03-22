@@ -143,7 +143,7 @@ namespace ServerClient
             info = info_;
 
             myHost = globalHost.NewHost(info.validatorHost.hostname, Game.Convert(AssignProcessor),
-                BasicInfo.GenerateHandshake(NodeRole.PLAYER_VALIDATOR, info));
+                BasicInfo.GenerateHandshake(NodeRole.PLAYER_VALIDATOR, info), Aggregator.longInactivityWait);
             myHost.onNewConnectionHook = ProcessNewConnection;
         }
 
@@ -274,7 +274,7 @@ namespace ServerClient
             myClient = myClient_;
 
             myHost = globalHost.NewHost(info.playerHost.hostname, Game.Convert(AssignProcessor),
-                BasicInfo.GenerateHandshake(NodeRole.PLAYER_AGENT, info));
+                BasicInfo.GenerateHandshake(NodeRole.PLAYER_AGENT, info), Aggregator.longInactivityWait);
 
             myHost.ConnectAsync(info.validatorHost);
 
