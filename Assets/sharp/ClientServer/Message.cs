@@ -19,8 +19,6 @@ using Network;
 
 namespace ServerClient
 {
-
-
     [Serializable]
     public class ForwardFunctionCall
     {

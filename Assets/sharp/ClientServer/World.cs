@@ -596,18 +596,20 @@ namespace ServerClient
 
         HashSet<Guid> playerLocks = new HashSet<Guid>();
 
+        HashSet<OverlayEndpoint> subscribers = new HashSet<OverlayEndpoint>();
+
         public WorldValidator(WorldInfo info, WorldInitializer init, GlobalHost globalHost, OverlayEndpoint serverHost_)
         {
             serverHost = serverHost_;
 
             World newWorld = World.Generate(info, init);
 
-            Action<ForwardFunctionCall> onChange = (ffc) => myHost.BroadcastGroup(Client.hostName, MessageType.WORLD_VAR_CHANGE, ffc.Serialize());
+            Action<ForwardFunctionCall> onChange = RemoteFunctionForward;
             world = new ForwardProxy<World>(newWorld, onChange).GetProxy();
 
             myHost = globalHost.NewHost(info.host.hostname, Game.Convert(AssignProcessor),
                 BasicInfo.GenerateHandshake(NodeRole.WORLD_VALIDATOR, info), Aggregator.longInactivityWait);
-            myHost.onNewConnectionHook = ProcessNewConnection;
+            //myHost.onNewConnectionHook = ProcessNewConnection;
 
             newWorld.onLootHook = OnLootPickup;
             newWorld.onMoveHook = OnMoveHook;
@@ -618,7 +620,8 @@ namespace ServerClient
             NodeRole role = Serializer.Deserialize<NodeRole>(nodeInfo);
 
             if (role == NodeRole.CLIENT)
-                return (mt, stm, nd) => { throw new Exception(Log.StDump( n.info, mt, "not expecting messages")); };
+                return ProcessClientMessage;
+                //return (mt, stm, nd) => { throw new Exception(Log.StDump(n.info, mt, "not expecting messages")); };
 
             if (n.info.remote == serverHost)
                 return ProcessServerMessage;
@@ -645,18 +648,18 @@ namespace ServerClient
             throw new Exception(Log.StDump(n.info, role, "unexpected"));
         }
         
-        void ProcessNewConnection(Node n)
-        {
-            OverlayHostName remoteName = n.info.remote.hostname;
+        //void ProcessNewConnection(Node n)
+        //{
+        //    OverlayHostName remoteName = n.info.remote.hostname;
 
-            if (remoteName == Client.hostName)
-                OnNewClient(n);
-        }
+        //    if (remoteName == Client.hostName)
+        //        OnNewClient(n);
+        //}
 
-        void OnNewClient(Node n)
-        {
-            n.SendMessage(MessageType.WORLD_VAR_INIT, world.Serialize());
-        }
+        //void OnNewClient(Node n)
+        //{
+        //    n.SendMessage(MessageType.WORLD_VAR_INIT, world.Serialize());
+        //}
 
         void ProcessPlayerValidatorMessage(MessageType mt, Stream stm, Node n, PlayerInfo inf)
         {
@@ -750,6 +753,20 @@ namespace ServerClient
             else
                 throw new Exception(Log.StDump("unexpected", world.Info, mt));
         }
+        void ProcessClientMessage(MessageType mt, Stream stm, Node n)
+        {
+            if (mt == MessageType.SUBSCRIBE)
+            {
+                if(subscribers.Add(n.info.remote))
+                    n.SendMessage(MessageType.WORLD_VAR_INIT, world.Serialize());
+            }
+            else if (mt == MessageType.UNSUBSCRIBE)
+            {
+                subscribers.Remove(n.info.remote);
+            }
+            else
+                throw new Exception(Log.StDump("unexpected", world.Info, mt, n.info));
+        }
 
         void OnMoveHook(PlayerInfo inf, Point newPos, ActionValidity mv)
         {
@@ -760,7 +777,6 @@ namespace ServerClient
                 BoundaryRequest();
             }
         }
-
         void OnPlaceBlock(PlayerInfo player, Point currPos, Point blockPos)
         {
             ActionValidity v = world.CheckAction(player.id, blockPos) & ~ActionValidity.REMOTE;
@@ -876,7 +892,6 @@ namespace ServerClient
                     postProcess(Response.FAIL);
             }
         }
-        
         void OnRemotePlaceBlock(Point blockPos, Node n, Guid remoteActionId)
         {
             bool success = false;
@@ -1133,7 +1148,6 @@ namespace ServerClient
                     postProcess.Invoke(Response.FAIL);
             }
         }
-
         void RealmMoveIn(PlayerInfo player, Point newPos, Node n, Guid remoteActionId)
         {
             bool success = false;
@@ -1179,7 +1193,6 @@ namespace ServerClient
                     RemoteAction.Fail(n, remoteActionId);
             }
         }
-
         void OnValidateTeleport(PlayerInfo player, Point currPos, Point newPos)
         {
             ActionValidity v = world.CheckValidMove(player.id, newPos) & ~(ActionValidity.REMOTE | ActionValidity.BOUNDARY);
@@ -1233,7 +1246,6 @@ namespace ServerClient
                     }
                 });
         }
-
         void Teleport(PlayerInfo player, Point currPos, Point newPos, PlayerData pd, Action<Response> postProcess)
         {
             ActionValidity v = world.CheckValidMove(player.id, newPos) & ~(ActionValidity.REMOTE);
@@ -1274,7 +1286,6 @@ namespace ServerClient
                 postProcess.Invoke(Response.SUCCESS);
             }
         }
-
         void OnLootPickup(PlayerInfo inf)
         {
             myHost.ConnectSendMessage(inf.validatorHost, MessageType.PICKUP_TELEPORT);
@@ -1284,6 +1295,14 @@ namespace ServerClient
         {
             foreach (Point p in world.GetUnknownNeighbors())
                 myHost.ConnectSendMessage(serverHost, MessageType.NEW_WORLD_REQUEST, p);
+        }
+
+        void RemoteFunctionForward(ForwardFunctionCall ffc)
+        {
+            object[] ffc_ser = ffc.Serialize();
+            
+            foreach (OverlayEndpoint remote in subscribers)
+                myHost.SendMessage(remote, MessageType.WORLD_VAR_CHANGE, ffc_ser);
         }
     }
 }

@@ -72,7 +72,9 @@ namespace ServerClient
             if (w == null)
                 return false;
             
-            myHost.TryCloseNode(w.Info.host);
+            //myHost.TryCloseNode(w.Info.host);
+            myHost.SendMessage(w.Info.host, MessageType.UNSUBSCRIBE);
+            
             knownWorlds.Remove(worldPos);
             onDeleteWorldHook(w);
 
@@ -176,8 +178,11 @@ namespace ServerClient
             }
             else if (mt == MessageType.WORLD_VAR_CHANGE)
             {
-                ForwardFunctionCall ffc = ForwardFunctionCall.Deserialize(stm, typeof(World));
-                ffc.Apply(knownWorlds.GetValue(inf.position));
+                if (knownWorlds.ContainsKey(inf.position))
+                {
+                    ForwardFunctionCall ffc = ForwardFunctionCall.Deserialize(stm, typeof(World));
+                    ffc.Apply(knownWorlds.GetValue(inf.position));
+                }
             }
             else
                 throw new Exception(Log.StDump(mt, inf, "unexpected"));
@@ -226,7 +231,8 @@ namespace ServerClient
         {
             //gameInfo.AddWorld(inf);
             //Log.LogWriteLine("New world\n{0}", inf.GetFullInfo());
-            myHost.TryConnectAsync(inf.host);
+            //myHost.TryConnectAsync(inf.host);
+            myHost.ConnectSendMessage(inf.host, MessageType.SUBSCRIBE);
         }
         void OnNewWorldVar(WorldSerialized ws)
         {
