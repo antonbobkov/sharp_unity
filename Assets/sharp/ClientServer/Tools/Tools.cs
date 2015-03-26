@@ -139,6 +139,14 @@ namespace Tools
             }
         }
 
+        static public int NumberOfThreads()
+        {
+            lock (threads)
+                return (from ti in threads
+                        where (ti.thread.ThreadState & System.Threading.ThreadState.Stopped) != 0
+                        select ti).Count();
+        }
+
         static public void Terminate()
         {
             lock (threads)

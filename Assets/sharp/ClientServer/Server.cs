@@ -65,7 +65,7 @@ namespace ServerClient
         {
             myHost = globalHost.NewHost(Server.hostName, Game.Convert(AssignProcessor),
                 BasicInfo.GenerateHandshake(NodeRole.SERVER), Aggregator.shortInactivityWait);
-            myHost.onNewConnectionHook = ProcessNewConnection;
+            //myHost.onNewConnectionHook = ProcessNewConnection;
 
             //Action<ForwardFunctionCall> onChange = (ffc) => myHost.BroadcastGroup(Client.hostName, MessageType.GAME_INFO_VAR_CHANGE, ffc.Serialize());
             //gameInfo = new ForwardProxy<GameInfo>(new GameInfo(), onChange).GetProxy();
@@ -136,17 +136,17 @@ namespace ServerClient
                 throw new Exception(Log.StDump("unexpected", mt));
         }
 
-        void ProcessNewConnection(Node n)
-        {
-            OverlayHostName remoteName = n.info.remote.hostname;
+        //void ProcessNewConnection(Node n)
+        //{
+        //    OverlayHostName remoteName = n.info.remote.hostname;
 
-            if (remoteName == Client.hostName)
-                OnNewClient(n);
-        }
-        void OnNewClient(Node n)
-        {
-            //n.SendMessage(MessageType.GAME_INFO_VAR_INIT, gameInfo.Serialize());
-        }
+        //    if (remoteName == Client.hostName)
+        //        OnNewClient(n);
+        //}
+        //void OnNewClient(Node n)
+        //{
+        //    //n.SendMessage(MessageType.GAME_INFO_VAR_INIT, gameInfo.Serialize());
+        //}
 
         void OnNewPlayerRequest(Guid playerId, OverlayEndpoint playerClient)
         {

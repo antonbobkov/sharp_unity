@@ -131,6 +131,11 @@ namespace Tools
                 fs.Write(s);
         }
     }
+    class DummyLog : ILog
+    {
+        public DummyLog(int logLevel_arg) : base(logLevel_arg) { }
+        public override void LogWrite(string s) { }
+    }
 
     class UTIL_Logger
     {
@@ -141,6 +146,9 @@ namespace Tools
         {
             lock (locker)
             {
+                if (LogLevel < 0)
+                    return new DummyLog(LogLevel);
+                
                 string path = CombinePaths(folders);
                 path = System.IO.Path.Combine(Path, path);
 

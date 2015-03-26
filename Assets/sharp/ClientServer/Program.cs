@@ -163,8 +163,10 @@ namespace ServerClient
 
             inputProc.commands.Add("status", (param) =>
             {
-                if (all.myServer != null)
-                    all.myServer.PrintStats();
+                //if (all.myServer != null)
+                //    all.myServer.PrintStats();
+
+                Log.Console("Hosts: {0} Nodes: {1} Threads: {2}", all.host.CountHosts(), all.host.CountConnectedNodes(), ThreadManager.NumberOfThreads());
             });
             
             inputProc.commands.Add("exit", (param) =>

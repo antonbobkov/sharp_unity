@@ -2,12 +2,12 @@
 <GameConfig xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
   <startServer>true</startServer>
   <serverConfig>
-    <validate>false</validate>
+    <validate>true</validate>
     <aiPlayers>0</aiPlayers>
   </serverConfig>
   <clientConfig>
     <validate>true</validate>
-    <aiPlayers>0</aiPlayers>
+    <aiPlayers>5</aiPlayers>
   </clientConfig>
   <meshIPs>
     <string>default</string>

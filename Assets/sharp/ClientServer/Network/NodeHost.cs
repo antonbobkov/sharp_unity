@@ -117,6 +117,16 @@ namespace Network
         //{
         //    Log.EntryConsole
         //}
+
+        public int CountHosts()
+        {
+            return hosts.Count();
+        }
+
+        public int CountConnectedNodes()
+        {
+            return hosts.Values.Sum(n => n.CountConnectedNodes());
+        }
     }
 
     class OverlayHost
@@ -396,6 +406,16 @@ namespace Network
         {
             MyAssert.Assert(FindNode(n.info.remote) != null);
             nodes.Remove(n.info.remote);
+        }
+
+        public int CountConnectedNodes()
+        {
+            return (from n in nodes.Values
+                    where n.IsConnected()
+                    select n).Count();
+
+            //return nodes.Values.Where(n => n.IsConnected()).Count();
+                    
         }
     }
 }
