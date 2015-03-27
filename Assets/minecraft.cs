@@ -30,6 +30,33 @@ class WorldDraw
 	public Plane<GameObject> loots;
     public Dictionary<Guid, GameObject> players = new Dictionary<Guid, GameObject>();
 
+    private HashSet<GameObject> teleportAnimations = new HashSet<GameObject>();
+    public void TickAnimations(float deltaTime)
+    {
+        foreach (var k in teleportAnimations.ToArray())
+        {
+            float change = deltaTime*2;
+            k.transform.localScale -= change * Vector3.one;
+            if (k.transform.localScale.x <= 0)
+            {
+                teleportAnimations.Remove(k);
+                UnityEngine.Object.Destroy(k);
+                //Log.Console("done");
+            }
+        }
+    }
+
+    public void NewTeleportAnimation(Vector3 pos)
+    {
+        var avatar = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        avatar.renderer.material.color = Color.blue;
+        avatar.transform.position = pos;// minecraft.GetPositionAtGrid(w.Position, pos);
+
+        //Log.Console(avatar.transform.localScale.ToString());
+
+        teleportAnimations.Add(avatar);
+    }
+
 	public void MessBackground()
     {
         //background.transform.rotation = Quaternion.AngleAxis(2f, UnityEngine.Random.onUnitSphere);
@@ -41,6 +68,8 @@ class WorldDraw
 		w = w_;
         main = main_;
         sz = w.Size;
+
+        bool isOwnedByUs = main.all.worldValidators.ContainsKey(w.Position);
 
         w.onChangeBlock = (pos, placed) => { if (placed) PlaceBlock(pos); else RemoveBlock(pos); };
 
@@ -70,7 +99,10 @@ class WorldDraw
 		background = GameObject.CreatePrimitive(PrimitiveType.Quad);
 		background.transform.localScale = new Vector3(sz.x, sz.y, 1);
 		background.transform.position = minecraft.GetPositionAtGrid(w.Position, new Point(0,0)) + new Vector3(sz.x-1, sz.y-1, 1)/2;
-		background.renderer.material.color = new Color(.7f, .7f, .7f);
+		if(isOwnedByUs)
+            background.renderer.material.color = new Color(.6f, .6f, .6f);
+        else
+            background.renderer.material.color = new Color(.7f, .7f, .7f);
 
         if (!continuousBackground)
             MessBackground();
@@ -161,7 +193,7 @@ class WorldDraw
 
 public class minecraft : MonoBehaviour {
 
-    Aggregator all;
+    internal Aggregator all;
 
     //bool gameStarted = false;
 
@@ -369,6 +401,11 @@ public class minecraft : MonoBehaviour {
 		}
 
         GameObject movedPlayer = wd.players.GetValue(player.id);
+
+        if ((mv & ActionValidity.REMOTE) != ActionValidity.VALID)
+            //if (movedPlayer.transform.position != GetPositionAtGrid(w.Position, newPos))
+            wd.NewTeleportAnimation(movedPlayer.transform.position);
+
         movedPlayer.transform.position = GetPositionAtGrid(w.Position, newPos);
 
         if (player.id == me)
@@ -529,5 +566,8 @@ public class minecraft : MonoBehaviour {
             }
             //camera.transform.rotation *= Quaternion.AngleAxis(Time.deltaTime * 1, Vector3.forward);
         }
+
+        foreach (var w in worlds.Values)
+            w.TickAnimations(Time.deltaTime);
 	}
 }

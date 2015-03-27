@@ -46,3 +46,5 @@ sharpunity.sln
 Logs/
 Assets/sharp/ClientServer/bin/
 Assets/sharp/ClientServer/ServerClient.sdf
+NetworkingGame-csharp.sln
+NetworkingGame.sln
