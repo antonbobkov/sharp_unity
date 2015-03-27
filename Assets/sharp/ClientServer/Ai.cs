@@ -56,8 +56,8 @@ namespace ServerClient
 
         static int PlayerAiMove(Aggregator all, Guid playerId)
         {
-            int longSleep = 1000 * 2;
-            int shortSleep = 750;
+            int longSleep = 2;
+            int shortSleep = 1;
 
             Client myClient = all.myClient;
 
@@ -124,20 +124,45 @@ namespace ServerClient
             return shortSleep;
         }
 
-        public static void StartPlayerAiThread(Aggregator all, Guid playerId)
+        static private Dictionary<Guid, int> timings = null;
+
+        static private void Tick(Aggregator all)
         {
-            ThreadManager.NewThread(() =>
+            foreach(var id in timings.Keys.ToArray())
             {
-                while (true)
+                timings[id]--;
+
+                if (timings[id] <= 0)
                 {
-                    int sleepTime;
-
-                    lock (all.sync.syncLock)
-                        sleepTime = PlayerAiMove(all, playerId);
-
-                    Thread.Sleep(sleepTime);
+                    int timeout = PlayerAiMove(all, id);
+                    MyAssert.Assert(timeout > 0 && timeout < 10);
+                    timings[id] = timeout;
                 }
-            }, () => { }, "Ai for player " + playerId);
+            }
+        }
+
+        public static void StartPlayerAi(Aggregator all, Guid playerId)
+        {
+            if (timings == null)
+            {
+                timings = new Dictionary<Guid, int>();
+                all.sync.TimedAction.AddAction(() => Tick(all));
+            }
+
+            timings.Add(playerId, 0);
+
+            //ThreadManager.NewThread(() =>
+            //{
+            //    while (true)
+            //    {
+            //        int sleepTime;
+
+            //        lock (all.sync.syncLock)
+            //            sleepTime = PlayerAiMove(all, playerId);
+
+            //        Thread.Sleep(sleepTime);
+            //    }
+            //}, () => { }, "Ai for player " + playerId);
 
         }
     }

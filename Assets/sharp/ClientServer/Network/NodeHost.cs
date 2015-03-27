@@ -179,7 +179,7 @@ namespace Network
                 {
                     if (timeNow.Subtract(n.LastUsed) > inactivityPeriod)
                     {
-                        Log.Console(hostName + " -> " + n.info.remote.hostname + " disconnecting due to inactivity");
+                        Log.EntryVerbose(log, n.info.remote + " disconnecting due to inactivity");
 
                         n.UpdateUseTime();
                         n.SoftDisconnect();

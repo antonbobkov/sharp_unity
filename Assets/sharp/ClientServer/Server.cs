@@ -154,7 +154,10 @@ namespace ServerClient
             
             Guid actionId = Guid.NewGuid();
             string name = PlayerNameMap(playerCounter++);
-            
+
+            if (!validatorPool.Any())
+                throw new Exception("no validators!");
+
             OverlayEndpoint validatorHost = new OverlayEndpoint(validatorPool.Random(n => r.Next(n)), new OverlayHostName("validator player " + name));
 
             OverlayEndpoint playerNewHost = new OverlayEndpoint(playerClient.addr, new OverlayHostName("agent player " + name));
@@ -210,6 +213,9 @@ namespace ServerClient
             if (worldsInProgress.Contains(worldPos))
                 return;
             worldsInProgress.Add(worldPos);
+
+            if (!validatorPool.Any())
+                throw new Exception("no validators!");
             
             Guid validatorId = Guid.NewGuid();
             OverlayEndpoint validatorHost = new OverlayEndpoint(validatorPool.Random(n => r.Next(n)), new OverlayHostName("host world " + worldPos));

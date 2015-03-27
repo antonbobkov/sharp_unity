@@ -76,7 +76,7 @@ namespace ServerClient
             Guid newPlayer = Guid.NewGuid();
 
             all.myClient.NewMyPlayer(newPlayer);
-            Ai.StartPlayerAiThread(all, newPlayer);
+            Ai.StartPlayerAi(all, newPlayer);
 
             return newPlayer;
         }
