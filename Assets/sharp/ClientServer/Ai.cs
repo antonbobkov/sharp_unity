@@ -82,7 +82,7 @@ namespace ServerClient
 
             World playerWorld = myClient.knownWorlds.GetValue(playerData.WorldPosition);
 
-            if (playerData.inventory.teleport > 0 && rand.NextDouble() < .01)
+            if (playerData.inventory.teleport > 0 && rand.NextDouble() < .1)
             {
                 Point teleportRange = Point.Zero; // internal teleport
                 

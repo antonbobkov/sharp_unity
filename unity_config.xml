@@ -6,7 +6,7 @@
     <aiPlayers>0</aiPlayers>
   </serverConfig>
   <clientConfig>
-    <validate>true</validate>
+    <validate>false</validate>
     <aiPlayers>0</aiPlayers>
   </clientConfig>
   <meshIPs>

@@ -33,10 +33,11 @@ class WorldDraw
     private HashSet<GameObject> teleportAnimations = new HashSet<GameObject>();
     public void TickAnimations(float deltaTime)
     {
+        Vector3 change = deltaTime * 2 * Vector3.one;
+
         foreach (var k in teleportAnimations.ToArray())
         {
-            float change = deltaTime*2;
-            k.transform.localScale -= change * Vector3.one;
+            k.transform.localScale -= change;
             if (k.transform.localScale.x <= 0)
             {
                 teleportAnimations.Remove(k);
@@ -44,12 +45,20 @@ class WorldDraw
                 //Log.Console("done");
             }
         }
+
+        foreach (var k in players.Values)
+        {
+            if(k.transform.localScale.x < 1)
+                k.transform.localScale += change;
+            if (k.transform.localScale.x > 1)
+                k.transform.localScale = Vector3.one;
+        }
     }
 
-    public void NewTeleportAnimation(Vector3 pos)
+    public void NewTeleportAnimation(Vector3 pos, Color c)
     {
         var avatar = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-        avatar.renderer.material.color = Color.blue;
+        avatar.renderer.material.color = c;
         avatar.transform.position = pos;// minecraft.GetPositionAtGrid(w.Position, pos);
 
         //Log.Console(avatar.transform.localScale.ToString());
@@ -388,6 +397,8 @@ public class minecraft : MonoBehaviour {
         if (!worlds.ContainsKey(w.Position))
             return;
 
+        bool teleported = (mv & ActionValidity.REMOTE) != ActionValidity.VALID;
+
         WorldDraw wd = worlds.GetValue(w.Position);
 
         if (mv == ActionValidity.NEW)
@@ -402,11 +413,14 @@ public class minecraft : MonoBehaviour {
 
         GameObject movedPlayer = wd.players.GetValue(player.id);
 
-        if ((mv & ActionValidity.REMOTE) != ActionValidity.VALID)
+        if (teleported)
             //if (movedPlayer.transform.position != GetPositionAtGrid(w.Position, newPos))
-            wd.NewTeleportAnimation(movedPlayer.transform.position);
+            wd.NewTeleportAnimation(movedPlayer.transform.position, movedPlayer.renderer.material.color);
 
         movedPlayer.transform.position = GetPositionAtGrid(w.Position, newPos);
+
+        if (teleported)
+            movedPlayer.transform.localScale = Vector3.one * .1f;
 
         if (player.id == me)
             UpdateCamera(movedPlayer);
