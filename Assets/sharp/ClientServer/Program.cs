@@ -81,14 +81,10 @@ namespace ServerClient
             return newPlayer;
         }
 
-        //static public void dostuff(byte b) { }
-
         static void Main(string[] args)
         {
             //Serializer.Test();
             //DisposeHandle.Test();
-
-            //dostuff(MessageType.ACCEPT);
 
             MasterLog.Initialize("log_config.xml", (msg) => Console.WriteLine(msg));
 
@@ -163,12 +159,14 @@ namespace ServerClient
 
             inputProc.commands.Add("status", (param) =>
             {
-                //if (all.myServer != null)
-                //    all.myServer.PrintStats();
-
-                Log.Console("Hosts: {0} Nodes: {1} Threads: {2}", all.host.CountHosts(), all.host.CountConnectedNodes(), ThreadManager.NumberOfThreads());
+                Log.Console(all.GetStats());
             });
-            
+
+            inputProc.commands.Add("threads", (param) =>
+            {
+                Log.Console(ThreadManager.Status());
+            });
+
             inputProc.commands.Add("exit", (param) =>
             {
                 all.host.Close();

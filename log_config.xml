@@ -1,16 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LogConfig xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
-  <logLevel>1</logLevel>
-  <logConfigList>
-    <LogConfigEntry>
-      <name>network</name>
-      <logLevel>error</logLevel>
-      <output>console</output>
-    </LogConfigEntry>
-    <LogConfigEntry>
-      <name>world</name>
-      <logLevel>normal</logLevel>
-      <output>world</output>
-    </LogConfigEntry>
-  </logConfigList>
+  <rootName>C:\Users\Anton\Projects\network logs\Unity Logs</rootName>
+  <logLevel>0</logLevel>
+  <logConfigList />
 </LogConfig>

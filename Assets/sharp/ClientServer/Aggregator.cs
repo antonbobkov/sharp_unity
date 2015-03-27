@@ -85,6 +85,9 @@ namespace ServerClient
             sync = new ActionSyncronizer();
             host = new GlobalHost(sync.GetProxy(), myIP, sync.TimedAction);
             myClient = new Client(host, this);
+
+            ILog statsLog = MasterLog.GetFileLog("stats.log");
+            sync.TimedAction.AddAction(() => Log.EntryNormal(statsLog, this.GetStats()));
         }
 
         public static IPEndPoint ParseParamForIP(List<string> param, IPAddress defaultIP)
@@ -151,6 +154,14 @@ namespace ServerClient
         {
             foreach (Guid id in myClient.myPlayerAgents)
                 playerAgents.GetValue(id).Spawn();
+        }
+
+        public string GetStats()
+        {
+            return new StringBuilder().AppendFormat("Hosts: {0, -2} (W {1, -2} P {2, -2} A {3, -2}) Active nodes: {4, -2} Threads: {5, -2}",
+                    host.CountHosts(), worldValidators.Count(), playerValidators.Count(), playerAgents.Count(),
+                    host.CountConnectedNodes(), ThreadManager.NumberOfThreads()).ToString();
+
         }
     }
 }

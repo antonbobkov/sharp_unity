@@ -237,7 +237,7 @@ namespace Tools
     public class LogConfig
     {
         public string rootName = "Logs";
-        public int logLevel = 1;
+        public int logLevel = -1;
         public List<LogConfigEntry> logConfigList = new List<LogConfigEntry>();
     }
 

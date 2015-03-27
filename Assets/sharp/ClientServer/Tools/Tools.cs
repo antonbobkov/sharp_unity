@@ -110,10 +110,17 @@ namespace Tools
 
         static ILog threadLog = MasterLog.GetFileLog("Threads.log");
 
+        static private void CleanUpThreads()
+        {
+            threads.RemoveAll(ti => (ti.thread.ThreadState & System.Threading.ThreadState.Stopped) != 0);
+        }
+
         static public void NewThread(ThreadStart threadFunction, Action terminate, string name)
         {
             lock (threads)
             {
+                CleanUpThreads();
+                
                 ThreadInfo ti = new ThreadInfo() { thread = new Thread(threadFunction), terminate = terminate, name = name };
                 Log.EntryNormal(threadLog, "New Thread: " + name);
                 ti.thread.Start();
@@ -126,14 +133,12 @@ namespace Tools
         {
             lock (threads)
             {
+                CleanUpThreads();
+
                 StringBuilder sb = new StringBuilder();
 
                 foreach (ThreadInfo ti in threads)
-                {
-                    if ( (ti.thread.ThreadState & System.Threading.ThreadState.Stopped) != 0)
-                        continue;
                     sb.AppendFormat("Thread \"{0}\": status {1}\n", ti.name, ti.thread.ThreadState);
-                }
 
                 return sb.ToString();
             }
@@ -142,19 +147,20 @@ namespace Tools
         static public int NumberOfThreads()
         {
             lock (threads)
-                return (from ti in threads
-                        where (ti.thread.ThreadState & System.Threading.ThreadState.Stopped) != 0
-                        select ti).Count();
+            {
+                CleanUpThreads();
+                return threads.Count();
+            }
         }
 
         static public void Terminate()
         {
             lock (threads)
             {
+                CleanUpThreads();
+
                 foreach (ThreadInfo ti in threads)
                 {
-                    if ((ti.thread.ThreadState & System.Threading.ThreadState.Stopped) != 0)
-                        continue;
                     Log.EntryError(threadLog, "Terminating " + ti.name);
                     ti.terminate.Invoke();
                 }

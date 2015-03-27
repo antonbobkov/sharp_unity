@@ -43,7 +43,6 @@ Assembly-CSharp-vs.csproj
 Assembly-CSharp.csproj
 sharpunity-csharp.sln
 sharpunity.sln
-Assets/sharp/ClientServer/bin/Debug/Logs/
 Logs/
 Assets/sharp/ClientServer/bin/
 Assets/sharp/ClientServer/ServerClient.sdf
