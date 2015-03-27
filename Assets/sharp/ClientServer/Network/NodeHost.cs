@@ -228,8 +228,8 @@ namespace Network
                 if (newConnection)
                     onNewConnectionHook.Invoke(targetNode);
 
-                if (targetNode.writerStatus == Node.WriteStatus.READY)
-                    targetNode.ConnectAsync();
+                //if (targetNode.writerStatus == Node.WriteStatus.READY)
+                //    targetNode.ConnectAsync();
             }
             catch (NodeException) // FIXME
             {

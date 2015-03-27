@@ -350,7 +350,7 @@ namespace Network
             reader = null;
             readerStatus = ReadStatus.READY;
 
-            SoftDisconnect();
+            //SoftDisconnect();
         }
         
         private void OnSoftDisconnectWriter()
