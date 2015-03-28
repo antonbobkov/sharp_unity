@@ -323,16 +323,20 @@ namespace ServerClient
         }
 
         // ----- modifiers -----
-        [Forward] public void NET_AddPlayer(PlayerInfo player, Point pos)
+        [Forward] public void NET_AddPlayer(PlayerInfo player, Point pos, bool teleporting)
         {
             MyAssert.Assert(!playerPositions.ContainsKey(player.id));
             MyAssert.Assert(!playerInformation.ContainsKey(player.id));
 
             playerInformation.Add(player.id, player);
 
-            NET_Move(player.id, pos, ActionValidity.NEW);
+            ActionValidity av = ActionValidity.NEW;
+            if (teleporting)
+                av |= ActionValidity.REMOTE;
+
+            NET_Move(player.id, pos, av);
         }
-        [Forward] public void NET_RemovePlayer(Guid player)
+        [Forward] public void NET_RemovePlayer(Guid player, bool teleporting)
         {
             Point pos = playerPositions.GetValue(player);
             MyAssert.Assert(map[pos].PlayerId == player);
@@ -343,13 +347,13 @@ namespace ServerClient
             playerPositions.Remove(player);
             playerInformation.Remove(player);
 
-            onPlayerLeaveHook(inf);
+            onPlayerLeaveHook(inf, teleporting);
         }
         [Forward] public void NET_Move(Guid player, Point newPos, ActionValidity mv)
         {
             PlayerInfo p = playerInformation.GetValue(player);
 
-            if (mv != ActionValidity.NEW)
+            if (!mv.Has(ActionValidity.NEW))
             {
                 Point curPos = playerPositions.GetValue(player);
 
@@ -412,7 +416,7 @@ namespace ServerClient
         // ----- hooks -----
         public Action<PlayerInfo> onLootHook = (info) => { };
         public Action<PlayerInfo, Point, ActionValidity> onMoveHook = (a, b, c) => { };
-        public Action<PlayerInfo> onPlayerLeaveHook = (a) => { };
+        public Action<PlayerInfo, bool> onPlayerLeaveHook = (a, b) => { };
         public Action<WorldInfo> onNeighbor = (a) => { };
         public Action<Point, bool> onChangeBlock = (a, b) => { };
 
@@ -676,7 +680,8 @@ namespace ServerClient
                 Guid remoteActionId = Serializer.Deserialize<Guid>(stm);
                 PlayerInfo player = Serializer.Deserialize<PlayerInfo>(stm);
                 Point newPos = Serializer.Deserialize<Point>(stm);
-                RealmMoveIn(player, newPos, n, remoteActionId);
+                bool teleporting = Serializer.Deserialize<bool>(stm);
+                RealmMoveIn(player, newPos, teleporting, n, remoteActionId);
             }
             else if (mt == MessageType.TAKE_BLOCK)
             {
@@ -770,11 +775,9 @@ namespace ServerClient
         void OnMoveHook(PlayerInfo inf, Point newPos, ActionValidity mv)
         {
             //Log.Dump(inf, newPos, mv);
-            
-            if (mv == ActionValidity.NEW)
-            {
+
+            if (mv.Has(ActionValidity.NEW))
                 BoundaryRequest();
-            }
         }
         void OnPlaceBlock(PlayerInfo player, Point currPos, Point blockPos)
         {
@@ -999,7 +1002,7 @@ namespace ServerClient
 
                             Point spawnPos = spawn.Random((n) => rand.Next(n));
 
-                            world.NET_AddPlayer(player, spawnPos);
+                            world.NET_AddPlayer(player, spawnPos, true);
                             //myHost.BroadcastGroup(Client.hostName, MessageType.PLAYER_JOIN, player.id, spawnPos);
                             //myHost.ConnectSendMessage(player.validatorHost, MessageType.PLAYER_WORLD_MOVE, WorldMove.JOIN);
 
@@ -1064,7 +1067,7 @@ namespace ServerClient
                                 myHost.ConnectSendMessage(player.validatorHost, MessageType.UNLOCK_VAR, Response.FAIL, remoteLockId);
                         };
 
-                        RealmMoveOut(player, newPos, pd, postProcess);
+                        RealmMoveOut(player, newPos, pd, false, postProcess);
                     }
                     else
                     {
@@ -1103,7 +1106,7 @@ namespace ServerClient
             return targetRealm.Value;
         }
         
-        void RealmMoveOut(PlayerInfo player, Point newPos, PlayerData pd, Action<Response> postProcess)
+        void RealmMoveOut(PlayerInfo player, Point newPos, PlayerData pd, bool teleporting, Action<Response> postProcess)
         {
             bool success = false;
 
@@ -1116,14 +1119,14 @@ namespace ServerClient
                 ManualLock<Guid> lck = new ManualLock<Guid>(playerLocks, player.id);
 
                 RemoteAction
-                    .Send(myHost, targetRealm.host, MessageType.REALM_MOVE, player, newPos)
+                    .Send(myHost, targetRealm.host, MessageType.REALM_MOVE, player, newPos, teleporting)
                     .Respond(remoteActions, lck, (res, stm) =>
                     {
                         if (res == Response.SUCCESS)
                         {
                             //Log.LogWriteLine(Log.StDump(world.info, player, currentRealmPos, targetRealmPos, newPos, "realm move success"));
 
-                            world.NET_RemovePlayer(player.id);
+                            world.NET_RemovePlayer(player.id, teleporting);
 
                             pd.world = targetRealm;
                         }
@@ -1147,7 +1150,7 @@ namespace ServerClient
                     postProcess.Invoke(Response.FAIL);
             }
         }
-        void RealmMoveIn(PlayerInfo player, Point newPos, Node n, Guid remoteActionId)
+        void RealmMoveIn(PlayerInfo player, Point newPos, bool teleporting, Node n, Guid remoteActionId)
         {
             bool success = false;
 
@@ -1179,7 +1182,7 @@ namespace ServerClient
                     return;
                 }
 
-                world.NET_AddPlayer(player, newPos);
+                world.NET_AddPlayer(player, newPos, teleporting);
                 //myHost.ConnectSendMessage(player.validatorHost, MessageType.PLAYER_WORLD_MOVE, WorldMove.JOIN);
 
                 success = true;
@@ -1255,7 +1258,7 @@ namespace ServerClient
                 {
                     //Log.Dump("Realm teleport request", world.info, player, v, currPos, newPos);
 
-                    RealmMoveOut(player, newPos, pd, (res) =>
+                    RealmMoveOut(player, newPos, pd, true, (res) =>
                     {
                         if (res == Response.SUCCESS)
                         {

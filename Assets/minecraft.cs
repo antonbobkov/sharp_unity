@@ -160,13 +160,18 @@ class WorldDraw
             main.UpdateCamera(avatar);
     }
 
-    public void RemovePlayer(Guid player)
+    public void RemovePlayer(Guid player, bool teleporting)
     {
         if (!players.ContainsKey(player))
             return;
 
+        GameObject avatar = players.GetValue(player);
+
+        if (teleporting)
+            NewTeleportAnimation(avatar.transform.position, avatar.renderer.material.color);
+
         //MyAssert.Assert(w.playerPositions.ContainsKey(player));
-        UnityEngine.Object.Destroy(players.GetValue(player));
+        UnityEngine.Object.Destroy(avatar);
 		players.Remove(player);
     }
 
@@ -290,7 +295,7 @@ public class minecraft : MonoBehaviour {
 		};
 
         all.myClient.onMoveHook = (w, pl, pos, mt) => OnMove(w, pl, pos, mt);
-        all.myClient.onPlayerLeaveHook = (w, pl) => OnPlayerLeave(w.Position, pl);
+        all.myClient.onPlayerLeaveHook = (w, pl, tel) => OnPlayerLeave(w.Position, pl, tel);
 
         all.myClient.onNewWorldHook = (w) => OnNewWorld(w);
         all.myClient.onDeleteWorldHook = (w) => OnDeleteWorld(w);
@@ -380,11 +385,11 @@ public class minecraft : MonoBehaviour {
         UpdateWorlds();
     }
 
-    void OnPlayerLeave(Point worldPos, PlayerInfo player)
+    void OnPlayerLeave(Point worldPos, PlayerInfo player, bool teleporing)
     {
         WorldDraw worldDraw = worlds.TryGetValue(worldPos);
         if (worldDraw != null)
-            worldDraw.RemovePlayer(player.id);
+            worldDraw.RemovePlayer(player.id, teleporing);
     }
 
     void OnMove(World w, PlayerInfo player, Point newPos, ActionValidity mv)
@@ -397,11 +402,11 @@ public class minecraft : MonoBehaviour {
         if (!worlds.ContainsKey(w.Position))
             return;
 
-        bool teleported = (mv & ActionValidity.REMOTE) != ActionValidity.VALID;
+        bool teleported = mv.Has(ActionValidity.REMOTE);
 
         WorldDraw wd = worlds.GetValue(w.Position);
 
-        if (mv == ActionValidity.NEW)
+        if (mv.Has(ActionValidity.NEW))
             wd.AddPlayer(player.id);
 
         GameObject obj = wd.loots[newPos];
@@ -413,7 +418,7 @@ public class minecraft : MonoBehaviour {
 
         GameObject movedPlayer = wd.players.GetValue(player.id);
 
-        if (teleported)
+        if (teleported && !mv.Has(ActionValidity.NEW))
             //if (movedPlayer.transform.position != GetPositionAtGrid(w.Position, newPos))
             wd.NewTeleportAnimation(movedPlayer.transform.position, movedPlayer.renderer.material.color);
 

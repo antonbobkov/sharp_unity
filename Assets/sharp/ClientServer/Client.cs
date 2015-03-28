@@ -91,7 +91,7 @@ namespace ServerClient
         public Action<PlayerInfo> onNewMyPlayerHook = (a) => { };
 
         public Action<World, PlayerInfo, Point, ActionValidity> onMoveHook = (a, b, c, d) => { };
-        public Action<World, PlayerInfo> onPlayerLeaveHook = (a, b) => { };
+        public Action<World, PlayerInfo, bool> onPlayerLeaveHook = (a, b, c) => { };
         
         public Client(GlobalHost globalHost, Aggregator all_)
         {
@@ -240,7 +240,7 @@ namespace ServerClient
             
             knownWorlds.Add(w.Position, w);
             w.onMoveHook = (player, pos, mv) => onMoveHook(w, player, pos, mv);
-            w.onPlayerLeaveHook = (player) => onPlayerLeaveHook(w, player);
+            w.onPlayerLeaveHook = (player, tel) => onPlayerLeaveHook(w, player, tel);
 
             onNewWorldHook(w);
 

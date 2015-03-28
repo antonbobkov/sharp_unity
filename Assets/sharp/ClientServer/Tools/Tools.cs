@@ -18,11 +18,11 @@ namespace Tools
             IPHostEntry localDnsEntry = null;
 
             if (localDnsEntry == null)
-                try { localDnsEntry = Dns.GetHostEntry(string.Empty); }
+                try { localDnsEntry = Dns.GetHostEntry(Dns.GetHostName()); }
                 catch (Exception) { }
 
             if (localDnsEntry == null)
-                try { localDnsEntry = Dns.GetHostEntry(Dns.GetHostName()); }
+                try { localDnsEntry = Dns.GetHostEntry(string.Empty); }
                 catch (Exception) { }
 
             if (localDnsEntry == null)
@@ -274,5 +274,67 @@ namespace Tools
             if (handle != null)
                 handle.Dispose();
         }
+    }
+
+    public static class EnumerationExtensions
+    {
+        public static bool Has<T>(this System.Enum type, T value)
+        {
+            try
+            {
+                return (((int)(object)type & (int)(object)value) == (int)(object)value);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        public static bool Is<T>(this System.Enum type, T value)
+        {
+            try
+            {
+                return (int)(object)type == (int)(object)value;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+
+        public static T Add<T>(this System.Enum type, T value)
+        {
+            try
+            {
+                return (T)(object)(((int)(object)type | (int)(object)value));
+            }
+            catch (Exception ex)
+            {
+                throw new ArgumentException(
+                    string.Format(
+                        "Could not append value from enumerated type '{0}'.",
+                        typeof(T).Name
+                        ), ex);
+            }
+        }
+
+
+        public static T Remove<T>(this System.Enum type, T value)
+        {
+            try
+            {
+                return (T)(object)(((int)(object)type & ~(int)(object)value));
+            }
+            catch (Exception ex)
+            {
+                throw new ArgumentException(
+                    string.Format(
+                        "Could not remove value from enumerated type '{0}'.",
+                        typeof(T).Name
+                        ), ex);
+            }
+        }
+
     }
 }
