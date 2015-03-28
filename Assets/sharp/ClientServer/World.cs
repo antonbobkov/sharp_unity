@@ -604,8 +604,7 @@ namespace ServerClient
 
             World newWorld = World.Generate(info, init);
 
-            Action<ForwardFunctionCall> onChange = RemoteFunctionForward;
-            world = new ForwardProxy<World>(newWorld, onChange).GetProxy();
+            world = new ForwardProxy<World>(newWorld, RemoteFunctionForward).GetProxy();
 
             myHost = globalHost.NewHost(info.host.hostname, Game.Convert(AssignProcessor),
                 BasicInfo.GenerateHandshake(NodeRole.WORLD_VALIDATOR, info), Aggregator.longInactivityWait);
