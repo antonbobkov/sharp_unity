@@ -126,6 +126,7 @@ namespace Network
     abstract class NetworkMessage
     {
         public MemoryStream ms = null;
+        public TimeSpan delay = TimeSpan.Zero;
 
         public abstract void LogData(ILog l);
     }
@@ -184,6 +185,7 @@ namespace Network
                 ConnectAsync();
 
             SocketWriterMessage swm = new SocketWriterMessage(nm.ms);
+            swm.delay = nm.delay;
 
             //string sentMsg = nm.ToString();
             //if (MasterFileLog.LogLevel > 2)

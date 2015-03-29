@@ -596,7 +596,8 @@ namespace ServerClient
 
         OverlayEndpoint serverHost;
 
-        Dictionary<Guid, RemoteAction> remoteActions = new Dictionary<Guid,RemoteAction>();
+        RemoteActionRepository remoteActions = new RemoteActionRepository();
+        bool finalizing = false;
 
         HashSet<Guid> playerLocks = new HashSet<Guid>();
 
@@ -651,19 +652,6 @@ namespace ServerClient
             throw new Exception(Log.StDump(n.info, role, "unexpected"));
         }
         
-        //void ProcessNewConnection(Node n)
-        //{
-        //    OverlayHostName remoteName = n.info.remote.hostname;
-
-        //    if (remoteName == Client.hostName)
-        //        OnNewClient(n);
-        //}
-
-        //void OnNewClient(Node n)
-        //{
-        //    n.SendMessage(MessageType.WORLD_VAR_INIT, world.Serialize());
-        //}
-
         void ProcessPlayerValidatorMessage(MessageType mt, Stream stm, Node n, PlayerInfo inf)
         {
             if (mt == MessageType.RESPONSE)
@@ -678,20 +666,37 @@ namespace ServerClient
             else if (mt == MessageType.REALM_MOVE)
             {
                 Guid remoteActionId = Serializer.Deserialize<Guid>(stm);
+
+                if (finalizing)
+                {
+                    RemoteAction.Fail(n, remoteActionId);
+                    return;
+                }
+
                 PlayerInfo player = Serializer.Deserialize<PlayerInfo>(stm);
                 Point newPos = Serializer.Deserialize<Point>(stm);
                 bool teleporting = Serializer.Deserialize<bool>(stm);
                 RealmMoveIn(player, newPos, teleporting, n, remoteActionId);
             }
-            else if (mt == MessageType.TAKE_BLOCK)
+            else if (mt == MessageType.REMOTE_TAKE_BLOCK)
             {
+                if (finalizing)
+                    return;
+
                 PlayerInfo player = Serializer.Deserialize<PlayerInfo>(stm);
                 Point blockPos = Serializer.Deserialize<Point>(stm);
                 TryRemoveBlock(player, blockPos);
             }
-            else if (mt == MessageType.PLACE_BLOCK)
+            else if (mt == MessageType.REMOTE_PLACE_BLOCK)
             {
                 Guid remoteActionId = Serializer.Deserialize<Guid>(stm);
+
+                if (finalizing)
+                {
+                    RemoteAction.Fail(n, remoteActionId);
+                    return;
+                }
+
                 Point blockPos = Serializer.Deserialize<Point>(stm);
 
                 OnRemotePlaceBlock(blockPos, n, remoteActionId);
@@ -701,6 +706,9 @@ namespace ServerClient
         }
         void ProcessPlayerMessage(MessageType mt, Stream stm, Node n, PlayerInfo inf)
         {
+            if (finalizing)
+                return;
+
             if (playerLocks.Contains(inf.id))
             {
                 Log.Dump("can't act, locked", inf, mt);
@@ -744,6 +752,9 @@ namespace ServerClient
         }
         void ProcessServerMessage(MessageType mt, Stream stm, Node n)
         {
+            if (finalizing)
+                return;
+            
             if (mt == MessageType.SPAWN_REQUEST)
             {
                 PlayerInfo playerInfo = Serializer.Deserialize<PlayerInfo>(stm);
@@ -759,6 +770,9 @@ namespace ServerClient
         }
         void ProcessClientMessage(MessageType mt, Stream stm, Node n)
         {
+            if (finalizing)
+                return;
+            
             if (mt == MessageType.SUBSCRIBE)
             {
                 if(subscribers.Add(n.info.remote))
@@ -871,7 +885,7 @@ namespace ServerClient
                 ManualLock<Guid> lck = new ManualLock<Guid>(playerLocks, player.id);
 
                 RemoteAction
-                    .Send(myHost, remoteRealm.host, MessageType.PLACE_BLOCK, blockPos)
+                    .Send(myHost, remoteRealm.host, MessageType.REMOTE_PLACE_BLOCK, blockPos)
                     .Respond(remoteActions, lck, (res, stm) =>
                     {
                         if (res == Response.SUCCESS)
@@ -937,7 +951,7 @@ namespace ServerClient
                 try
                 {
                     WorldInfo remoteRealm = GetRemoteRealm(ref blockPos);
-                    myHost.ConnectSendMessage(remoteRealm.host, MessageType.TAKE_BLOCK, player, blockPos);
+                    myHost.ConnectSendMessage(remoteRealm.host, MessageType.REMOTE_TAKE_BLOCK, player, blockPos);
                 }
                 catch (GetRealmException e)
                 {
@@ -1305,6 +1319,20 @@ namespace ServerClient
             
             foreach (OverlayEndpoint remote in subscribers)
                 myHost.SendMessage(remote, MessageType.WORLD_VAR_CHANGE, ffc_ser);
+        }
+
+        public void FinalizeWorld()
+        {
+            finalizing = true;
+
+            Log.Dump(remoteActions.Count);
+
+            remoteActions.TriggerOnEmpty(OnFinalizedWorld);
+        }
+
+        void OnFinalizedWorld()
+        {
+            Log.Dump();
         }
     }
 }

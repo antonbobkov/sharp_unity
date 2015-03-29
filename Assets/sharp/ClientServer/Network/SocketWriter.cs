@@ -18,6 +18,7 @@ namespace Network
     {
         public SocketWriterMessageType type = SocketWriterMessageType.MESSAGE;
         public MemoryStream message = null;
+        public TimeSpan delay = TimeSpan.Zero;
 
         public SocketWriterMessage(SocketWriterMessageType swmt) { this.type = swmt; }
         public SocketWriterMessage(MemoryStream message) { this.message = message; }
@@ -92,6 +93,9 @@ namespace Network
                             }
                             else if (swm.type == SocketWriterMessageType.MESSAGE)
                             {
+                                if (swm.delay != TimeSpan.Zero)
+                                    Thread.Sleep(swm.delay);
+                                
                                 connectionStream.WriteByte((byte)NetworkMessageType.MESSAGE);
 
                                 Serializer.SendMemoryStream(connectionStream, swm.message);

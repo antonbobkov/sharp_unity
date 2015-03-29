@@ -26,7 +26,6 @@ namespace ServerClient
 
         Random r = new Random();
 
-        //GameInfo gameInfo;
         HashSet<Point> worldsInProgress = new HashSet<Point>();
 
         List<IPEndPoint> validatorPool = new List<IPEndPoint>();
@@ -135,18 +134,6 @@ namespace ServerClient
             else
                 throw new Exception(Log.StDump("unexpected", mt));
         }
-
-        //void ProcessNewConnection(Node n)
-        //{
-        //    OverlayHostName remoteName = n.info.remote.hostname;
-
-        //    if (remoteName == Client.hostName)
-        //        OnNewClient(n);
-        //}
-        //void OnNewClient(Node n)
-        //{
-        //    //n.SendMessage(MessageType.GAME_INFO_VAR_INIT, gameInfo.Serialize());
-        //}
 
         void OnNewPlayerRequest(Guid playerId, OverlayEndpoint playerClient)
         {

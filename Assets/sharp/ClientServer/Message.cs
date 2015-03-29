@@ -153,7 +153,7 @@ namespace ServerClient
 
     class RemoteAction
     {
-        Guid id = Guid.Empty;
+        public Guid Id { get; private set; }
         OverlayEndpoint remoteHost = new OverlayEndpoint();
         IManualLock l = null;
 
@@ -168,7 +168,7 @@ namespace ServerClient
             MyAssert.Assert(ra == null);
             ra = this;
         }
-        public void Respond(Dictionary<Guid, RemoteAction> remotes, IManualLock l_, Action<Response, Stream> followUp_)
+        public void Respond(RemoteActionRepository rar, IManualLock l_, Action<Response, Stream> followUp_)
         {
             l = l_;
             followUp = followUp_;
@@ -176,7 +176,7 @@ namespace ServerClient
             if (l != null && !l.Locked)
                 throw new Exception("Cannot remote unlocked object");
 
-            remotes.Add(id, this);
+            rar.AddAction(this);
         }
 
         static public RemoteAction Send(OverlayHost myHost, OverlayEndpoint remoteHost, MessageType mt, params object[] args)
@@ -190,7 +190,7 @@ namespace ServerClient
             {
                 if (args[i].GetType() == typeof(RemoteActionIdInject))
                 {
-                    args[i] = ra.id;        // id is injected at first RemoteActionIdInject argument
+                    args[i] = ra.Id;        // id is injected at first RemoteActionIdInject argument
                     assigned = true;
                     break;
                 }
@@ -199,7 +199,7 @@ namespace ServerClient
             if (!assigned)
             {
                 List<object> lst = new List<object>();
-                lst.Add(ra.id);             // or in front if there isn't one
+                lst.Add(ra.Id);             // or in front if there isn't one
                 lst.AddRange(args);
                 args = lst.ToArray();
             }
@@ -211,7 +211,7 @@ namespace ServerClient
 
         RemoteAction()
         {
-            id = Guid.NewGuid();
+            Id = Guid.NewGuid();
         }
 
         void FollowUp(Node n, Stream st, Response r)
@@ -230,25 +230,25 @@ namespace ServerClient
             Response r = Serializer.Deserialize<Response>(st);
             Guid id = Serializer.Deserialize<Guid>(st);
 
-            MyAssert.Assert(ra.id == id);
+            MyAssert.Assert(ra.Id == id);
 
             ra.FollowUp(n, st, r);
 
             ra = null;
         }
-        static public void Process(Dictionary<Guid, RemoteAction> remotes, Node n, Stream st)
+        static public void Process(RemoteActionRepository rar, Node n, Stream st)
         {
             Response r = Serializer.Deserialize<Response>(st);
             Guid id = Serializer.Deserialize<Guid>(st);
 
-            MyAssert.Assert(remotes.ContainsKey(id));
+            RemoteAction ra = rar.Get(id);
             
-            remotes[id].FollowUp(n, st, r);
+            ra.FollowUp(n, st, r);
 
-            remotes.Remove(id);
+            rar.Remove(id);
         }
 
-        static void Respond(Node n, bool success, Guid id, object[] args)
+        static private void Respond(Node n, bool success, Guid id, object[] args)
         {
             List<object> lst = new List<object>();
             lst.Add(success ? Response.SUCCESS : Response.FAIL);
@@ -266,5 +266,51 @@ namespace ServerClient
         {
             Respond(n, false, id, args);
         }
+    }
+
+    class RemoteActionRepository
+    {
+        private Dictionary<Guid, RemoteAction> remotes = new Dictionary<Guid,RemoteAction>();
+        private Action onClear = null;
+
+        private void EmptyCheck()
+        {
+            if (!remotes.Any() && onClear != null)
+            {
+                onClear.Invoke();
+                onClear = null;
+            }
+        }
+
+        public void AddAction(RemoteAction ra)
+        {
+            MyAssert.Assert(!remotes.ContainsKey(ra.Id));
+
+            remotes.Add(ra.Id, ra);
+        }
+        public RemoteAction Get(Guid id)
+        {
+            MyAssert.Assert(remotes.ContainsKey(id));
+
+            return remotes[id];
+        }
+        public void Remove(Guid id)
+        {
+            MyAssert.Assert(remotes.ContainsKey(id));
+
+            remotes.Remove(id);
+
+            EmptyCheck();
+        }
+        public void TriggerOnEmpty(Action a)
+        {
+            MyAssert.Assert(onClear == null);
+            onClear = a;
+
+            EmptyCheck();
+        }
+
+        public int Count { get { return remotes.Count; } }
+
     }
 }

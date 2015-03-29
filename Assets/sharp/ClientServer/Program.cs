@@ -167,6 +167,18 @@ namespace ServerClient
                 Log.Console(ThreadManager.Status());
             });
 
+            inputProc.commands.Add("finalize", (param) =>
+            {
+                var wv = (from kv in all.worldValidators
+                          where kv.Key == Point.Zero
+                          select kv.Value).FirstOrDefault();
+
+                if (wv != null)
+                {
+                    wv.FinalizeWorld();
+                }
+            });
+
             inputProc.commands.Add("exit", (param) =>
             {
                 all.host.Close();

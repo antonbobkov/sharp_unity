@@ -2,7 +2,7 @@
 <GameConfig xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
   <startServer>true</startServer>
   <serverConfig>
-    <validate>true</validate>
+    <validate>false</validate>
     <aiPlayers>0</aiPlayers>
   </serverConfig>
   <clientConfig>

@@ -24,7 +24,8 @@ namespace ServerClient
         PLAYER_INFO_VAR,
         SPAWN_REQUEST,
         RESPONSE, LOCK_VAR, UNLOCK_VAR,
-        PLACE_BLOCK, TAKE_BLOCK
+        PLACE_BLOCK, TAKE_BLOCK,
+        REMOTE_PLACE_BLOCK, REMOTE_TAKE_BLOCK,
     };
     
     [Serializable]
@@ -167,7 +168,7 @@ namespace ServerClient
         }
     }
 
-    class GameMessage: NetworkMessage
+    class GameMessage : NetworkMessage
     {
         string loggedMessage = "";
         MessageType mt;
@@ -177,6 +178,9 @@ namespace ServerClient
         {
             this.mt = mt;
             //this.data = data;
+
+            //if (mt == MessageType.REMOTE_PLACE_BLOCK)
+            //    delay = TimeSpan.FromSeconds(5);
 
             ms = new MemoryStream();
 
