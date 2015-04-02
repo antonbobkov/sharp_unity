@@ -301,7 +301,7 @@ public class minecraft : MonoBehaviour {
         all.myClient.onDeleteWorldHook = (w) => OnDeleteWorld(w);
 
         if (myServer)
-            all.StartServer();
+            all.StartServer(cfg.serverSpawnDensity);
 
         var light = gameObject.AddComponent<Light>();
         light.type = LightType.Point;

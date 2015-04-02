@@ -29,6 +29,8 @@ namespace ServerClient
         public GameInstanceConifg serverConfig = new GameInstanceConifg();
         public GameInstanceConifg clientConfig = new GameInstanceConifg();
 
+        public int serverSpawnDensity = 0;
+
         public List<string> meshIPs = new List<string>() { "default" };
         public string myIP = "default";
 
@@ -122,10 +124,10 @@ namespace ServerClient
             if (!myClient.TryConnect(ep))
                 Log.Console("Already connected/connecting");
         }
-        public void StartServer()
+        public void StartServer(int serverSpawnDensity)
         {
             MyAssert.Assert(myServer == null);
-            myServer = new Server(host, sync);
+            myServer = new Server(host, sync, serverSpawnDensity);
             myClient.OnServerAddress(myServer.Address);
         }
 

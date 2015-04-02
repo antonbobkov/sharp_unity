@@ -116,7 +116,7 @@ namespace ServerClient
             MeshConnect(all, cfg_total, myIP);
 
             if (myServer)
-                all.StartServer();
+                all.StartServer(cfg_total.serverSpawnDensity);
 
             all.sync.Start();
 
@@ -126,7 +126,7 @@ namespace ServerClient
 
             inputProc.commands.Add("server", (param) =>
             {
-                all.StartServer();
+                all.StartServer(cfg_total.serverSpawnDensity);
             });
 
             inputProc.commands.Add("player", (param) =>

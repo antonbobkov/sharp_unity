@@ -1332,7 +1332,15 @@ namespace ServerClient
 
         void OnFinalizedWorld()
         {
-            Log.Dump();
+            Log.Dump(world.Info.GetShortInfo(), "players", world.GetAllPlayers().Count());
+
+            MyAssert.Assert(!playerLocks.Any());
+
+            foreach (var player in world.GetAllPlayers().ToArray())
+            {
+                world.NET_RemovePlayer(player.id, false);
+                myHost.ConnectSendMessage(player.validatorHost, MessageType.PLAYER_DISCONNECT);
+            }
         }
     }
 }

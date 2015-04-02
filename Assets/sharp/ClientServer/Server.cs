@@ -60,14 +60,14 @@ namespace ServerClient
 
         public OverlayEndpoint Address { get { return myHost.Address; } }
 
-        public Server(GlobalHost globalHost, ActionSyncronizer sync)
+        int serverSpawnDensity;
+
+        public Server(GlobalHost globalHost, ActionSyncronizer sync, int serverSpawnDensity)
         {
             myHost = globalHost.NewHost(Server.hostName, Game.Convert(AssignProcessor),
                 BasicInfo.GenerateHandshake(NodeRole.SERVER), Aggregator.shortInactivityWait);
-            //myHost.onNewConnectionHook = ProcessNewConnection;
 
-            //Action<ForwardFunctionCall> onChange = (ffc) => myHost.BroadcastGroup(Client.hostName, MessageType.GAME_INFO_VAR_CHANGE, ffc.Serialize());
-            //gameInfo = new ForwardProxy<GameInfo>(new GameInfo(), onChange).GetProxy();
+            this.serverSpawnDensity = serverSpawnDensity;
         }
 
         Game.MessageProcessor AssignProcessor(Node n, MemoryStream nodeInfo)
@@ -210,9 +210,15 @@ namespace ServerClient
             WorldInfo info = new WorldInfo(worldPos, validatorHost);
             WorldInitializer init = new WorldInitializer(r.Next(), RandomColor(worldPos));
 
-            if (worldPos == Point.Zero)
-            //if ((worldPos.x % 2 == 0) && (worldPos.y % 2 == 0))
+            if (serverSpawnDensity == 0)
+            {
+                if (worldPos == Point.Zero)
+                    init.hasSpawn = true;
+            }
+            else if ((worldPos.x % serverSpawnDensity == 0) && (worldPos.y % serverSpawnDensity == 0))
+            {
                 init.hasSpawn = true;
+            }
 
             OverlayEndpoint validatorClient = new OverlayEndpoint(validatorHost.addr, Client.hostName);
             myHost.SendMessage(validatorClient, MessageType.WORLD_VALIDATOR_ASSIGN, validatorId, info, init);

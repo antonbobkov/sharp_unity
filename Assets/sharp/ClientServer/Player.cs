@@ -194,9 +194,11 @@ namespace ServerClient
                 RemoteAction.Process(ref locked, n, stm);
             }
             else if (mt == MessageType.PICKUP_TELEPORT)
-                ProcessOrDelay(() => OnPickupTeleport());
+                ProcessOrDelay(OnPickupTeleport);
             else if (mt == MessageType.PICKUP_BLOCK)
-                ProcessOrDelay(() => OnPickupBlock());
+                ProcessOrDelay(OnPickupBlock);
+            else if (mt == MessageType.PLAYER_DISCONNECT)
+                ProcessOrDelay(OnDisconnect);
             else
                 throw new Exception(Log.StDump(info, inf, mt, "unexpected message"));
         }
@@ -248,6 +250,11 @@ namespace ServerClient
         {
             ++playerData.inventory.blocks;
 
+            MessageToAgent(MessageType.PLAYER_INFO_VAR, playerData);
+        }
+        void OnDisconnect()
+        {
+            playerData.world = null;
             MessageToAgent(MessageType.PLAYER_INFO_VAR, playerData);
         }
     }
@@ -322,6 +329,8 @@ namespace ServerClient
 
                 if (!data.IsConnected) // spawn
                     OnSpawn(pd.world.Value);
+                else if (!pd.IsConnected) // despawn
+                { }
                 else if (data.world.Value.position != pd.world.Value.position)  // realm move
                     OnChangeRealm(data.world.Value, pd.world.Value);
 
