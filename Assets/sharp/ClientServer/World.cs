@@ -89,14 +89,26 @@ namespace ServerClient
     [Serializable]
     public class WorldInitializer
     {
+        public WorldInfo info;
+        public WorldSeed seed = null;
+        public WorldSerialized world = null;
+
+        public WorldInitializer() { }
+        public WorldInitializer(WorldInfo info, WorldSeed seed) { this.info = info; this.seed = seed; }
+        public WorldInitializer(WorldInfo info, WorldSerialized world) { this.info = info; this.world = world; }
+    }
+
+    [Serializable]
+    public class WorldSeed
+    {
         public int seed;
         public double wallDensity = .2;
         public double lootDensity = .05;
         public bool hasSpawn = false;
         public MyColor defaultColor;
 
-        public WorldInitializer() { }
-        internal WorldInitializer(int seed_, MyColor defaultColor_)
+        public WorldSeed() { }
+        internal WorldSeed(int seed_, MyColor defaultColor_)
         {
             seed = seed_;
             defaultColor = defaultColor_;
@@ -148,7 +160,6 @@ namespace ServerClient
     public class WorldSerialized
     {
         public Plane<Tile> map;
-        public WorldInfo myInfo;
         public PlayerInfo[] players;
         public WorldInfo[] neighborWorlds;
     }
@@ -156,36 +167,33 @@ namespace ServerClient
     class World : MarshalByRefObject
     {
         // ----- constructors -----
-        public World(WorldSerialized ws, Action<WorldInfo> onNeighbor_)
-            : this(ws.myInfo)
+        public World(WorldInitializer init, Action<WorldInfo> onNeighbor_) : this(init.info)
         {
-            if(onNeighbor_ != null)
+            if (onNeighbor_ != null)
                 onNeighbor = onNeighbor_;
-            map = ws.map;
 
-            foreach (Point p in Point.Range(map.Size))
-                if (map[p].PlayerId != Guid.Empty)
-                    playerPositions.Add(map[p].PlayerId, p);
+            // exactly one is non-null
+            MyAssert.Assert((init.seed != null) || (init.world != null));
+            MyAssert.Assert((init.seed == null) || (init.world == null));
 
-            foreach (PlayerInfo inf in ws.players)
-                playerInformation.Add(inf.id, inf);
+            if (init.seed != null)
+                GenerateWorld(init.seed);
 
-            foreach (WorldInfo inf in ws.neighborWorlds)
-                NET_AddNeighbor(inf);
-
-            MyAssert.Assert(playerPositions.Count == playerInformation.Count);
+            if (init.world != null)
+                DeserializeWorld(init.world);
         }
-        public WorldSerialized Serialize()
+        public WorldInitializer Serialize()
         {
             //SanityCheck();
             
-            return new WorldSerialized()
+            WorldSerialized ser = new WorldSerialized()
             { 
                 map = map,
-                myInfo = Info, 
                 players = playerInformation.Values.ToArray(),
                 neighborWorlds = GetKnownNeighbors().ToArray()
             };
+
+            return new WorldInitializer(Info, ser);
         }
 
         void SanityCheck()
@@ -421,22 +429,34 @@ namespace ServerClient
         public Action<Point, bool> onChangeBlock = (a, b) => { };
 
         // ----- generating -----
-        static public World Generate(WorldInfo myInfo_, WorldInitializer init)
-        {
-            World w = new World(myInfo_);
-
-            w.map = new Plane<Tile>(worldSize);
-
-            foreach (Point p in Point.Range(w.map.Size))
-                w.map[p] = new Tile(p);
-
-            w.Generate(init);
-
-            return w;
-        }
-
         static public readonly Point worldSize = new Point(10, 10);
-        private void Generate(WorldInitializer init)
+
+        private void DeserializeWorld(WorldSerialized ws)
+        {
+            map = ws.map;
+
+            foreach (Point p in Point.Range(map.Size))
+                if (map[p].PlayerId != Guid.Empty)
+                    playerPositions.Add(map[p].PlayerId, p);
+
+            foreach (PlayerInfo inf in ws.players)
+                playerInformation.Add(inf.id, inf);
+
+            foreach (WorldInfo inf in ws.neighborWorlds)
+                NET_AddNeighbor(inf);
+
+            MyAssert.Assert(playerPositions.Count == playerInformation.Count);
+        }
+        private void GenerateWorld(WorldSeed init)
+        {
+            map = new Plane<Tile>(worldSize);
+
+            foreach (Point p in Point.Range(map.Size))
+                map[p] = new Tile(p);
+
+            Generate(init);
+        }
+        private void Generate(WorldSeed init)
         {
             MyRandom seededRandom = new MyRandom(init.seed);
 
@@ -603,16 +623,16 @@ namespace ServerClient
 
         HashSet<OverlayEndpoint> subscribers = new HashSet<OverlayEndpoint>();
 
-        public WorldValidator(WorldInfo info, WorldInitializer init, GlobalHost globalHost, OverlayEndpoint serverHost_)
+        public WorldValidator(WorldInitializer init, GlobalHost globalHost, OverlayEndpoint serverHost_)
         {
             serverHost = serverHost_;
 
-            World newWorld = World.Generate(info, init);
+            World newWorld = new World(init, null);
 
             world = new ForwardProxy<World>(newWorld, RemoteFunctionForward).GetProxy();
 
-            myHost = globalHost.NewHost(info.host.hostname, Game.Convert(AssignProcessor),
-                BasicInfo.GenerateHandshake(NodeRole.WORLD_VALIDATOR, info), Aggregator.longInactivityWait);
+            myHost = globalHost.NewHost(init.info.host.hostname, Game.Convert(AssignProcessor),
+                BasicInfo.GenerateHandshake(NodeRole.WORLD_VALIDATOR, init.info), Aggregator.longInactivityWait);
             //myHost.onNewConnectionHook = ProcessNewConnection;
 
             newWorld.onLootHook = OnLootPickup;
@@ -1341,6 +1361,10 @@ namespace ServerClient
                 world.NET_RemovePlayer(player.id, false);
                 myHost.ConnectSendMessage(player.validatorHost, MessageType.PLAYER_DISCONNECT);
             }
+
+            Log.Dump("all player disconnects sent");
+
+            myHost.ConnectSendMessage(serverHost, MessageType.WORLD_HOST_DISCONNECT, world.Serialize());
         }
     }
 }

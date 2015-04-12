@@ -131,10 +131,10 @@ namespace ServerClient
             myClient.OnServerAddress(myServer.Address);
         }
 
-        public void AddWorldValidator(WorldInfo info, WorldInitializer init)
+        public void AddWorldValidator(WorldInitializer init)
         {
-            MyAssert.Assert(!worldValidators.ContainsKey(info.position));
-            worldValidators.Add(info.position, new WorldValidator(info, init, host, myClient.serverHost));
+            MyAssert.Assert(!worldValidators.ContainsKey(init.info.position));
+            worldValidators.Add(init.info.position, new WorldValidator(init, host, myClient.serverHost));
         }
         public void AddPlayerValidator(PlayerInfo info)
         {

@@ -121,6 +121,11 @@ namespace ServerClient
                 OnNewWorldRequest(worldPos);
                 //n.SoftDisconnect();
             }
+            else if (mt == MessageType.WORLD_HOST_DISCONNECT)
+            {
+                WorldInitializer w = Serializer.Deserialize<WorldInitializer>(stm);
+                Log.Dump(mt, w.info);
+            }
             else
                 throw new Exception("Client.ProcessWorldMessage bad message type " + mt.ToString());
         }
@@ -191,10 +196,8 @@ namespace ServerClient
             return new MyColor(R, G, B);
         }
 
-        void OnNewWorldRequest(Point worldPos)
+        void OnNewWorldRequest(Point worldPos, WorldSerialized ser)
         {
-            //if (gameInfo.TryGetWorldByPos(worldPos) != null)
-            //    return;
             if (worlds.ContainsKey(worldPos))
                 return;
             if (worldsInProgress.Contains(worldPos))
@@ -207,28 +210,38 @@ namespace ServerClient
             Guid validatorId = Guid.NewGuid();
             OverlayEndpoint validatorHost = new OverlayEndpoint(validatorPool.Random(n => r.Next(n)), new OverlayHostName("host world " + worldPos));
 
+            WorldInitializer init;
             WorldInfo info = new WorldInfo(worldPos, validatorHost);
-            WorldInitializer init = new WorldInitializer(r.Next(), RandomColor(worldPos));
 
-            if (serverSpawnDensity == 0)
+            if (ser == null)
             {
-                if (worldPos == Point.Zero)
-                    init.hasSpawn = true;
+                WorldSeed seed = new WorldSeed(r.Next(), RandomColor(worldPos));
+
+                if (serverSpawnDensity == 0)
+                {
+                    if (worldPos == Point.Zero)
+                        seed.hasSpawn = true;
+                }
+                else if ((worldPos.x % serverSpawnDensity == 0) && (worldPos.y % serverSpawnDensity == 0))
+                {
+                    seed.hasSpawn = true;
+                }
+
+                init = new WorldInitializer(info, seed);
             }
-            else if ((worldPos.x % serverSpawnDensity == 0) && (worldPos.y % serverSpawnDensity == 0))
-            {
-                init.hasSpawn = true;
-            }
+            else
+                init = new WorldInitializer(info, ser);
+
 
             OverlayEndpoint validatorClient = new OverlayEndpoint(validatorHost.addr, Client.hostName);
-            myHost.SendMessage(validatorClient, MessageType.WORLD_VALIDATOR_ASSIGN, validatorId, info, init);
+            myHost.SendMessage(validatorClient, MessageType.WORLD_VALIDATOR_ASSIGN, validatorId, init);
 
             DelayedAction da = new DelayedAction()
             {
                 ep = validatorClient,
                 a = () =>
                 {
-                    if (init.hasSpawn == true)
+                    if (seed.hasSpawn == true)
                         spawnWorlds.Add(worldPos);
 
                     worldsInProgress.Remove(worldPos);

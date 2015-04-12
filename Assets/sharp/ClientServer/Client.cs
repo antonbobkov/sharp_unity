@@ -157,9 +157,8 @@ namespace ServerClient
             else if (mt == MessageType.WORLD_VALIDATOR_ASSIGN)
             {
                 Guid actionId = Serializer.Deserialize<Guid>(stm);
-                WorldInfo info = Serializer.Deserialize<WorldInfo>(stm);
                 WorldInitializer init = Serializer.Deserialize<WorldInitializer>(stm);
-                OnWorldValidateRequest(actionId, info, init);
+                OnWorldValidateRequest(actionId, init);
             }
             else if (mt == MessageType.NEW_PLAYER_REQUEST_SUCCESS)
             {
@@ -173,7 +172,7 @@ namespace ServerClient
         {
             if (mt == MessageType.WORLD_VAR_INIT)
             {
-                WorldSerialized wrld = Serializer.Deserialize<WorldSerialized>(stm);
+                WorldInitializer wrld = Serializer.Deserialize<WorldInitializer>(stm);
                 OnNewWorldVar(wrld);
             }
             else if (mt == MessageType.WORLD_VAR_CHANGE)
@@ -234,9 +233,9 @@ namespace ServerClient
             //myHost.TryConnectAsync(inf.host);
             myHost.ConnectSendMessage(inf.host, MessageType.SUBSCRIBE);
         }
-        void OnNewWorldVar(WorldSerialized ws)
+        void OnNewWorldVar(WorldInitializer wrld)
         {
-            World w = new World(ws, OnNeighbor);
+            World w = new World(wrld, OnNeighbor);
             
             knownWorlds.Add(w.Position, w);
             w.onMoveHook = (player, pos, mv) => onMoveHook(w, player, pos, mv);
@@ -266,9 +265,9 @@ namespace ServerClient
             //Log.LogWriteLine("Validating for {0}", info);
             myHost.SendMessage(serverHost, MessageType.ACCEPT, actionId);
         }
-        void OnWorldValidateRequest(Guid actionId, WorldInfo info, WorldInitializer init)
+        void OnWorldValidateRequest(Guid actionId, WorldInitializer init)
         {
-            all.AddWorldValidator(info, init);
+            all.AddWorldValidator(init);
             //Log.LogWriteLine("Validating for world {0}", info.worldPos);
             myHost.SendMessage(serverHost, MessageType.ACCEPT, actionId);
         }
