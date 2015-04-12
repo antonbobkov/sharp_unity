@@ -99,7 +99,7 @@ namespace ServerClient
             else if (mt == MessageType.NEW_WORLD_REQUEST)
             {
                 Point worldPos = Serializer.Deserialize<Point>(stm);
-                OnNewWorldRequest(worldPos);
+                OnNewWorldRequest(worldPos, null);
             }
             else if (mt == MessageType.NEW_VALIDATOR)
             {
@@ -118,8 +118,7 @@ namespace ServerClient
             if (mt == MessageType.NEW_WORLD_REQUEST)
             {
                 Point worldPos = Serializer.Deserialize<Point>(stm);
-                OnNewWorldRequest(worldPos);
-                //n.SoftDisconnect();
+                OnNewWorldRequest(worldPos, null);
             }
             else if (mt == MessageType.WORLD_HOST_DISCONNECT)
             {
@@ -212,6 +211,7 @@ namespace ServerClient
 
             WorldInitializer init;
             WorldInfo info = new WorldInfo(worldPos, validatorHost);
+            bool hasSpawn;
 
             if (ser == null)
             {
@@ -227,10 +227,14 @@ namespace ServerClient
                     seed.hasSpawn = true;
                 }
 
+                hasSpawn = seed.hasSpawn;
                 init = new WorldInitializer(info, seed);
             }
             else
+            {
+                hasSpawn = ser.spawnPos.HasValue;
                 init = new WorldInitializer(info, ser);
+            }
 
 
             OverlayEndpoint validatorClient = new OverlayEndpoint(validatorHost.addr, Client.hostName);
@@ -241,7 +245,7 @@ namespace ServerClient
                 ep = validatorClient,
                 a = () =>
                 {
-                    if (seed.hasSpawn == true)
+                    if (hasSpawn == true)
                         spawnWorlds.Add(worldPos);
 
                     worldsInProgress.Remove(worldPos);

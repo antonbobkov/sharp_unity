@@ -162,6 +162,7 @@ namespace ServerClient
         public Plane<Tile> map;
         public PlayerInfo[] players;
         public WorldInfo[] neighborWorlds;
+        public Point? spawnPos;
     }
 
     class World : MarshalByRefObject
@@ -190,7 +191,8 @@ namespace ServerClient
             { 
                 map = map,
                 players = playerInformation.Values.ToArray(),
-                neighborWorlds = GetKnownNeighbors().ToArray()
+                neighborWorlds = GetKnownNeighbors().ToArray(),
+                spawnPos = spawnPos
             };
 
             return new WorldInitializer(Info, ser);
@@ -434,6 +436,7 @@ namespace ServerClient
         private void DeserializeWorld(WorldSerialized ws)
         {
             map = ws.map;
+            spawnPos = ws.spawnPos;
 
             foreach (Point p in Point.Range(map.Size))
                 if (map[p].PlayerId != Guid.Empty)
