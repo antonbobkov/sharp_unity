@@ -168,7 +168,7 @@ namespace ServerClient
     class World : MarshalByRefObject
     {
         // ----- constructors -----
-        public World(WorldInitializer init, Action<WorldInfo> onNeighbor_) : this(init.info)
+        public World(WorldInitializer init, Action<WorldInfo, bool> onNeighbor_) : this(init.info)
         {
             if (onNeighbor_ != null)
                 onNeighbor = onNeighbor_;
@@ -395,11 +395,11 @@ namespace ServerClient
             Point p = worldInfo.position;
 
             MyAssert.Assert(neighborWorlds.ContainsKey(p));
-            MyAssert.Assert(neighborWorlds[p] == null);
+            bool isNewNeighbor = (neighborWorlds[p] == null);
 
             neighborWorlds[p] = worldInfo;
 
-            onNeighbor.Invoke(worldInfo);
+            onNeighbor.Invoke(worldInfo, isNewNeighbor);
         }
         [Forward] public void NET_PlaceBlock(Point pos)
         {
@@ -427,7 +427,7 @@ namespace ServerClient
         public Action<PlayerInfo> onLootHook = (info) => { };
         public Action<PlayerInfo, Point, ActionValidity> onMoveHook = (a, b, c) => { };
         public Action<PlayerInfo, bool> onPlayerLeaveHook = (a, b) => { };
-        public Action<WorldInfo> onNeighbor = (a) => { };
+        public Action<WorldInfo, bool> onNeighbor = (a, b) => { };
         public Action<Point, bool> onChangeBlock = (a, b) => { };
 
         // ----- generating -----

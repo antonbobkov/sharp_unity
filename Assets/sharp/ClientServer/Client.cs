@@ -15,6 +15,80 @@ using Network;
 
 namespace ServerClient
 {
+    class PlayerDatabase
+    {
+        private Dictionary<Guid, Point> playerPositions = new Dictionary<Guid, Point>();
+
+        public void Set(Guid player, Point pos)
+        {
+            // track
+
+            if (playerPositions.ContainsKey(player))
+                Remove(player);
+
+
+            playerPositions.Add(player, pos);
+        }
+
+        public void Remove(Guid player)
+        {
+            MyAssert.Assert(playerPositions.ContainsKey(player));
+            
+            Point prevPos = playerPositions[player];
+            
+            // untrack
+
+            playerPositions.Remove(player);
+        }
+    }
+
+    class ClientWorld
+    {
+        private int tracker = 0;
+        private WorldInfo? info = null;
+        private World world = null;
+
+        public void Track()
+        {
+            ++tracker;
+            if (info != null)
+                Subscribe();
+        }
+
+        public void Untrack()
+        {
+            --tracker;
+            MyAssert.Assert(tracker >= 0);
+
+            if (info != null)
+                Unsubscribe();
+        }
+
+        public void SetWorldInfo(WorldInfo newInfo)
+        {
+            // if the same as the current value
+            if (info != null && info.Value.GetFullInfo() == newInfo.GetFullInfo())
+                return;
+            
+            if (info == null)
+            {
+                info = newInfo;
+                
+                if(tracker > 0)
+                    Subscribe();
+            }
+            else
+            {
+                Unsubscribe();
+            }
+        }
+
+        public void SetWorld(WorldInitializer init);
+
+        private void Subscribe();
+        private void Unsubscribe();
+    }
+
     class Client
     {
         public static readonly OverlayHostName hostName = new OverlayHostName("client");
@@ -236,6 +310,8 @@ namespace ServerClient
         void OnNewWorldVar(WorldInitializer wrld)
         {
             World w = new World(wrld, OnNeighbor);
+
+            MyAssert.Assert(!knownWorlds.ContainsKey(w.Info.position));
             
             knownWorlds.Add(w.Position, w);
             w.onMoveHook = (player, pos, mv) => onMoveHook(w, player, pos, mv);
@@ -253,7 +329,7 @@ namespace ServerClient
             }
         }
 
-        void OnNeighbor(WorldInfo inf)
+        void OnNeighbor(WorldInfo inf, bool isNewWorld)
         {
             if (trackedWorlds.TryGetValue(inf.position) > 0)
                 OnNewWorld(inf);
