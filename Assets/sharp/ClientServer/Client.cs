@@ -48,8 +48,16 @@ namespace ServerClient
         private WorldInfo? info = null;
         private World world = null;
 
+        private Point position;
+
+        ClientWorld(Point position)
+        {
+            this.position = position;
+        }
+
         public void Track()
         {
+            // wrong: don't always subscribe
             ++tracker;
             if (info != null)
                 Subscribe();
@@ -60,33 +68,61 @@ namespace ServerClient
             --tracker;
             MyAssert.Assert(tracker >= 0);
 
-            if (info != null)
+            if (tracker == 0 && info != null)
                 Unsubscribe();
         }
 
         public void SetWorldInfo(WorldInfo newInfo)
         {
-            // if the same as the current value
-            if (info != null && info.Value.GetFullInfo() == newInfo.GetFullInfo())
+            MyAssert.Assert(newInfo.position == position);
+            
+            // if the same as the current value, do nothing
+            if (info.HasValue && info.Value == newInfo)
                 return;
             
+            // first ever value - initialize
             if (info == null)
             {
                 info = newInfo;
                 
                 if(tracker > 0)
                     Subscribe();
+
+                return;
             }
-            else
-            {
+
+            // only do something if new information has greater generation
+            MyAssert.Assert(newInfo.generation != info.Value.generation);
+            if (newInfo.generation < info.Value.generation)
+                return; // old info, ignore
+
+            if (tracker > 0)
                 Unsubscribe();
-            }
+
+            info = newInfo;
+
+            if (tracker > 0)
+                Subscribe();
         }
 
-        public void SetWorld(WorldInitializer init);
+        public void SetWorld(WorldInitializer init)
+        {
+            MyAssert.Assert(info.HasValue);
+            MyAssert.Assert(init.info.position == position);
+
+            if (init.info != info.Value)    // old world information - ignore
+            {
+                MyAssert.Assert(init.info.generation < info.Value.generation);
+                return;
+            }
+
+            MyAssert.Assert(world == null);
+
+            world = new World(init, null);  // wrong: should have non-null action
+        }
 
         private void Subscribe();
-        private void Unsubscribe();
+        private void Unsubscribe(); // set world to null
     }
 
     class Client

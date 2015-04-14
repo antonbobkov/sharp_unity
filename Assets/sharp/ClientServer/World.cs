@@ -120,16 +120,18 @@ namespace ServerClient
     {
         public Point position;
         public OverlayEndpoint host;
+        public int generation;
 
-        public WorldInfo(Point worldPos_, OverlayEndpoint host_)
+        public WorldInfo(Point position, OverlayEndpoint host, int generation)
         {
-            host = host_;
-            position = worldPos_;
+            this.host = host;
+            this.position = position;
+            this.generation = generation;
         }
 
         public override string ToString()
         {
-            return GetShortInfo();
+            return GetFullInfo();   // used for comparison, must contain full info
         }
 
         public string GetFullInfo()
@@ -137,10 +139,17 @@ namespace ServerClient
             StringBuilder sb = new StringBuilder();
             sb.AppendFormat("World pos: {0}\n", position);
             sb.AppendFormat("Validator host: {0}\n", host);
+            sb.AppendFormat("Generation: {0}\n", generation);
 
             return sb.ToString();
         }
         public string GetShortInfo() { return "World " + position.ToString(); }
+
+        public override bool Equals(object comparand) { return this.ToString().Equals(comparand.ToString()); }
+        public override int GetHashCode() { return this.ToString().GetHashCode(); }
+
+        public static bool operator ==(WorldInfo o1, WorldInfo o2) { return Object.Equals(o1, o2); }
+        public static bool operator !=(WorldInfo o1, WorldInfo o2) { return !(o1 == o2); }
     }
 
     [Flags]
