@@ -18,178 +18,183 @@ namespace ServerClient
     class PlayerDatabase
     {
         private Dictionary<Guid, Point> playerPositions = new Dictionary<Guid, Point>();
+        private Action<Point> track;
+        private Action<Point> untrack;
+
+        public PlayerDatabase(Action<Point> track, Action<Point> untrack)
+        {
+            this.track = track;
+            this.untrack = untrack;
+        }
 
         public void Set(Guid player, Point pos)
         {
-            // track
+            foreach (Point p in Point.SymmetricRange(Point.One))
+                track.Invoke(pos + p);
 
             if (playerPositions.ContainsKey(player))
                 Remove(player);
 
-
             playerPositions.Add(player, pos);
         }
-
         public void Remove(Guid player)
         {
             MyAssert.Assert(playerPositions.ContainsKey(player));
             
             Point prevPos = playerPositions[player];
-            
-            // untrack
+
+            foreach (Point p in Point.SymmetricRange(Point.One))
+                untrack.Invoke(prevPos + p);
 
             playerPositions.Remove(player);
         }
     }
 
-    class ClientWorld
+    class TrackedWorld
     {
+        private Point position;
+        private OverlayHost myHost;
+
+        private bool isSubscribed = false;
+
         private int tracker = 0;
-        private WorldInfo? info = null;
+
+        private WorldInfo? _info = null;
+        private WorldInfo? Info
+        {
+            get { return _info; }
+            set
+            {
+                MyAssert.Assert(value.HasValue);
+                MyAssert.Assert(value.Value.position == position);
+                _info = value;
+            }
+        }
         private World world = null;
 
-        private Point position;
+        private void TrySubscribe()
+        {
+            if (tracker > 0 && !isSubscribed && Info != null)
+            {
+                isSubscribed = true; // subscribe!
+            }
+        }
+        private void Unsubscribe()
+        {
+            if (isSubscribed)
+            {
+                isSubscribed = false;   // unsubscribe!
+                world = null;
+            }
+        }
+        private bool ValidateWorldInfo(WorldInfo info)
+        {
+            MyAssert.Assert(Info != null);
+            MyAssert.Assert(info.position == position);
 
-        ClientWorld(Point position)
+            if (info != Info)    // old world information - ignore
+            {
+                MyAssert.Assert(info.generation < Info.Value.generation);
+                return false;
+            }
+
+            if (!isSubscribed)
+                return false;
+
+            return true;
+        }
+
+        public TrackedWorld(Point position, OverlayHost myHost)
         {
             this.position = position;
+            this.myHost = myHost;
         }
 
         public void Track()
         {
-            // wrong: don't always subscribe
             ++tracker;
-            if (info != null)
-                Subscribe();
+            TrySubscribe();
         }
-
         public void Untrack()
         {
             --tracker;
             MyAssert.Assert(tracker >= 0);
 
-            if (tracker == 0 && info != null)
+            if (tracker == 0)
                 Unsubscribe();
         }
 
         public void SetWorldInfo(WorldInfo newInfo)
         {
-            MyAssert.Assert(newInfo.position == position);
-            
-            // if the same as the current value, do nothing
-            if (info.HasValue && info.Value == newInfo)
-                return;
-            
             // first ever value - initialize
-            if (info == null)
+            if (Info == null)
             {
-                info = newInfo;
-                
-                if(tracker > 0)
-                    Subscribe();
-
-                return;
+                Info = newInfo;
+                TrySubscribe();
             }
+            else // already initialized
+            {
+                if (Info == newInfo && newInfo.generation < Info.Value.generation)  // old information
+                    return;
 
-            // only do something if new information has greater generation
-            MyAssert.Assert(newInfo.generation != info.Value.generation);
-            if (newInfo.generation < info.Value.generation)
-                return; // old info, ignore
+                MyAssert.Assert(newInfo.generation != Info.Value.generation);
 
-            if (tracker > 0)
                 Unsubscribe();
 
-            info = newInfo;
+                Info = newInfo;
 
-            if (tracker > 0)
-                Subscribe();
+                TrySubscribe();
+                
+            }
         }
 
-        public void SetWorld(WorldInitializer init)
+        public void WorldInit(WorldInitializer init)
         {
-            MyAssert.Assert(info.HasValue);
-            MyAssert.Assert(init.info.position == position);
-
-            if (init.info != info.Value)    // old world information - ignore
-            {
-                MyAssert.Assert(init.info.generation < info.Value.generation);
+            if (!ValidateWorldInfo(init.info))
                 return;
-            }
 
             MyAssert.Assert(world == null);
 
             world = new World(init, null);  // wrong: should have non-null action
         }
+        public void WorldAction(ForwardFunctionCall ffc, WorldInfo info)
+        {
+            if (!ValidateWorldInfo(info))
+                return;
 
-        private void Subscribe();
-        private void Unsubscribe(); // set world to null
+            MyAssert.Assert(world != null);
+            ffc.Apply(world);
+        }
+
+        public World GetWorld() { return world; }
+    }
+
+    class WorldDatabase
+    {
+        private Dictionary<Point, TrackedWorld> worlds = new Dictionary<Point, TrackedWorld>();
+        private OverlayHost myHost;
+
+        public WorldDatabase(OverlayHost myHost) { this.myHost = myHost; }
+        public TrackedWorld At(Point p)
+        {
+            if(!worlds.ContainsKey(p))
+                worlds.Add(p, new TrackedWorld(p, myHost));
+            return worlds[p];
+        }
     }
 
     class Client
     {
         public static readonly OverlayHostName hostName = new OverlayHostName("client");
 
-        //public GameInfo gameInfo = null;
         public OverlayEndpoint serverHost = null;
-        //Node server = null;
 
         OverlayHost myHost;
 
         Aggregator all;
 
-        public Dictionary<Point, int> trackedWorlds = new Dictionary<Point, int>();
-        public Dictionary<Point, World> knownWorlds = new Dictionary<Point, World>();
-
-        public void TrackWorld(WorldInfo world)
-        {
-            foreach (Point p in Point.SymmetricRange(Point.One))
-            {
-                Point q = p + world.position;
-                if (!trackedWorlds.ContainsKey(q))
-                    trackedWorlds.Add(q, 0);
-
-                trackedWorlds[q]++;
-            }
-
-            if (knownWorlds.ContainsKey(world.position))
-            {
-                World w = knownWorlds[world.position];
-                foreach (WorldInfo inf in w.GetKnownNeighbors())
-                    OnNeighbor(inf);
-            }
-            else
-                OnNewWorld(world);
-        }
-        public void UnTrackWorld(Point worldPos)
-        {
-            foreach (Point p in Point.SymmetricRange(Point.One))
-            {
-                Point q = p + worldPos;
-
-                MyAssert.Assert(trackedWorlds.ContainsKey(q));
-                MyAssert.Assert(trackedWorlds[q] > 0);
-
-                trackedWorlds[q]--;
-
-                if (trackedWorlds[q] == 0)
-                    TryRemoveWorld(q);
-            }
-        }
-
-        bool TryRemoveWorld(Point worldPos)
-        {
-            World w = knownWorlds.TryGetValue(worldPos);
-            if (w == null)
-                return false;
-            
-            //myHost.TryCloseNode(w.Info.host);
-            myHost.SendMessage(w.Info.host, MessageType.UNSUBSCRIBE);
-            
-            knownWorlds.Remove(worldPos);
-            onDeleteWorldHook(w);
-
-            return true;
-        }
+        PlayerDatabase connectedPlayers;
+        WorldDatabase worlds;
 
         public HashSet<Guid> myPlayerAgents = new HashSet<Guid>();
 
@@ -211,6 +216,10 @@ namespace ServerClient
                 BasicInfo.GenerateHandshake(NodeRole.CLIENT), Aggregator.longInactivityWait);
 
             myHost.onNewConnectionHook = ProcessNewConnection;
+
+            worlds = new WorldDatabase(myHost);
+
+            connectedPlayers = new PlayerDatabase(p => worlds.At(p).Track(), p => worlds.At(p).Untrack());
         }
 
         Game.MessageProcessor AssignProcessor(Node n, MemoryStream nodeInfo)
@@ -246,18 +255,6 @@ namespace ServerClient
         }
         void ProcessServerMessage(MessageType mt, Stream stm, Node n)
         {
-            //if (mt == MessageType.GAME_INFO_VAR_INIT)
-            //{
-            //    GameInfoSerialized info = Serializer.Deserialize<GameInfoSerialized>(stm);
-            //    OnGameInfo(info);
-            //}
-            //else if (mt == MessageType.GAME_INFO_VAR_CHANGE)
-            //{
-            //    MyAssert.Assert(gameInfo != null);
-
-            //    ForwardFunctionCall ffc = ForwardFunctionCall.Deserialize(stm, typeof(GameInfo));
-            //    ffc.Apply(gameInfo);
-            //}
             if (mt == MessageType.PLAYER_VALIDATOR_ASSIGN)
             {
                 Guid actionId = Serializer.Deserialize<Guid>(stm);
@@ -287,11 +284,8 @@ namespace ServerClient
             }
             else if (mt == MessageType.WORLD_VAR_CHANGE)
             {
-                if (knownWorlds.ContainsKey(inf.position))
-                {
-                    ForwardFunctionCall ffc = ForwardFunctionCall.Deserialize(stm, typeof(World));
-                    ffc.Apply(knownWorlds.GetValue(inf.position));
-                }
+                ForwardFunctionCall ffc = ForwardFunctionCall.Deserialize(stm, typeof(World));
+                worlds.At(inf.position).WorldAction(ffc, inf);
             }
             else
                 throw new Exception(Log.StDump(mt, inf, "unexpected"));
@@ -336,20 +330,13 @@ namespace ServerClient
             onNewMyPlayerHook(inf);
         }
 
-        public void OnNewWorld(WorldInfo inf)
-        {
-            //gameInfo.AddWorld(inf);
-            //Log.LogWriteLine("New world\n{0}", inf.GetFullInfo());
-            //myHost.TryConnectAsync(inf.host);
-            myHost.ConnectSendMessage(inf.host, MessageType.SUBSCRIBE);
-        }
         void OnNewWorldVar(WorldInitializer wrld)
         {
-            World w = new World(wrld, OnNeighbor);
-
-            MyAssert.Assert(!knownWorlds.ContainsKey(w.Info.position));
+            Point pos = wrld.info.position;
             
-            knownWorlds.Add(w.Position, w);
+            worlds.At(pos).WorldInit(wrld);
+            
+            worlds.At(wrld.info.position)
             w.onMoveHook = (player, pos, mv) => onMoveHook(w, player, pos, mv);
             w.onPlayerLeaveHook = (player, tel) => onPlayerLeaveHook(w, player, tel);
 
@@ -357,12 +344,6 @@ namespace ServerClient
 
             //Log.LogWriteLine("New world {0}", w.Position);
             //w.ConsoleOut();
-
-            if (trackedWorlds.TryGetValue(w.Position) == 0)
-            {
-                myHost.TryCloseNode(w.Info.host);
-                knownWorlds.Remove(w.Position);
-            }
         }
 
         void OnNeighbor(WorldInfo inf, bool isNewWorld)

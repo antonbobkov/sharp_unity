@@ -174,13 +174,38 @@ namespace ServerClient
         public Point? spawnPos;
     }
 
-    class World : MarshalByRefObject
+    class WorldMutator : MarshalByRefObject
+    {
+        [Forward]
+        public virtual void NET_AddPlayer(PlayerInfo player, Point pos, bool teleporting) { }
+
+        [Forward]
+        public virtual void NET_RemovePlayer(Guid player, bool teleporting) { }
+
+        [Forward]
+        public virtual void NET_Move(Guid player, Point newPos, ActionValidity mv) { }
+
+        [Forward]
+        public virtual void NET_AddNeighbor(WorldInfo worldInfo) { }
+
+        [Forward]
+        public virtual void NET_PlaceBlock(Point pos) { }
+
+        [Forward]
+        public virtual void NET_RemoveBlock(Point pos) { }
+    }
+
+    class World : WorldMutator
     {
         // ----- constructors -----
-        public World(WorldInitializer init, Action<WorldInfo, bool> onNeighbor_) : this(init.info)
+        public World(WorldInitializer init, Action<PlayerInfo> onLootHook)
         {
-            if (onNeighbor_ != null)
-                onNeighbor = onNeighbor_;
+            Info = init.info;
+            this.onLootHook = onLootHook;
+
+            foreach (Point p in Point.SymmetricRange(Point.One))
+                if (p != Point.Zero)
+                    neighborWorlds.Add(p + Position, null);
 
             // exactly one is non-null
             MyAssert.Assert((init.seed != null) || (init.world != null));
@@ -342,7 +367,7 @@ namespace ServerClient
         }
 
         // ----- modifiers -----
-        [Forward] public void NET_AddPlayer(PlayerInfo player, Point pos, bool teleporting)
+        public override void NET_AddPlayer(PlayerInfo player, Point pos, bool teleporting)
         {
             MyAssert.Assert(!playerPositions.ContainsKey(player.id));
             MyAssert.Assert(!playerInformation.ContainsKey(player.id));
@@ -355,7 +380,7 @@ namespace ServerClient
 
             NET_Move(player.id, pos, av);
         }
-        [Forward] public void NET_RemovePlayer(Guid player, bool teleporting)
+        public override void NET_RemovePlayer(Guid player, bool teleporting)
         {
             Point pos = playerPositions.GetValue(player);
             MyAssert.Assert(map[pos].PlayerId == player);
@@ -365,10 +390,8 @@ namespace ServerClient
 
             playerPositions.Remove(player);
             playerInformation.Remove(player);
-
-            onPlayerLeaveHook(inf, teleporting);
         }
-        [Forward] public void NET_Move(Guid player, Point newPos, ActionValidity mv)
+        public override void NET_Move(Guid player, Point newPos, ActionValidity mv)
         {
             PlayerInfo p = playerInformation.GetValue(player);
 
@@ -397,30 +420,22 @@ namespace ServerClient
             tile.Loot = false;
 
             //Log.Dump(player, newPos, mv);
-            onMoveHook(p, newPos, mv);
         }
-        [Forward] public void NET_AddNeighbor(WorldInfo worldInfo)
+        public override void NET_AddNeighbor(WorldInfo worldInfo)
         {
             Point p = worldInfo.position;
-
             MyAssert.Assert(neighborWorlds.ContainsKey(p));
-            bool isNewNeighbor = (neighborWorlds[p] == null);
-
             neighborWorlds[p] = worldInfo;
-
-            onNeighbor.Invoke(worldInfo, isNewNeighbor);
         }
-        [Forward] public void NET_PlaceBlock(Point pos)
+        public override void NET_PlaceBlock(Point pos)
         {
             Tile t = map[pos];
 
             MyAssert.Assert(t.IsEmpty());
 
             t.Block = new MyColor(50, 50, 50);
-
-            onChangeBlock(pos, true);
         }
-        [Forward] public void NET_RemoveBlock(Point pos)
+        public override void NET_RemoveBlock(Point pos)
         {
             Tile t = map[pos];
 
@@ -428,16 +443,10 @@ namespace ServerClient
             MyAssert.Assert(!t.IsSpecial());
 
             t.Block = null;
-
-            onChangeBlock(pos, false);
         }
 
         // ----- hooks -----
-        public Action<PlayerInfo> onLootHook = (info) => { };
-        public Action<PlayerInfo, Point, ActionValidity> onMoveHook = (a, b, c) => { };
-        public Action<PlayerInfo, bool> onPlayerLeaveHook = (a, b) => { };
-        public Action<WorldInfo, bool> onNeighbor = (a, b) => { };
-        public Action<Point, bool> onChangeBlock = (a, b) => { };
+        private Action<PlayerInfo> onLootHook;
 
         // ----- generating -----
         static public readonly Point worldSize = new Point(10, 10);
@@ -455,7 +464,7 @@ namespace ServerClient
                 playerInformation.Add(inf.id, inf);
 
             foreach (WorldInfo inf in ws.neighborWorlds)
-                NET_AddNeighbor(inf);
+                neighborWorlds[inf.position] = inf;
 
             MyAssert.Assert(playerPositions.Count == playerInformation.Count);
         }
@@ -514,15 +523,6 @@ namespace ServerClient
         }
 
         // ----- private data -----
-        private World(WorldInfo myInfo_)
-        {
-            Info = myInfo_;
-
-            foreach (Point p in Point.SymmetricRange(Point.One))
-                if (p != Point.Zero)
-                    neighborWorlds.Add(p + Position, null);
-        }
-
         Plane<Tile> map;
         Point? spawnPos = null;
 
@@ -621,9 +621,21 @@ namespace ServerClient
 
     class WorldValidator
     {
+        private class WorldHook : WorldMutator
+        {
+            private WorldValidator parent;
+            public WorldHook(WorldValidator parent) { this.parent = parent; }
+
+            public override void NET_AddPlayer(PlayerInfo player, Point pos, bool teleporting)
+            {
+                parent.BoundaryRequest();
+            }
+        }
+
         Random rand = new Random();
 
         World world;
+        WorldHook worldHook;
         OverlayHost myHost;
 
         OverlayEndpoint serverHost;
@@ -639,16 +651,13 @@ namespace ServerClient
         {
             serverHost = serverHost_;
 
-            World newWorld = new World(init, null);
-
+            World newWorld = new World(init, OnLootPickup);
             world = new ForwardProxy<World>(newWorld, RemoteFunctionForward).GetProxy();
+            worldHook = new WorldHook(this);
 
             myHost = globalHost.NewHost(init.info.host.hostname, Game.Convert(AssignProcessor),
                 BasicInfo.GenerateHandshake(NodeRole.WORLD_VALIDATOR, init.info), Aggregator.longInactivityWait);
-            //myHost.onNewConnectionHook = ProcessNewConnection;
 
-            newWorld.onLootHook = OnLootPickup;
-            newWorld.onMoveHook = OnMoveHook;
         }
 
         Game.MessageProcessor AssignProcessor(Node n, MemoryStream nodeInfo)
@@ -1351,6 +1360,8 @@ namespace ServerClient
             
             foreach (OverlayEndpoint remote in subscribers)
                 myHost.SendMessage(remote, MessageType.WORLD_VAR_CHANGE, ffc_ser);
+
+            ffc.Apply(worldHook);
         }
 
         public void FinalizeWorld()
