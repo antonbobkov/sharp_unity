@@ -189,7 +189,7 @@ namespace ServerClient
     class World : WorldMutator
     {
         // ----- constructors -----
-        public World(WorldInitializer init, Action<PlayerInfo> onLootHook)
+        public World(WorldInitializer init, Action<Point, PlayerInfo> onLootHook)
         {
             Info = init.info;
             this.onLootHook = onLootHook;
@@ -405,7 +405,7 @@ namespace ServerClient
 
             if (tile.Loot == true)
                 if(onLootHook != null)
-                    onLootHook(p);
+                    onLootHook(newPos, p);
             
             playerPositions[player] = newPos;
             tile.PlayerId = player;
@@ -438,7 +438,7 @@ namespace ServerClient
         }
 
         // ----- hooks -----
-        private Action<PlayerInfo> onLootHook;
+        private Action<Point, PlayerInfo> onLootHook;
 
         // ----- generating -----
         static public readonly Point worldSize = new Point(10, 10);
@@ -1335,7 +1335,7 @@ namespace ServerClient
                 postProcess.Invoke(Response.SUCCESS);
             }
         }
-        void OnLootPickup(PlayerInfo inf)
+        void OnLootPickup(Point p, PlayerInfo inf)
         {
             myHost.ConnectSendMessage(inf.validatorHost, MessageType.PICKUP_TELEPORT);
         }

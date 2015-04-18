@@ -16,204 +16,11 @@ public class RotateSlowly : MonoBehaviour {
     }
 }
 
-class WorldDraw
+public class minecraft : MonoBehaviour
 {
-    static public bool continuousBackground = false;
-
-    World w;
-    minecraft main;
-
-    public readonly Point sz;
-
-	public GameObject background;
-	public Plane<GameObject> walls;
-	public Plane<GameObject> loots;
-    public Dictionary<Guid, GameObject> players = new Dictionary<Guid, GameObject>();
-
-    private HashSet<GameObject> teleportAnimations = new HashSet<GameObject>();
-    public void TickAnimations(float deltaTime)
-    {
-        Vector3 change = deltaTime * 2 * Vector3.one;
-
-        foreach (var k in teleportAnimations.ToArray())
-        {
-            k.transform.localScale -= change;
-            if (k.transform.localScale.x <= 0)
-            {
-                teleportAnimations.Remove(k);
-                UnityEngine.Object.Destroy(k);
-                //Log.Console("done");
-            }
-        }
-
-        foreach (var k in players.Values)
-        {
-            if(k.transform.localScale.x < 1)
-                k.transform.localScale += change;
-            if (k.transform.localScale.x > 1)
-                k.transform.localScale = Vector3.one;
-        }
-    }
-
-    public void NewTeleportAnimation(Vector3 pos, Color c)
-    {
-        var avatar = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-        avatar.renderer.material.color = c;
-        avatar.transform.position = pos;// minecraft.GetPositionAtGrid(w.Position, pos);
-
-        //Log.Console(avatar.transform.localScale.ToString());
-
-        teleportAnimations.Add(avatar);
-    }
-
-	public void MessBackground()
-    {
-        //background.transform.rotation = Quaternion.AngleAxis(2f, UnityEngine.Random.onUnitSphere);
-        background.transform.localScale *= .99f;
-    }
-
-    public WorldDraw(World w_, minecraft main_)
-	{
-		w = w_;
-        main = main_;
-        sz = w.Size;
-
-        bool isOwnedByUs = main.all.worldValidators.ContainsKey(w.Position);
-
-        w.onChangeBlock = (pos, placed) => { if (placed) PlaceBlock(pos); else RemoveBlock(pos); };
-
-		walls = new Plane<GameObject>(sz);
-		loots = new Plane<GameObject>(sz);
-		
-		foreach(Point pos in Point.Range(sz))
-		{
-			ITile t = w[pos];
-			if (t.Solid)
-			{
-                PlaceBlock(pos);
-			}
-			else if(t.Loot)
-			{
-				GameObject loot = GameObject.CreatePrimitive(PrimitiveType.Quad);
-				loots [pos] = loot;
-				
-				loot.transform.localScale = new Vector3(.5f, .5f, 1);
-				loot.renderer.material.color = Color.blue;
-				loot.transform.position = minecraft.GetPositionAtGrid(w.Position, pos);
-				loot.transform.rotation = Quaternion.AngleAxis(15f, UnityEngine.Random.onUnitSphere);
-				loot.AddComponent<RotateSlowly>();
-			}
-		}
-
-		background = GameObject.CreatePrimitive(PrimitiveType.Quad);
-		background.transform.localScale = new Vector3(sz.x, sz.y, 1);
-		background.transform.position = minecraft.GetPositionAtGrid(w.Position, new Point(0,0)) + new Vector3(sz.x-1, sz.y-1, 1)/2;
-		if(isOwnedByUs)
-            background.renderer.material.color = new Color(.6f, .6f, .6f);
-        else
-            background.renderer.material.color = new Color(.7f, .7f, .7f);
-
-        if (!continuousBackground)
-            MessBackground();
-        
-        foreach (PlayerInfo inf in w.GetAllPlayers())
-		{
-			AddPlayer(inf.id);
-		}
-    }
-
-	public void Purge()
-	{
-		foreach(Point pos in Point.Range(sz))
-		{
-			UnityEngine.Object.Destroy (walls[pos]);
-			UnityEngine.Object.Destroy (loots[pos]);
-		}
-
-        foreach(GameObject pl in players.Values)
-            UnityEngine.Object.Destroy(pl);
-
-		UnityEngine.Object.Destroy(background);
-	}
-
-    public void AddPlayer(Guid player)
-    {
-        if (players.ContainsKey(player))
-            return;
-
-		//MyAssert.Assert(w.playerPositions.ContainsKey(player));
-        Point pos = w.GetPlayerPosition(player);
-
-        var avatar = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-
-        var r = new MyRandom(BitConverter.ToInt32(player.ToByteArray(), 0));
-
-        avatar.renderer.material.color = new Color(
-            (float)r.NextDouble(),
-            (float)r.NextDouble(),
-            (float)r.NextDouble());
-
-        avatar.transform.position = minecraft.GetPositionAtGrid(w.Position, pos);
-        players.Add(player, avatar);
-
-        if (player == main.me)
-            main.UpdateCamera(avatar);
-    }
-
-    public void RemovePlayer(Guid player, bool teleporting)
-    {
-        if (!players.ContainsKey(player))
-            return;
-
-        GameObject avatar = players.GetValue(player);
-
-        if (teleporting)
-            NewTeleportAnimation(avatar.transform.position, avatar.renderer.material.color);
-
-        //MyAssert.Assert(w.playerPositions.ContainsKey(player));
-        UnityEngine.Object.Destroy(avatar);
-		players.Remove(player);
-    }
-
-    public void RemoveBlock(Point pos)
-    {
-        ITile t = w[pos];
-
-        MyAssert.Assert(t.IsEmpty());
-        MyAssert.Assert(walls[pos] != null);
-
-        UnityEngine.Object.Destroy(walls[pos]);
-    }
-
-    public void PlaceBlock(Point pos)
-    {
-        ITile t = w[pos];
-
-        MyAssert.Assert(t.Solid);
-        MyAssert.Assert(walls[pos] == null);
-
-        GameObject wall = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        walls[pos] = wall;
-
-        wall.transform.position = minecraft.GetPositionAtGrid(w.Position, pos);
-        if (!t.Spawn)
-        {
-            wall.renderer.material.color = new Color((float)t.Block.R / 255, (float)t.Block.G / 255, (float)t.Block.B / 255);
-        }
-        else
-            wall.renderer.material.color = Color.yellow;
-    }
-}
-
-public class minecraft : MonoBehaviour {
-
     internal Aggregator all;
 
-    //bool gameStarted = false;
-
-	Dictionary<Point, WorldDraw> worlds = new Dictionary<Point, WorldDraw>();
-
-	public Guid me;
+    public Guid me;
     PlayerAgent myAgent = null;
     PlayerData myData = null;
 
@@ -232,16 +39,17 @@ public class minecraft : MonoBehaviour {
         return new Vector3(cornerPos.x + pos.x, cornerPos.y + pos.y, 0);
     }
     static internal Point GetPositionAtMap(Point worldPos, Point pos)
-	{
+    {
         Point cornerPos = Point.Scale(worldPos, World.worldSize);
         return pos - cornerPos;
-	}
+    }
 
     const float cameraDistance = 30f;
 
-    
+
     // Use this for initialization
-	void Start () {
+    void Start()
+    {
         MasterLog.Initialize("log_config.xml", msg => Debug.Log(msg));
 
         GameConfig cfg = GameConfig.ReadConfig("unity_config.xml");
@@ -249,8 +57,23 @@ public class minecraft : MonoBehaviour {
 
         IPAddress myIP = GameConfig.GetIP(cfg);
 
-        all = new Aggregator(myIP);
-        
+        Action<Guid, GameObject> updateCameraAction = (id, obj) => 
+            {
+                if(id == me)
+                    UpdateCamera(obj);
+            };
+
+        Func<WorldInitializer, World> newWorldCreation = (init) =>
+            {
+                bool isOwnedByUs = all.worldValidators.ContainsKey(init.info.position);
+
+                WorldDraw wd = new WorldDraw(init, isOwnedByUs, updateCameraAction);
+
+                return wd;
+            };
+
+        all = new Aggregator(myIP, newWorldCreation);
+
         bool myServer = cfg.startServer && all.host.MyAddress.Port == GlobalHost.nStartPort;
 
         if (myServer)
@@ -276,8 +99,8 @@ public class minecraft : MonoBehaviour {
             all.myClient.NewMyPlayer(me);
         };
 
-		all.onNewPlayerAgentHook = (pa) =>
-		{
+        all.onNewPlayerAgentHook = (pa) =>
+        {
             if (pa.info.id == me)
             {
                 myAgent = pa;
@@ -292,20 +115,14 @@ public class minecraft : MonoBehaviour {
                         TrySpawn();
                 };
             }
-		};
-
-        all.myClient.onMoveHook = (w, pl, pos, mt) => OnMove(w, pl, pos, mt);
-        all.myClient.onPlayerLeaveHook = (w, pl, tel) => OnPlayerLeave(w.Position, pl, tel);
-
-        all.myClient.onNewWorldHook = (w) => OnNewWorld(w);
-        all.myClient.onDeleteWorldHook = (w) => OnDeleteWorld(w);
+        };
 
         if (myServer)
             all.StartServer(cfg.serverSpawnDensity);
 
         var light = gameObject.AddComponent<Light>();
         light.type = LightType.Point;
-        light.range = cameraDistance*1.5f;
+        light.range = cameraDistance * 1.5f;
         light.intensity = 5;
 
         //camera.isOrthoGraphic = true;
@@ -331,105 +148,16 @@ public class minecraft : MonoBehaviour {
         }
     }
 
-    void OnApplicationQuit () {
-		Log.Console ("Terminating");
-		all.host.Close();
-		System.Threading.Thread.Sleep (100);
-		Log.Console (ThreadManager.Status ());
-		ThreadManager.Terminate();
-		//System.Threading.Thread.Sleep (100);
-		//all.sync.Add(null);
-	}
-
-    void UpdateWorlds()
+    void OnApplicationQuit()
     {
-        //if (myData == null || !myData.IsConnected)
-        //    return;
-
-        //suggestedPos = myData.WorldPosition;
-
-        Dictionary<Point, WorldDraw> newWorlds = new Dictionary<Point, WorldDraw>();
-        //foreach (Point delta in Point.SymmetricRange(new Point(1, 1)))
-        //{
-        //    Point targetPos = suggestedPos + delta;
-        //    World worldCandidate = all.myClient.knownWorlds.TryGetValue(targetPos);
-        //    if (worldCandidate == null)
-        //        continue;
-        
-        foreach(World worldCandidate in all.myClient.knownWorlds.Values)
-        {
-            Point targetPos = worldCandidate.Position;
-
-            if (worlds.ContainsKey(targetPos))
-            {
-                newWorlds[targetPos] = worlds[targetPos];
-                worlds.Remove(targetPos);
-            }
-            else
-                newWorlds[targetPos] = new WorldDraw(worldCandidate, this);
-        }
-
-        foreach (WorldDraw wdt in worlds.Values)
-            wdt.Purge();
-        worlds = newWorlds;
+        Log.Console("Terminating");
+        all.host.Close();
+        System.Threading.Thread.Sleep(100);
+        Log.Console(ThreadManager.Status());
+        ThreadManager.Terminate();
+        //System.Threading.Thread.Sleep (100);
+        //all.sync.Add(null);
     }
-
-    void OnNewWorld(World w)
-    {
-		UpdateWorlds();
-        //Log.LogWriteLine("Unity : OnNewWorld " + w.Position);
-    }
-
-    void OnDeleteWorld(World w)
-    {
-        UpdateWorlds();
-    }
-
-    void OnPlayerLeave(Point worldPos, PlayerInfo player, bool teleporing)
-    {
-        WorldDraw worldDraw = worlds.TryGetValue(worldPos);
-        if (worldDraw != null)
-            worldDraw.RemovePlayer(player.id, teleporing);
-    }
-
-    void OnMove(World w, PlayerInfo player, Point newPos, ActionValidity mv)
-	{
-		//Log.LogWriteLine(Log.Dump(this, w.info, player, player.id, mv));
-
-        //if (mv == ActionValidity.NEW && player.id == me)
-        //    UpdateWorlds(w.Position);
-
-        if (!worlds.ContainsKey(w.Position))
-            return;
-
-        bool teleported = mv.Has(ActionValidity.REMOTE);
-
-        WorldDraw wd = worlds.GetValue(w.Position);
-
-        if (mv.Has(ActionValidity.NEW))
-            wd.AddPlayer(player.id);
-
-        GameObject obj = wd.loots[newPos];
-		if (obj != null)
-		{
-			Destroy(obj);
-            wd.loots[newPos] = null;
-		}
-
-        GameObject movedPlayer = wd.players.GetValue(player.id);
-
-        if (teleported && !mv.Has(ActionValidity.NEW))
-            //if (movedPlayer.transform.position != GetPositionAtGrid(w.Position, newPos))
-            wd.NewTeleportAnimation(movedPlayer.transform.position, movedPlayer.renderer.material.color);
-
-        movedPlayer.transform.position = GetPositionAtGrid(w.Position, newPos);
-
-        if (teleported)
-            movedPlayer.transform.localScale = Vector3.one * .1f;
-
-        if (player.id == me)
-            UpdateCamera(movedPlayer);
-	}
 
     public void UpdateCamera(GameObject ourPlayer)
     {
@@ -438,7 +166,7 @@ public class minecraft : MonoBehaviour {
     }
 
     Dictionary<KeyCode, float> keyTrack = new Dictionary<KeyCode, float>();
-    
+
     Dictionary<KeyCode, Point> keyDir = new Dictionary<KeyCode, Point>()
     { 
         {KeyCode.UpArrow, new Point(0, 1)},
@@ -459,7 +187,7 @@ public class minecraft : MonoBehaviour {
 
         return pos;
     }
-    
+
     void ProcessMovement()
     {
         Point p = Point.Zero;
@@ -470,7 +198,7 @@ public class minecraft : MonoBehaviour {
             {
                 if (keyTrack.ContainsKey(k))
                     keyTrack.Remove(k);
-                
+
                 keyTrack.Add(k, 0);
                 p += keyDir[k];
             }
@@ -495,15 +223,15 @@ public class minecraft : MonoBehaviour {
         bool teleport = Input.GetMouseButtonDown(0);
         bool move = (p != Point.Zero);
 
-        if (! (move || teleport))
+        if (!(move || teleport))
             return;
 
         PlayerAgent pa = myAgent;
         PlayerData pd = myData;
         if (pa == null || pd == null || !pd.IsConnected)
             return;
-        
-        World w = all.myClient.knownWorlds.TryGetValue(pd.WorldPosition);
+
+        World w = all.myClient.worlds.TryGetWorld(pd.WorldPosition);
 
         if (w == null)
             return;
@@ -513,17 +241,17 @@ public class minecraft : MonoBehaviour {
         if (move)
         {
             Point oldPos = w.GetPlayerPosition(me);
-			Point newPos = oldPos + p;
+            Point newPos = oldPos + p;
 
             ActionValidity mv = w.CheckValidMove(me, newPos);
-            
+
             if (mv == ActionValidity.VALID || mv == ActionValidity.BOUNDARY)
-				pa.Move(w.Info, newPos, mv);
+                pa.Move(w.Info, newPos, mv);
         }
         else if (teleport)
         {
             Point pos = RayCast(w.Position);
-            
+
             //Log.LogWriteLine("Teleporting to {0}", pos);
             pa.Move(w.Info, pos, ActionValidity.REMOTE);
             //pa.Move(all.myClient.gameInfo.GetWorldByPos(Point.Zero), pos, ActionValidity.REMOTE);
@@ -537,7 +265,7 @@ public class minecraft : MonoBehaviour {
         if (myData == null || !myData.IsConnected)
             return;
 
-        World w = all.myClient.knownWorlds.TryGetValue(myData.WorldPosition);
+        World w = all.myClient.worlds.TryGetWorld(myData.WorldPosition);
 
         Point pos = RayCast(w.Position);
 
@@ -558,9 +286,10 @@ public class minecraft : MonoBehaviour {
                 a.Invoke();
         }
     }
-    
+
     // Update is called once per frame
-	void Update () {
+    void Update()
+    {
 
         lock (all.sync.syncLock)
         {
@@ -568,16 +297,6 @@ public class minecraft : MonoBehaviour {
 
             ProcessMovement();
             ProcessBlockInteraction();
-
-            if(Input.GetKeyDown(KeyCode.Alpha1))
-            {
-                if (WorldDraw.continuousBackground == true)
-                {
-                    WorldDraw.continuousBackground = false;
-                    foreach (var w in worlds)
-                        w.Value.MessBackground();
-                }
-            }
 
             if (Input.GetKeyDown(KeyCode.S))
             {
@@ -588,5 +307,5 @@ public class minecraft : MonoBehaviour {
 
         foreach (var w in worlds.Values)
             w.TickAnimations(Time.deltaTime);
-	}
+    }
 }
