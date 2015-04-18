@@ -50,6 +50,13 @@ namespace ServerClient
         }
     }
 
+    class TrackedWorldData
+    {
+        public OverlayHost host;
+        public Action<Point, WorldInfo> recordWorldInfo;
+        public Func<WorldInitializer, World> generateWorld;
+    }
+
     class TrackedWorld
     {
         private Point position;
