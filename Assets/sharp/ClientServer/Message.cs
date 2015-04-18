@@ -60,6 +60,7 @@ namespace ServerClient
         }
     }
 
+    //[System.AttributeUsage(AttributeTargets.Method, Inherited = true)]
     public class Forward : Attribute { }
 
     class ForwardProxy<T> : RealProxy

@@ -271,8 +271,8 @@ namespace ServerClient
         public PlayerData data = null;
 
         public Action<PlayerData> onDataHook = (a) => { };
-        public Action<WorldInfo> onSpawnHook = (a) => { };
-        public Action<WorldInfo, WorldInfo> onRealmMoveHook = (a, b) => { };
+        //public Action<WorldInfo> onSpawnHook = (a) => { };
+        //public Action<WorldInfo, WorldInfo> onRealmMoveHook = (a, b) => { };
 
         public PlayerAgent(PlayerInfo info_, GlobalHost globalHost, OverlayEndpoint serverHost_, Client myClient_)
         {
@@ -345,17 +345,16 @@ namespace ServerClient
 
         void OnChangeRealm(WorldInfo oldWorld, WorldInfo newWorld)
         {
-            onRealmMoveHook(oldWorld, newWorld);
+            //onRealmMoveHook(oldWorld, newWorld);
 
-            myClient.TrackWorld(newWorld);
-            myClient.UnTrackWorld(oldWorld.position);
+            myClient.connectedPlayers.Set(info.id, newWorld);
         }
 
         void OnSpawn(WorldInfo newWorld)
         {
-            onSpawnHook(newWorld);
+            //onSpawnHook(newWorld);
 
-            myClient.TrackWorld(newWorld);
+            myClient.connectedPlayers.Set(info.id, newWorld);
         }
         
         public void Spawn()

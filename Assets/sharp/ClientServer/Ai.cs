@@ -39,7 +39,7 @@ namespace ServerClient
             if (mv == ActionValidity.BOUNDARY)
             {
                 RealmMove rm = WorldTools.BoundaryMove(newPosition, world.Position);
-                World w = all.myClient.knownWorlds.TryGetValue(rm.newWorld);
+                World w = all.myClient.worlds.TryGetWorld(rm.newWorld);
 
                 if (w == null)
                     return null;
@@ -80,7 +80,9 @@ namespace ServerClient
                 return longSleep;
             }
 
-            World playerWorld = myClient.knownWorlds.GetValue(playerData.WorldPosition);
+            World playerWorld = myClient.worlds.TryGetWorld(playerData.WorldPosition);
+            if (playerWorld == null)
+                return longSleep;
 
             if (playerData.inventory.teleport > 0 && rand.NextDouble() < .1)
             {
@@ -90,7 +92,7 @@ namespace ServerClient
                     teleportRange = Point.One; // external teleport
 
                 var teleportPos = (from p in Point.SymmetricRange(teleportRange)
-                                   let w = myClient.knownWorlds.TryGetValue(p + playerWorld.Position)
+                                   let w = myClient.worlds.TryGetWorld(p + playerWorld.Position)
                                    where w != null
                                    from t in w.GetAllTiles()
                                    where t.IsMoveable()

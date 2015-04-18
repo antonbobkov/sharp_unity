@@ -99,7 +99,7 @@ namespace ServerClient
             else if (mt == MessageType.NEW_WORLD_REQUEST)
             {
                 Point worldPos = Serializer.Deserialize<Point>(stm);
-                OnNewWorldRequest(worldPos, null);
+                OnNewWorldRequest(worldPos, null, 0);
             }
             else if (mt == MessageType.NEW_VALIDATOR)
             {
@@ -118,7 +118,7 @@ namespace ServerClient
             if (mt == MessageType.NEW_WORLD_REQUEST)
             {
                 Point worldPos = Serializer.Deserialize<Point>(stm);
-                OnNewWorldRequest(worldPos, null);
+                OnNewWorldRequest(worldPos, null, 0);
             }
             else if (mt == MessageType.WORLD_HOST_DISCONNECT)
             {
@@ -195,7 +195,7 @@ namespace ServerClient
             return new MyColor(R, G, B);
         }
 
-        void OnNewWorldRequest(Point worldPos, WorldSerialized ser)
+        void OnNewWorldRequest(Point worldPos, WorldSerialized ser, int generation)
         {
             if (worlds.ContainsKey(worldPos))
                 return;
@@ -210,7 +210,7 @@ namespace ServerClient
             OverlayEndpoint validatorHost = new OverlayEndpoint(validatorPool.Random(n => r.Next(n)), new OverlayHostName("host world " + worldPos));
 
             WorldInitializer init;
-            WorldInfo info = new WorldInfo(worldPos, validatorHost);
+            WorldInfo info = new WorldInfo(worldPos, validatorHost, generation);
             bool hasSpawn;
 
             if (ser == null)

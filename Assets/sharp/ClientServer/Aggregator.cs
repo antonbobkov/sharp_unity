@@ -82,11 +82,11 @@ namespace ServerClient
 
         public Action<PlayerAgent> onNewPlayerAgentHook = (a) => { };
 
-        public Aggregator(IPAddress myIP)
+        public Aggregator(IPAddress myIP, Func<WorldInitializer, World> generateWorld)
         {
             sync = new ActionSyncronizer();
             host = new GlobalHost(sync.GetProxy(), myIP, sync.TimedAction);
-            myClient = new Client(host, this);
+            myClient = new Client(host, this, generateWorld);
 
             ILog statsLog = MasterLog.GetFileLog("stats.log");
             sync.TimedAction.AddAction(() => Log.EntryNormal(statsLog, this.GetStats()));

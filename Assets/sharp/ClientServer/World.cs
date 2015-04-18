@@ -176,23 +176,14 @@ namespace ServerClient
 
     class WorldMutator : MarshalByRefObject
     {
-        [Forward]
         public virtual void NET_AddPlayer(PlayerInfo player, Point pos, bool teleporting) { }
-
-        [Forward]
         public virtual void NET_RemovePlayer(Guid player, bool teleporting) { }
-
-        [Forward]
         public virtual void NET_Move(Guid player, Point newPos, ActionValidity mv) { }
-
-        [Forward]
         public virtual void NET_AddNeighbor(WorldInfo worldInfo) { }
-
-        [Forward]
         public virtual void NET_PlaceBlock(Point pos) { }
-
-        [Forward]
         public virtual void NET_RemoveBlock(Point pos) { }
+
+        public virtual void Dispose() { }
     }
 
     class World : WorldMutator
@@ -367,7 +358,7 @@ namespace ServerClient
         }
 
         // ----- modifiers -----
-        public override void NET_AddPlayer(PlayerInfo player, Point pos, bool teleporting)
+        [Forward] public override void NET_AddPlayer(PlayerInfo player, Point pos, bool teleporting)
         {
             MyAssert.Assert(!playerPositions.ContainsKey(player.id));
             MyAssert.Assert(!playerInformation.ContainsKey(player.id));
@@ -380,7 +371,7 @@ namespace ServerClient
 
             NET_Move(player.id, pos, av);
         }
-        public override void NET_RemovePlayer(Guid player, bool teleporting)
+        [Forward] public override void NET_RemovePlayer(Guid player, bool teleporting)
         {
             Point pos = playerPositions.GetValue(player);
             MyAssert.Assert(map[pos].PlayerId == player);
@@ -391,7 +382,7 @@ namespace ServerClient
             playerPositions.Remove(player);
             playerInformation.Remove(player);
         }
-        public override void NET_Move(Guid player, Point newPos, ActionValidity mv)
+        [Forward] public override void NET_Move(Guid player, Point newPos, ActionValidity mv)
         {
             PlayerInfo p = playerInformation.GetValue(player);
 
@@ -413,7 +404,8 @@ namespace ServerClient
             MyAssert.Assert(tile.IsMoveable());
 
             if (tile.Loot == true)
-                onLootHook(p);
+                if(onLootHook != null)
+                    onLootHook(p);
             
             playerPositions[player] = newPos;
             tile.PlayerId = player;
@@ -421,13 +413,13 @@ namespace ServerClient
 
             //Log.Dump(player, newPos, mv);
         }
-        public override void NET_AddNeighbor(WorldInfo worldInfo)
+        [Forward] public override void NET_AddNeighbor(WorldInfo worldInfo)
         {
             Point p = worldInfo.position;
             MyAssert.Assert(neighborWorlds.ContainsKey(p));
             neighborWorlds[p] = worldInfo;
         }
-        public override void NET_PlaceBlock(Point pos)
+        [Forward] public override void NET_PlaceBlock(Point pos)
         {
             Tile t = map[pos];
 
@@ -435,7 +427,7 @@ namespace ServerClient
 
             t.Block = new MyColor(50, 50, 50);
         }
-        public override void NET_RemoveBlock(Point pos)
+        [Forward] public override void NET_RemoveBlock(Point pos)
         {
             Tile t = map[pos];
 

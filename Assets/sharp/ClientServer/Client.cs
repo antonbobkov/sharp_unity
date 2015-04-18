@@ -18,17 +18,24 @@ namespace ServerClient
     class PlayerDatabase
     {
         private Dictionary<Guid, Point> playerPositions = new Dictionary<Guid, Point>();
+
+        private Action<WorldInfo> recordWorldInfo;
         private Action<Point> track;
         private Action<Point> untrack;
 
-        public PlayerDatabase(Action<Point> track, Action<Point> untrack)
+        public PlayerDatabase(Action<Point> track, Action<Point> untrack, Action<WorldInfo> recordWorldInfo)
         {
             this.track = track;
             this.untrack = untrack;
+            this.recordWorldInfo = recordWorldInfo;
         }
 
-        public void Set(Guid player, Point pos)
+        public void Set(Guid player, WorldInfo inf)
         {
+            Point pos = inf.position;
+
+            recordWorldInfo.Invoke(inf);
+
             foreach (Point p in Point.SymmetricRange(Point.One))
                 track.Invoke(pos + p);
 
@@ -53,14 +60,27 @@ namespace ServerClient
     class TrackedWorldData
     {
         public OverlayHost host;
-        public Action<Point, WorldInfo> recordWorldInfo;
+        public Action<WorldInfo> recordWorldInfo;
         public Func<WorldInitializer, World> generateWorld;
     }
 
     class TrackedWorld
     {
+        private class WorldHook : WorldMutator
+        {
+            private TrackedWorld parent;
+            public WorldHook(TrackedWorld parent) { this.parent = parent; }
+
+            public override void NET_AddNeighbor(WorldInfo worldInfo)
+            {
+                parent.data.recordWorldInfo(worldInfo);
+            }
+        }
+
+        private TrackedWorldData data;
+        private WorldHook worldHook;
+
         private Point position;
-        private OverlayHost myHost;
 
         private bool isSubscribed = false;
 
@@ -83,14 +103,19 @@ namespace ServerClient
         {
             if (tracker > 0 && !isSubscribed && Info != null)
             {
-                isSubscribed = true; // subscribe!
+                isSubscribed = true;
+                data.host.ConnectSendMessage(Info.Value.host, MessageType.SUBSCRIBE);
             }
         }
         private void Unsubscribe()
         {
             if (isSubscribed)
             {
-                isSubscribed = false;   // unsubscribe!
+                isSubscribed = false;
+                data.host.ConnectSendMessage(Info.Value.host, MessageType.UNSUBSCRIBE);
+
+                MyAssert.Assert(world != null);
+                world.Dispose();
                 world = null;
             }
         }
@@ -111,10 +136,12 @@ namespace ServerClient
             return true;
         }
 
-        public TrackedWorld(Point position, OverlayHost myHost)
+        public TrackedWorld(Point position, TrackedWorldData data)
         {
             this.position = position;
-            this.myHost = myHost;
+            this.data = data;
+
+            worldHook = new WorldHook(this);
         }
 
         public void Track()
@@ -141,7 +168,7 @@ namespace ServerClient
             }
             else // already initialized
             {
-                if (Info == newInfo && newInfo.generation < Info.Value.generation)  // old information
+                if (Info == newInfo || newInfo.generation < Info.Value.generation)  // old information
                     return;
 
                 MyAssert.Assert(newInfo.generation != Info.Value.generation);
@@ -162,7 +189,9 @@ namespace ServerClient
 
             MyAssert.Assert(world == null);
 
-            world = new World(init, null);  // wrong: should have non-null action
+            world = data.generateWorld(init);
+            foreach (WorldInfo inf in world.GetKnownNeighbors())
+                data.recordWorldInfo(inf);
         }
         public void WorldAction(ForwardFunctionCall ffc, WorldInfo info)
         {
@@ -171,6 +200,7 @@ namespace ServerClient
 
             MyAssert.Assert(world != null);
             ffc.Apply(world);
+            ffc.Apply(worldHook);
         }
 
         public World GetWorld() { return world; }
@@ -179,14 +209,22 @@ namespace ServerClient
     class WorldDatabase
     {
         private Dictionary<Point, TrackedWorld> worlds = new Dictionary<Point, TrackedWorld>();
-        private OverlayHost myHost;
+        private TrackedWorldData data;
 
-        public WorldDatabase(OverlayHost myHost) { this.myHost = myHost; }
+        public WorldDatabase(TrackedWorldData data)
+        {
+            data.recordWorldInfo = inf => this.At(inf.position).SetWorldInfo(inf);
+            this.data = data;
+        }
         public TrackedWorld At(Point p)
         {
             if(!worlds.ContainsKey(p))
-                worlds.Add(p, new TrackedWorld(p, myHost));
+                worlds.Add(p, new TrackedWorld(p, data));
             return worlds[p];
+        }
+        public World TryGetWorld(Point p)
+        {
+            return At(p).GetWorld();
         }
     }
 
@@ -200,33 +238,39 @@ namespace ServerClient
 
         Aggregator all;
 
-        PlayerDatabase connectedPlayers;
-        WorldDatabase worlds;
+        public PlayerDatabase connectedPlayers;
+        public WorldDatabase worlds;
 
         public HashSet<Guid> myPlayerAgents = new HashSet<Guid>();
 
         public Action onServerReadyHook = () => { };
 
-        public Action<World> onNewWorldHook = (a) => { };
-        public Action<World> onDeleteWorldHook = (a) => { };
+        //public Action<World> onNewWorldHook = (a) => { };
+        //public Action<World> onDeleteWorldHook = (a) => { };
 
         public Action<PlayerInfo> onNewMyPlayerHook = (a) => { };
 
-        public Action<World, PlayerInfo, Point, ActionValidity> onMoveHook = (a, b, c, d) => { };
-        public Action<World, PlayerInfo, bool> onPlayerLeaveHook = (a, b, c) => { };
-        
-        public Client(GlobalHost globalHost, Aggregator all_)
+        //public Action<World, PlayerInfo, Point, ActionValidity> onMoveHook = (a, b, c, d) => { };
+        //public Action<World, PlayerInfo, bool> onPlayerLeaveHook = (a, b, c) => { };
+
+        Func<WorldInitializer, World> generateWorld;
+
+        public Client(GlobalHost globalHost, Aggregator all, Func<WorldInitializer, World> generateWorld)
         {
-            all = all_;
+            this.all = all;
+            this.generateWorld = generateWorld;
 
             myHost = globalHost.NewHost(Client.hostName, Game.Convert(AssignProcessor),
                 BasicInfo.GenerateHandshake(NodeRole.CLIENT), Aggregator.longInactivityWait);
 
             myHost.onNewConnectionHook = ProcessNewConnection;
 
-            worlds = new WorldDatabase(myHost);
 
-            connectedPlayers = new PlayerDatabase(p => worlds.At(p).Track(), p => worlds.At(p).Untrack());
+            TrackedWorldData data = new TrackedWorldData() { host = myHost, generateWorld = generateWorld, recordWorldInfo = null };
+            worlds = new WorldDatabase(data);
+
+            connectedPlayers = new PlayerDatabase(p => worlds.At(p).Track(), p => worlds.At(p).Untrack(), 
+                inf => worlds.At(inf.position).SetWorldInfo(inf));
         }
 
         Game.MessageProcessor AssignProcessor(Node n, MemoryStream nodeInfo)
@@ -340,23 +384,9 @@ namespace ServerClient
         void OnNewWorldVar(WorldInitializer wrld)
         {
             Point pos = wrld.info.position;
-            
+
             worlds.At(pos).WorldInit(wrld);
             
-            worlds.At(wrld.info.position)
-            w.onMoveHook = (player, pos, mv) => onMoveHook(w, player, pos, mv);
-            w.onPlayerLeaveHook = (player, tel) => onPlayerLeaveHook(w, player, tel);
-
-            onNewWorldHook(w);
-
-            //Log.LogWriteLine("New world {0}", w.Position);
-            //w.ConsoleOut();
-        }
-
-        void OnNeighbor(WorldInfo inf, bool isNewWorld)
-        {
-            if (trackedWorlds.TryGetValue(inf.position) > 0)
-                OnNewWorld(inf);
         }
 
         void OnPlayerValidateRequest(Guid actionId, PlayerInfo info)

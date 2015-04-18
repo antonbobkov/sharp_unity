@@ -93,7 +93,7 @@ namespace ServerClient
 
             IPAddress myIP = GameConfig.GetIP(cfg_total);
 
-            Aggregator all = new Aggregator(myIP);
+            Aggregator all = new Aggregator(myIP, init => new World(init, null));
 
             bool myServer = cfg_total.startServer && all.host.MyAddress.Port == GlobalHost.nStartPort;
 
@@ -151,7 +151,8 @@ namespace ServerClient
 
             inputProc.commands.Add("draw", (param) =>
             {
-                World w = all.myClient.knownWorlds.GetValue(new Point(0,0));
+                World w = all.myClient.worlds.TryGetWorld(new Point(0, 0));
+                MyAssert.Assert(w != null);
                 ThreadManager.NewThread(() => RepeatedAction(all.sync.GetAsDelegate(),
                     () => WorldTools.ConsoleOut(w), 500),
                     () => { }, "console drawer");
