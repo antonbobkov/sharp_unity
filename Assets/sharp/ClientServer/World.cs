@@ -377,7 +377,7 @@ namespace ServerClient
             MyAssert.Assert(map[pos].PlayerId == player);
             map[pos].PlayerId = Guid.Empty;
 
-            PlayerInfo inf = playerInformation.GetValue(player);
+            //PlayerInfo inf = playerInformation.GetValue(player);
 
             playerPositions.Remove(player);
             playerInformation.Remove(player);

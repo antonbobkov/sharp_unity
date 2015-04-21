@@ -253,12 +253,12 @@ namespace ServerClient
         //public Action<World, PlayerInfo, Point, ActionValidity> onMoveHook = (a, b, c, d) => { };
         //public Action<World, PlayerInfo, bool> onPlayerLeaveHook = (a, b, c) => { };
 
-        Func<WorldInitializer, World> generateWorld;
+        //Func<WorldInitializer, World> generateWorld;
 
         public Client(GlobalHost globalHost, Aggregator all, Func<WorldInitializer, World> generateWorld)
         {
             this.all = all;
-            this.generateWorld = generateWorld;
+            //this.generateWorld = generateWorld;
 
             myHost = globalHost.NewHost(Client.hostName, Game.Convert(AssignProcessor),
                 BasicInfo.GenerateHandshake(NodeRole.CLIENT), Aggregator.longInactivityWait);

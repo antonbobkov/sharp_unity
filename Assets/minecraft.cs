@@ -18,11 +18,13 @@ public class RotateSlowly : MonoBehaviour {
 
 public class minecraft : MonoBehaviour
 {
-    internal Aggregator all;
+    private Aggregator all;
 
-    public Guid me;
-    PlayerAgent myAgent = null;
-    PlayerData myData = null;
+    private Guid me;
+    private PlayerAgent myAgent = null;
+    private PlayerData myData = null;
+
+    private HashSet<WorldDraw> worlds = new HashSet<WorldDraw>();
 
     void OnGUI()
     {
@@ -63,11 +65,23 @@ public class minecraft : MonoBehaviour
                     UpdateCamera(obj);
             };
 
+        Action<WorldDraw> onWorldDestruction = wd =>
+            {
+                MyAssert.Assert(worlds.Contains(wd));
+                worlds.Remove(wd);
+            };
+
         Func<WorldInitializer, World> newWorldCreation = (init) =>
             {
+                Log.Console("New world " + init.info.position);
+                
                 bool isOwnedByUs = all.worldValidators.ContainsKey(init.info.position);
 
-                WorldDraw wd = new WorldDraw(init, isOwnedByUs, updateCameraAction);
+                WorldDraw wd = new WorldDraw(init, isOwnedByUs, updateCameraAction, onWorldDestruction);
+
+                bool conflict = worlds.Select(w => w.Position == wd.Position).Any();
+                //MyAssert.Assert(!conflict);
+                worlds.Add(wd);
 
                 return wd;
             };
@@ -305,7 +319,7 @@ public class minecraft : MonoBehaviour
             //camera.transform.rotation *= Quaternion.AngleAxis(Time.deltaTime * 1, Vector3.forward);
         }
 
-        foreach (var w in worlds.Values)
+        foreach (var w in worlds)
             w.TickAnimations(Time.deltaTime);
     }
 }

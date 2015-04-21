@@ -19,34 +19,13 @@ class WorldDraw : World
 	private GameObject background;
 	private Plane<GameObject> walls;
 	private Plane<GameObject> loots;
-    private Dictionary<Guid, GameObject> players = new Dictionary<Guid, GameObject>();
+    private Dictionary<Guid, GameObject> playerAvatars = new Dictionary<Guid, GameObject>();
 
     private HashSet<GameObject> teleportAnimations = new HashSet<GameObject>();
     private Action<Guid, GameObject> updateCamera;
+    private Action<WorldDraw> onDestruction;
 
 
-    private void TickAnimations(float deltaTime)
-    {
-        Vector3 change = deltaTime * 2 * Vector3.one;
-
-        foreach (var k in teleportAnimations.ToArray())
-        {
-            k.transform.localScale -= change;
-            if (k.transform.localScale.x <= 0)
-            {
-                teleportAnimations.Remove(k);
-                UnityEngine.Object.Destroy(k);
-            }
-        }
-
-        foreach (var k in players.Values)
-        {
-            if(k.transform.localScale.x < 1)
-                k.transform.localScale += change;
-            if (k.transform.localScale.x > 1)
-                k.transform.localScale = Vector3.one;
-        }
-    }
     private void NewTeleportAnimation(Vector3 pos, Color c)
     {
         var avatar = GameObject.CreatePrimitive(PrimitiveType.Sphere);
@@ -63,10 +42,11 @@ class WorldDraw : World
         background.transform.localScale *= .99f;
     }
 
-    public WorldDraw(WorldInitializer init, bool isOwnedByUs, Action<Guid, GameObject> updateCamera)
+    public WorldDraw(WorldInitializer init, bool isOwnedByUs, Action<Guid, GameObject> updateCamera, Action<WorldDraw> onDestruction)
         :base(init, null)
 	{
         this.updateCamera = updateCamera;
+        this.onDestruction = onDestruction;
         sz = World.worldSize;
 
 		walls = new Plane<GameObject>(sz);
@@ -104,7 +84,30 @@ class WorldDraw : World
 			AddPlayer(inf);
     }
 
-	public override void Dispose()
+    public void TickAnimations(float deltaTime)
+    {
+        Vector3 change = deltaTime * 2 * Vector3.one;
+
+        foreach (var k in teleportAnimations.ToArray())
+        {
+            k.transform.localScale -= change;
+            if (k.transform.localScale.x <= 0)
+            {
+                teleportAnimations.Remove(k);
+                UnityEngine.Object.Destroy(k);
+            }
+        }
+
+        foreach (var k in playerAvatars.Values)
+        {
+            if (k.transform.localScale.x < 1)
+                k.transform.localScale += change;
+            if (k.transform.localScale.x > 1)
+                k.transform.localScale = Vector3.one;
+        }
+    }
+    
+    public override void Dispose()
 	{
 		foreach(Point pos in Point.Range(sz))
 		{
@@ -112,10 +115,12 @@ class WorldDraw : World
 			UnityEngine.Object.Destroy (loots[pos]);
 		}
 
-        foreach(GameObject pl in players.Values)
+        foreach(GameObject pl in playerAvatars.Values)
             UnityEngine.Object.Destroy(pl);
 
 		UnityEngine.Object.Destroy(background);
+
+        onDestruction(this);
 	}
 
     public override void NET_AddPlayer(PlayerInfo player, Point pos, bool teleporting)
@@ -124,9 +129,9 @@ class WorldDraw : World
 
         //AddPlayer(player, pos); <- will be handled in NET_Move
     }
-    public void AddPlayer(PlayerInfo player)
+    private void AddPlayer(PlayerInfo player)
     {
-        MyAssert.Assert(players.ContainsKey(player.id));
+        MyAssert.Assert(HasPlayer(player.id));
 
         Point pos = base.GetPlayerPosition(player.id);
 
@@ -140,7 +145,7 @@ class WorldDraw : World
             (float)r.NextDouble());
 
         avatar.transform.position = minecraft.GetPositionAtGrid(Position, pos);
-        players.Add(player.id, avatar);
+        playerAvatars.Add(player.id, avatar);
 
         updateCamera(player.id, avatar);
         //if (player.id == main.me)
@@ -149,17 +154,17 @@ class WorldDraw : World
 
     public override void NET_RemovePlayer(Guid player, bool teleporting)
     {
-        if (!players.ContainsKey(player))
+        if (!playerAvatars.ContainsKey(player))
             return;
 
-        GameObject avatar = players.GetValue(player);
+        GameObject avatar = playerAvatars.GetValue(player);
 
         if (teleporting)
             NewTeleportAnimation(avatar.transform.position, avatar.renderer.material.color);
 
         //MyAssert.Assert(w.playerPositions.ContainsKey(player));
         UnityEngine.Object.Destroy(avatar);
-		players.Remove(player);
+		playerAvatars.Remove(player);
     }
 
     public override void NET_Move(Guid player, Point newPos, ActionValidity mv)
@@ -178,7 +183,7 @@ class WorldDraw : World
             loots[newPos] = null;
         }
 
-        GameObject movedPlayer = players.GetValue(player);
+        GameObject movedPlayer = playerAvatars.GetValue(player);
 
         if (teleported && !mv.Has(ActionValidity.NEW))
             NewTeleportAnimation(movedPlayer.transform.position, movedPlayer.renderer.material.color);
@@ -206,7 +211,7 @@ class WorldDraw : World
         base.NET_PlaceBlock(pos);
         PlaceBlock(pos);
     }
-    public void PlaceBlock(Point pos)
+    private void PlaceBlock(Point pos)
     {
         ITile t = this[pos];
 
