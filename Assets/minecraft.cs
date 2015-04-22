@@ -73,14 +73,12 @@ public class minecraft : MonoBehaviour
 
         Func<WorldInitializer, World> newWorldCreation = (init) =>
             {
-                Log.Console("New world " + init.info.position);
-                
                 bool isOwnedByUs = all.worldValidators.ContainsKey(init.info.position);
 
                 WorldDraw wd = new WorldDraw(init, isOwnedByUs, updateCameraAction, onWorldDestruction);
 
-                bool conflict = worlds.Select(w => w.Position == wd.Position).Any();
-                //MyAssert.Assert(!conflict);
+                bool conflict = worlds.Where(w => w.Position == wd.Position).Any();
+                MyAssert.Assert(!conflict);
                 worlds.Add(wd);
 
                 return wd;

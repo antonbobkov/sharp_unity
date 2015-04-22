@@ -154,15 +154,15 @@ class WorldDraw : World
 
     public override void NET_RemovePlayer(Guid player, bool teleporting)
     {
-        if (!playerAvatars.ContainsKey(player))
-            return;
+        base.NET_RemovePlayer(player, teleporting);
+
+        MyAssert.Assert(playerAvatars.ContainsKey(player));
 
         GameObject avatar = playerAvatars.GetValue(player);
 
         if (teleporting)
             NewTeleportAnimation(avatar.transform.position, avatar.renderer.material.color);
 
-        //MyAssert.Assert(w.playerPositions.ContainsKey(player));
         UnityEngine.Object.Destroy(avatar);
 		playerAvatars.Remove(player);
     }
