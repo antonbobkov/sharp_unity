@@ -631,6 +631,7 @@ namespace ServerClient
         OverlayHost myHost;
 
         OverlayEndpoint serverHost;
+        Aggregator all;
 
         RemoteActionRepository remoteActions = new RemoteActionRepository();
         bool finalizing = false;
@@ -639,9 +640,10 @@ namespace ServerClient
 
         HashSet<OverlayEndpoint> subscribers = new HashSet<OverlayEndpoint>();
 
-        public WorldValidator(WorldInitializer init, GlobalHost globalHost, OverlayEndpoint serverHost_)
+        public WorldValidator(WorldInitializer init, GlobalHost globalHost, OverlayEndpoint serverHost, Aggregator all)
         {
-            serverHost = serverHost_;
+            this.serverHost = serverHost;
+            this.all = all;
 
             World newWorld = new World(init, OnLootPickup);
             world = new ForwardProxy<World>(newWorld, RemoteFunctionForward).GetProxy();
@@ -1378,6 +1380,8 @@ namespace ServerClient
             }
 
             Log.Dump("all player disconnects sent");
+
+            all.worldValidators.Remove(world.Position);
 
             myHost.ConnectSendMessage(serverHost, MessageType.WORLD_HOST_DISCONNECT, world.Serialize());
         }

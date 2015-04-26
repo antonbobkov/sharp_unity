@@ -123,7 +123,9 @@ namespace ServerClient
             else if (mt == MessageType.WORLD_HOST_DISCONNECT)
             {
                 WorldInitializer w = Serializer.Deserialize<WorldInitializer>(stm);
-                Log.Dump(mt, w.info);
+                //Log.Dump(mt, w.info);
+                worlds.Remove(w.info.position);
+                OnNewWorldRequest(w.info.position, w.world, w.info.generation + 1);
             }
             else
                 throw new Exception("Client.ProcessWorldMessage bad message type " + mt.ToString());
@@ -207,7 +209,8 @@ namespace ServerClient
                 throw new Exception("no validators!");
             
             Guid validatorId = Guid.NewGuid();
-            OverlayEndpoint validatorHost = new OverlayEndpoint(validatorPool.Random(n => r.Next(n)), new OverlayHostName("host world " + worldPos));
+            string hostName = "host world " + worldPos + "(" + generation + ")";
+            OverlayEndpoint validatorHost = new OverlayEndpoint(validatorPool.Random(n => r.Next(n)), new OverlayHostName(hostName));
 
             WorldInitializer init;
             WorldInfo info = new WorldInfo(worldPos, validatorHost, generation);

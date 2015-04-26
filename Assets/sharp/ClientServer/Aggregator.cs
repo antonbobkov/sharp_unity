@@ -134,7 +134,7 @@ namespace ServerClient
         public void AddWorldValidator(WorldInitializer init)
         {
             MyAssert.Assert(!worldValidators.ContainsKey(init.info.position));
-            worldValidators.Add(init.info.position, new WorldValidator(init, host, myClient.serverHost));
+            worldValidators.Add(init.info.position, new WorldValidator(init, host, myClient.serverHost, this));
         }
         public void AddPlayerValidator(PlayerInfo info)
         {
