@@ -86,6 +86,12 @@ namespace ServerClient
                 return (mt, stm, nd) => ProcessPlayerMessage(mt, stm, nd, inf);
             }
 
+            if (role == NodeRole.PLAYER_VALIDATOR)
+            {
+                PlayerInfo inf = Serializer.Deserialize<PlayerInfo>(nodeInfo);
+                return (mt, stm, nd) => ProcessPlayerValidatorMessage(mt, stm, nd, inf);
+            }
+
             throw new Exception(Log.StDump(n.info, role, "unexpected"));
         }
 
@@ -125,12 +131,10 @@ namespace ServerClient
             else if (mt == MessageType.WORLD_HOST_DISCONNECT)
             {
                 WorldInitializer w = Serializer.Deserialize<WorldInitializer>(stm);
-                //Log.Dump(mt, w.info);
-                worlds.Remove(w.info.position);
-                OnNewWorldRequest(w.info.position, w.world, w.info.generation + 1);
+                OnWorldHostDisconnect(w);
             }
             else
-                throw new Exception("Client.ProcessWorldMessage bad message type " + mt.ToString());
+                throw new Exception(Log.StDump("bad message type", mt));
         }
         void ProcessPlayerMessage(MessageType mt, Stream stm, Node n, PlayerInfo inf)
         {
@@ -141,6 +145,16 @@ namespace ServerClient
             }
             else
                 throw new Exception(Log.StDump("unexpected", mt));
+        }
+        void ProcessPlayerValidatorMessage(MessageType mt, Stream stm, Node n, PlayerInfo inf)
+        {
+            if (mt == MessageType.PLAYER_HOST_DISCONNECT)
+            {
+                PlayerData pd = Serializer.Deserialize<PlayerData>(stm);
+                OnPlayerHostDisconnect(inf, pd);
+            }
+            else
+                throw new Exception(Log.StDump("bad message type", mt));
         }
 
         void OnNewPlayerRequest(Guid playerId, OverlayEndpoint playerClient)
@@ -316,6 +330,18 @@ namespace ServerClient
             
             MyAssert.Assert(validatorPool.Contains(addr));
             validatorPool.Remove(addr);
+        }
+
+        void OnWorldHostDisconnect(WorldInitializer w)
+        {
+            //Log.Dump(mt, w.info);
+            worlds.Remove(w.info.position);
+            OnNewWorldRequest(w.info.position, w.world, w.info.generation + 1);
+        }
+
+        void OnPlayerHostDisconnect(PlayerInfo inf, PlayerData pd)
+        {
+            Log.Dump(inf, pd);
         }
 
         public void PrintStats()

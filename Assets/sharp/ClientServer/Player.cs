@@ -84,7 +84,7 @@ namespace ServerClient
 
         public override string ToString()
         {
-            return "tel: " + teleport + "blc: " + blocks;
+            return "tel: " + teleport + " blc: " + blocks;
         }
     }
 
@@ -109,15 +109,19 @@ namespace ServerClient
 
     class PlayerValidator
     {
-        OverlayHost myHost;
+        private OverlayHost myHost;
 
-        PlayerInfo info;
-        Node playerAgentNode = null;
+        private PlayerInfo info;
+        private Node playerAgentNode = null;
 
-        PlayerData playerData = new PlayerData(); 
+        private PlayerData playerData = new PlayerData();
 
-        RemoteAction locked = null;
-        Queue<Action> delayedActions = new Queue<Action>();
+        private RemoteAction locked = null;
+        private Queue<Action> delayedActions = new Queue<Action>();
+
+        private OverlayEndpoint serverHost;
+
+        private bool finalizing = false;
 
         void ProcessOrDelay(Action a)
         {
@@ -138,9 +142,10 @@ namespace ServerClient
             }
         }
 
-        public PlayerValidator(PlayerInfo info_, GlobalHost globalHost)
+        public PlayerValidator(PlayerInfo info, GlobalHost globalHost, OverlayEndpoint serverHost)
         {
-            info = info_;
+            this.info = info;
+            this.serverHost = serverHost;
 
             myHost = globalHost.NewHost(info.validatorHost.hostname, Game.Convert(AssignProcessor),
                 BasicInfo.GenerateHandshake(NodeRole.PLAYER_VALIDATOR, info), Aggregator.longInactivityWait);
@@ -150,7 +155,10 @@ namespace ServerClient
         Game.MessageProcessor AssignProcessor(Node n, MemoryStream nodeInfo)
         {
             NodeRole role = Serializer.Deserialize<NodeRole>(nodeInfo);
-    
+
+            if (n.info.remote == serverHost)
+                return (mt, stm, nd) => { throw new Exception(Log.StDump(nd.info, mt, role, "unexpected")); };
+
             if (role == NodeRole.WORLD_VALIDATOR)
             {
                 WorldInfo inf = Serializer.Deserialize<WorldInfo>(nodeInfo);
@@ -192,15 +200,28 @@ namespace ServerClient
             else if (mt == MessageType.UNLOCK_VAR)
             {
                 RemoteAction.Process(ref locked, n, stm);
+                if (finalizing)
+                {
+                    MyAssert.Assert(locked == null);
+                    OnFinalizedVerifier();
+                }
             }
-            else if (mt == MessageType.PICKUP_TELEPORT)
-                ProcessOrDelay(OnPickupTeleport);
-            else if (mt == MessageType.PICKUP_BLOCK)
-                ProcessOrDelay(OnPickupBlock);
-            else if (mt == MessageType.PLAYER_DISCONNECT)
-                ProcessOrDelay(OnDisconnect);
             else
-                throw new Exception(Log.StDump(info, inf, mt, "unexpected message"));
+            {
+                if (finalizing) {
+                    Log.Dump(info, " finalizing - ignored message:", mt);
+                    return;
+                }
+
+                if (mt == MessageType.PICKUP_TELEPORT)
+                    ProcessOrDelay(OnPickupTeleport);
+                else if (mt == MessageType.PICKUP_BLOCK)
+                    ProcessOrDelay(OnPickupBlock);
+                else if (mt == MessageType.PLAYER_DISCONNECT)
+                    ProcessOrDelay(OnDisconnect);
+                else
+                    throw new Exception(Log.StDump(info, inf, mt, "unexpected message"));
+            }
         }
 
         void OnLock(Node n, Guid remoteActionId)
@@ -210,6 +231,13 @@ namespace ServerClient
             if (locked != null)
             {
                 Log.Dump(info, "already locked");
+                RemoteAction.Fail(n, remoteActionId);
+                return;
+            }
+
+            if (finalizing)
+            {
+                Log.Dump(info, "cannot lock, finializing");
                 RemoteAction.Fail(n, remoteActionId);
                 return;
             }
@@ -256,6 +284,29 @@ namespace ServerClient
         {
             playerData.world = null;
             MessageToAgent(MessageType.PLAYER_INFO_VAR, playerData);
+        }
+
+        public void FinalizeVerifier()
+        {
+            MyAssert.Assert(finalizing == false);
+            finalizing = true;
+
+            if (locked == null)
+                OnFinalizedVerifier();
+        }
+
+        void OnFinalizedVerifier()
+        {
+            MyAssert.Assert(finalizing == true);
+            MyAssert.Assert(locked == null);
+
+            if (playerData.IsConnected)
+            {
+                myHost.ConnectSendMessage(playerData.world.Value.host, MessageType.PLAYER_DISCONNECT);
+                OnDisconnect();
+            }
+
+            myHost.ConnectSendMessage(serverHost, MessageType.PLAYER_HOST_DISCONNECT, playerData);
         }
     }
 

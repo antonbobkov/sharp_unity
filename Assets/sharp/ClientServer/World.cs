@@ -691,8 +691,24 @@ namespace ServerClient
         {
             if (mt == MessageType.RESPONSE)
                 RemoteAction.Process(remoteActions, n, stm);
-            else
-                throw new Exception("WorldValidator.ProcessClientMessage bad message type " + mt.ToString());
+            else 
+            {
+                if (finalizing)
+                {
+                    Log.Dump(world.Info, "finalizing - ignored player validator message", mt);
+                    return;
+                }
+
+                if (mt == MessageType.PLAYER_DISCONNECT)
+                {
+                    if (world.HasPlayer(inf.id))
+                        world.NET_RemovePlayer(inf.id, false);
+                    else
+                        Log.Dump(world.Info, mt, inf, "player not present, possible bug");
+                }
+                else
+                    throw new Exception("WorldValidator.ProcessClientMessage bad message type " + mt.ToString());
+            }
         }
         void ProcessWorldValidatorMessage(MessageType mt, Stream stm, Node n, WorldInfo inf)
         {
@@ -742,7 +758,10 @@ namespace ServerClient
         void ProcessPlayerMessage(MessageType mt, Stream stm, Node n, PlayerInfo inf)
         {
             if (finalizing)
+            {
+                Log.Dump(world.Info, "finalizing - ignored player message", mt);
                 return;
+            }
 
             if (playerLocks.Contains(inf.id))
             {
@@ -1381,7 +1400,7 @@ namespace ServerClient
 
             Log.Dump("all player disconnects sent");
 
-            all.worldValidators.Remove(world.Position);
+            //all.worldValidators.Remove(world.Position);
 
             myHost.ConnectSendMessage(serverHost, MessageType.WORLD_HOST_DISCONNECT, world.Serialize());
         }

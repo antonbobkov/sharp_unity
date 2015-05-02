@@ -139,7 +139,7 @@ namespace ServerClient
         public void AddPlayerValidator(PlayerInfo info)
         {
             MyAssert.Assert(!playerValidators.ContainsKey(info.id));
-            playerValidators.Add(info.id, new PlayerValidator(info, host));
+            playerValidators.Add(info.id, new PlayerValidator(info, host, myClient.serverHost));
         }
         public void AddPlayerAgent(PlayerInfo info)
         {
@@ -168,10 +168,15 @@ namespace ServerClient
 
         public void Disengage()
         {
-            myClient.StopValidating();
+            //myClient.StopValidating();
 
-            foreach (var vw in worldValidators.Values.ToArray())
-                vw.FinalizeWorld();
+            //foreach (var wv in worldValidators.Values)
+            //    wv.FinalizeWorld();
+            //worldValidators.Clear();
+
+            foreach (var pv in playerValidators.Values)
+                pv.FinalizeVerifier();
+            playerValidators.Clear();
         }
     }
 }
