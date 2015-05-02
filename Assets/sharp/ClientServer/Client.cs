@@ -419,5 +419,9 @@ namespace ServerClient
         {
             myHost.SendMessage(serverHost, MessageType.NEW_VALIDATOR);
         }
+        public void StopValidating()
+        {
+            myHost.ConnectSendMessage(serverHost, MessageType.STOP_VALIDATING);
+        }
     }
 }

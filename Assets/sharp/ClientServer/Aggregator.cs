@@ -165,5 +165,13 @@ namespace ServerClient
                     host.CountConnectedNodes(), ThreadManager.NumberOfThreads()).ToString();
 
         }
+
+        public void Disengage()
+        {
+            myClient.StopValidating();
+
+            foreach (var vw in worldValidators.Values.ToArray())
+                vw.FinalizeWorld();
+        }
     }
 }

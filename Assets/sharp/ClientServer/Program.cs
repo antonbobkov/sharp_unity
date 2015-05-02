@@ -168,16 +168,9 @@ namespace ServerClient
                 Log.Console(ThreadManager.Status());
             });
 
-            inputProc.commands.Add("finalize", (param) =>
+            inputProc.commands.Add("disengage", (param) =>
             {
-                var wv = (from kv in all.worldValidators
-                          where kv.Key == Point.Zero
-                          select kv.Value).FirstOrDefault();
-
-                if (wv != null)
-                {
-                    wv.FinalizeWorld();
-                }
+                all.Disengage();
             });
 
             inputProc.commands.Add("exit", (param) =>

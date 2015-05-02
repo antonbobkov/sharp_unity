@@ -110,6 +110,8 @@ namespace ServerClient
                 Guid actionId = Serializer.Deserialize<Guid>(stm);
                 OnAccept(actionId, n.info.remote);
             }
+            else if (mt == MessageType.STOP_VALIDATING)
+                OnStopValidating(n);
             else
                 throw new Exception("Client.ProcessClientMessage bad message type " + mt.ToString());
         }
@@ -209,7 +211,9 @@ namespace ServerClient
                 throw new Exception("no validators!");
             
             Guid validatorId = Guid.NewGuid();
-            string hostName = "host world " + worldPos + "(" + generation + ")";
+            string hostName = "host world " + worldPos;
+            if(generation != 0)
+                hostName = hostName + " (" + generation + ")";
             OverlayEndpoint validatorHost = new OverlayEndpoint(validatorPool.Random(n => r.Next(n)), new OverlayHostName(hostName));
 
             WorldInitializer init;
@@ -304,6 +308,14 @@ namespace ServerClient
             MyAssert.Assert(da.ep == remote);
 
             da.a();
+        }
+
+        void OnStopValidating(Node n)
+        {
+            IPEndPoint addr = n.info.remote.addr;
+            
+            MyAssert.Assert(validatorPool.Contains(addr));
+            validatorPool.Remove(addr);
         }
 
         public void PrintStats()
