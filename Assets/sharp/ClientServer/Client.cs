@@ -308,15 +308,15 @@ namespace ServerClient
         {
             if (mt == MessageType.PLAYER_VALIDATOR_ASSIGN)
             {
-                Guid actionId = Serializer.Deserialize<Guid>(stm);
+                Guid remoteActionId = Serializer.Deserialize<Guid>(stm);
                 PlayerInfo info = Serializer.Deserialize<PlayerInfo>(stm);
-                OnPlayerValidateRequest(actionId, info);
+                OnPlayerValidateRequest(n, remoteActionId, info);
             }
             else if (mt == MessageType.WORLD_VALIDATOR_ASSIGN)
             {
-                Guid actionId = Serializer.Deserialize<Guid>(stm);
+                Guid remoteActionId = Serializer.Deserialize<Guid>(stm);
                 WorldInitializer init = Serializer.Deserialize<WorldInitializer>(stm);
-                OnWorldValidateRequest(actionId, init);
+                OnWorldValidateRequest(n, remoteActionId, init);
             }
             else if (mt == MessageType.NEW_PLAYER_REQUEST_SUCCESS)
             {
@@ -389,17 +389,19 @@ namespace ServerClient
             
         }
 
-        void OnPlayerValidateRequest(Guid actionId, PlayerInfo info)
+        void OnPlayerValidateRequest(Node n, Guid actionId, PlayerInfo info)
         {
             all.AddPlayerValidator(info);
             //Log.LogWriteLine("Validating for {0}", info);
-            myHost.SendMessage(serverHost, MessageType.ACCEPT, actionId);
+            //myHost.SendMessage(serverHost, MessageType.ACCEPT, actionId);
+            RemoteAction.Sucess(n, actionId);
         }
-        void OnWorldValidateRequest(Guid actionId, WorldInitializer init)
+        void OnWorldValidateRequest(Node n, Guid actionId, WorldInitializer init)
         {
             all.AddWorldValidator(init);
             //Log.LogWriteLine("Validating for world {0}", info.worldPos);
-            myHost.SendMessage(serverHost, MessageType.ACCEPT, actionId);
+            //myHost.SendMessage(serverHost, MessageType.ACCEPT, actionId);
+            RemoteAction.Sucess(n, actionId);
         }
 
         public bool TryConnect(IPEndPoint ep)

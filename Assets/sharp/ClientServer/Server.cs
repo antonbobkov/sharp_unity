@@ -14,24 +14,17 @@ using Network;
 
 namespace ServerClient
 {
-    class DelayedAction
-    {
-        public OverlayEndpoint ep;
-        public Action a;
-    }
-
     class Server
     {
         public static readonly OverlayHostName hostName = new OverlayHostName("server");
 
         Random r = new Random();
 
-        HashSet<Point> worldsInProgress = new HashSet<Point>();
-
         List<IPEndPoint> validatorPool = new List<IPEndPoint>();
         
         List<Point> spawnWorlds = new List<Point>();
         Dictionary<Point, WorldInfo> worlds = new Dictionary<Point, WorldInfo>();
+        Dictionary<Guid, PlayerInfo> players = new Dictionary<Guid, PlayerInfo>();
 
         OverlayHost myHost;
 
@@ -56,7 +49,10 @@ namespace ServerClient
 
             return result;
         }
-        Dictionary<Guid, DelayedAction> delayedActions = new Dictionary<Guid, DelayedAction>();
+
+        RemoteActionRepository remoteActions = new RemoteActionRepository();
+        HashSet<Guid> playerLocks = new HashSet<Guid>();
+        HashSet<Point> worldLocks = new HashSet<Point>();
 
         public OverlayEndpoint Address { get { return myHost.Address; } }
 
@@ -111,11 +107,8 @@ namespace ServerClient
             {
                 OnNewValidator(n.info.remote.addr);
             }
-            else if (mt == MessageType.ACCEPT)
-            {
-                Guid actionId = Serializer.Deserialize<Guid>(stm);
-                OnAccept(actionId, n.info.remote);
-            }
+            else if (mt == MessageType.RESPONSE)
+                RemoteAction.Process(remoteActions, n, stm);
             else if (mt == MessageType.STOP_VALIDATING)
                 OnStopValidating(n);
             else
@@ -159,34 +152,48 @@ namespace ServerClient
 
         void OnNewPlayerRequest(Guid playerId, OverlayEndpoint playerClient)
         {
-            // ! Worry about non-atomicity. Two similar requests at once? See OnNewWorldRequest
-            
-            Guid actionId = Guid.NewGuid();
-            string name = PlayerNameMap(playerCounter++);
+            MyAssert.Assert(!players.ContainsKey(playerId));
+            MyAssert.Assert(!playerLocks.Contains(playerId));
 
             if (!validatorPool.Any())
                 throw new Exception("no validators!");
 
-            OverlayEndpoint validatorHost = new OverlayEndpoint(validatorPool.Random(n => r.Next(n)), new OverlayHostName("validator player " + name));
+            ManualLock<Guid> lck = new ManualLock<Guid>(playerLocks, playerId);
+
+            string name = PlayerNameMap(playerCounter++);
+
+            OverlayEndpoint validatorHost = new OverlayEndpoint(validatorPool.Random(n => r.Next(n)),
+                new OverlayHostName("validator player " + name));
 
             OverlayEndpoint playerNewHost = new OverlayEndpoint(playerClient.addr, new OverlayHostName("agent player " + name));
             PlayerInfo playerInfo = new PlayerInfo(playerId, playerNewHost, validatorHost, name);
 
             OverlayEndpoint validatorClient = new OverlayEndpoint(validatorHost.addr, Client.hostName);
-            myHost.SendMessage(validatorClient, MessageType.PLAYER_VALIDATOR_ASSIGN, actionId, playerInfo);
 
-            DelayedAction da = new DelayedAction()
-            {
-                ep = validatorClient,
-                a = () =>
+            RemoteAction
+                .Send(myHost, validatorClient, MessageType.PLAYER_VALIDATOR_ASSIGN, playerInfo)
+                .Respond(remoteActions, lck, (res, stm) =>
                 {
-                    //gameInfo.NET_AddPlayer(playerInfo);
-                    myHost.ConnectSendMessage(playerClient, MessageType.NEW_PLAYER_REQUEST_SUCCESS, playerInfo);
-                    Log.Console("New player " + name + " validated by " + validatorHost.addr);
-                }
-            };
+                    players.Add(playerId, playerInfo);
 
-            delayedActions.Add(actionId, da);
+                    myHost.ConnectSendMessage(playerClient, MessageType.NEW_PLAYER_REQUEST_SUCCESS, playerInfo);
+                    
+                     Log.Console("New player " + name + " validated by " + validatorHost.addr);
+                });
+
+
+            //myHost.SendMessage(validatorClient, MessageType.PLAYER_VALIDATOR_ASSIGN, actionId, playerInfo);
+
+            //DelayedAction da = new DelayedAction()
+            //{
+            //    ep = validatorClient,
+            //    a = () =>
+            //    {
+                    //gameInfo.NET_AddPlayer(playerInfo);
+            //    }
+            //};
+
+            //delayedActions.Add(actionId, da);
         }
         void OnNewValidator(IPEndPoint ip)
         {
@@ -216,15 +223,22 @@ namespace ServerClient
         void OnNewWorldRequest(Point worldPos, WorldSerialized ser, int generation)
         {
             if (worlds.ContainsKey(worldPos))
+            {
+                Log.Dump(worldPos, "world alrady present");
                 return;
-            if (worldsInProgress.Contains(worldPos))
-                return;
-            worldsInProgress.Add(worldPos);
+            }
 
             if (!validatorPool.Any())
                 throw new Exception("no validators!");
-            
-            Guid validatorId = Guid.NewGuid();
+
+            ManualLock<Point> lck = new ManualLock<Point>(worldLocks, worldPos);
+
+            if (!lck.Locked)
+            {
+                Log.Dump(worldPos, "can't work, locked");
+                return;
+            }
+
             string hostName = "host world " + worldPos;
             if(generation != 0)
                 hostName = hostName + " (" + generation + ")";
@@ -259,29 +273,29 @@ namespace ServerClient
 
 
             OverlayEndpoint validatorClient = new OverlayEndpoint(validatorHost.addr, Client.hostName);
-            myHost.SendMessage(validatorClient, MessageType.WORLD_VALIDATOR_ASSIGN, validatorId, init);
 
-            DelayedAction da = new DelayedAction()
-            {
-                ep = validatorClient,
-                a = () =>
+            RemoteAction
+                .Send(myHost, validatorClient, MessageType.WORLD_VALIDATOR_ASSIGN, init)
+                .Respond(remoteActions, lck, (res, stm) =>
                 {
+                    if(res != Response.SUCCESS)
+                        throw new Exception( Log.StDump("unexpected", res) );
+                    
                     if (hasSpawn == true)
                         spawnWorlds.Add(worldPos);
 
-                    worldsInProgress.Remove(worldPos);
                     worlds.Add(info.position, info);
 
                     //Log.LogWriteLine("New world " + worldPos + " validated by " + validatorHost.addr);
 
-                    foreach(Point p in Point.SymmetricRange(Point.One))
+                    foreach (Point p in Point.SymmetricRange(Point.One))
                     {
                         if (p == Point.Zero)
                             continue;
 
                         Point neighborPos = p + info.position;
 
-                        if(!worlds.ContainsKey(neighborPos))
+                        if (!worlds.ContainsKey(neighborPos))
                             continue;
 
                         WorldInfo neighborWorld = worlds[neighborPos];
@@ -292,10 +306,19 @@ namespace ServerClient
 
                     //gameInfo.NET_AddWorld(info);
                     //myHost.BroadcastGroup(Client.hostName, MessageType.NEW_WORLD, info);
-                }
-            };
+                });
 
-            delayedActions.Add(validatorId, da);
+            //myHost.SendMessage(validatorClient, MessageType.WORLD_VALIDATOR_ASSIGN, validatorId, init);
+
+            //DelayedAction da = new DelayedAction()
+            //{
+            //    ep = validatorClient,
+            //    a = () =>
+            //    {
+            //    }
+            //};
+
+            //delayedActions.Add(validatorId, da);
 
         }
 
@@ -314,22 +337,14 @@ namespace ServerClient
             myHost.ConnectSendMessage(spawnWorld.host, MessageType.SPAWN_REQUEST, inf);
         }
 
-        void OnAccept(Guid id, OverlayEndpoint remote)
-        {
-            DelayedAction da = delayedActions.GetValue(id);
-            delayedActions.Remove(id);
-
-            MyAssert.Assert(da.ep == remote);
-
-            da.a();
-        }
-
         void OnStopValidating(Node n)
         {
             IPEndPoint addr = n.info.remote.addr;
             
             MyAssert.Assert(validatorPool.Contains(addr));
             validatorPool.Remove(addr);
+
+            Log.Dump(n.info.remote);
         }
 
         void OnWorldHostDisconnect(WorldInitializer w)

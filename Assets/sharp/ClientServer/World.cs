@@ -631,7 +631,7 @@ namespace ServerClient
         OverlayHost myHost;
 
         OverlayEndpoint serverHost;
-        Aggregator all;
+        //Aggregator all;
 
         RemoteActionRepository remoteActions = new RemoteActionRepository();
         bool finalizing = false;
@@ -640,10 +640,10 @@ namespace ServerClient
 
         HashSet<OverlayEndpoint> subscribers = new HashSet<OverlayEndpoint>();
 
-        public WorldValidator(WorldInitializer init, GlobalHost globalHost, OverlayEndpoint serverHost, Aggregator all)
+        public WorldValidator(WorldInitializer init, GlobalHost globalHost, OverlayEndpoint serverHost)//, Aggregator all)
         {
             this.serverHost = serverHost;
-            this.all = all;
+//            this.all = all;
 
             World newWorld = new World(init, OnLootPickup);
             world = new ForwardProxy<World>(newWorld, RemoteFunctionForward).GetProxy();
