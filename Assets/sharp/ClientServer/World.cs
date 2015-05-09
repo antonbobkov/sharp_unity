@@ -104,7 +104,7 @@ namespace ServerClient
         public int seed;
         public double wallDensity = .2;
         public double lootDensity = .05;
-        public bool hasSpawn = false;
+        //public bool hasSpawn = false;
         public MyColor defaultColor;
 
         public WorldSeed() { }
@@ -121,12 +121,14 @@ namespace ServerClient
         public Point position;
         public OverlayEndpoint host;
         public int generation;
+        public bool hasSpawn;
 
-        public WorldInfo(Point position, OverlayEndpoint host, int generation)
+        public WorldInfo(Point position, OverlayEndpoint host, int generation, bool hasSpawn)
         {
             this.host = host;
             this.position = position;
             this.generation = generation;
+            this.hasSpawn = hasSpawn;
         }
 
         public override string ToString()
@@ -203,7 +205,7 @@ namespace ServerClient
             MyAssert.Assert((init.seed == null) || (init.world == null));
 
             if (init.seed != null)
-                GenerateWorld(init.seed);
+                GenerateWorld(init.seed, init.info.hasSpawn);
 
             if (init.world != null)
                 DeserializeWorld(init.world);
@@ -460,16 +462,16 @@ namespace ServerClient
 
             MyAssert.Assert(playerPositions.Count == playerInformation.Count);
         }
-        private void GenerateWorld(WorldSeed init)
+        private void GenerateWorld(WorldSeed init, bool hasSpawn)
         {
             map = new Plane<Tile>(worldSize);
 
             foreach (Point p in Point.Range(map.Size))
                 map[p] = new Tile(p);
 
-            Generate(init);
+            Generate(init, hasSpawn);
         }
-        private void Generate(WorldSeed init)
+        private void Generate(WorldSeed init, bool hasSpawn)
         {
             MyRandom seededRandom = new MyRandom(init.seed);
 
@@ -487,7 +489,7 @@ namespace ServerClient
                 }
             }
 
-            if (init.hasSpawn)
+            if (hasSpawn)
             {
                 var a = (from t in map.GetEnum()
                          where t.Value.Solid

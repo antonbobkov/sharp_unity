@@ -112,11 +112,14 @@ namespace ServerClient
             if (isSubscribed)
             {
                 isSubscribed = false;
+                MyAssert.Assert(Info != null);
                 data.host.ConnectSendMessage(Info.Value.host, MessageType.UNSUBSCRIBE);
 
-                MyAssert.Assert(world != null);
-                world.Dispose();
-                world = null;
+                if (world != null)
+                {
+                    world.Dispose();
+                    world = null;
+                }
             }
         }
         private bool ValidateWorldInfo(WorldInfo info)

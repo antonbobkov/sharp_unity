@@ -144,17 +144,17 @@ namespace ServerClient
         public void AddPlayerAgent(PlayerInfo info)
         {
             if (info.generation == 0)
-            {
                 MyAssert.Assert(!playerAgents.ContainsKey(info.id));
-                PlayerAgent pa = new PlayerAgent(info, host, myClient.serverHost, myClient);
-                onNewPlayerAgentHook(pa);
-                playerAgents.Add(info.id, pa);
-            }
             else
             {
                 MyAssert.Assert(playerAgents.ContainsKey(info.id));
-                playerAgents[info.id].ChangeInfo(info);
+                playerAgents[info.id].Deactivate();
+                playerAgents.Remove(info.id);
             }
+
+            PlayerAgent pa = new PlayerAgent(info, host, myClient.serverHost, myClient);
+            onNewPlayerAgentHook(pa);
+            playerAgents.Add(info.id, pa);
         }
 
         public void SpawnAll()

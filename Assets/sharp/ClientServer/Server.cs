@@ -22,7 +22,7 @@ namespace ServerClient
 
         List<IPEndPoint> validatorPool = new List<IPEndPoint>();
         
-        List<Point> spawnWorlds = new List<Point>();
+        //List<Point> spawnWorlds = new List<Point>();
         Dictionary<Point, WorldInfo> worlds = new Dictionary<Point, WorldInfo>();
         Dictionary<Guid, PlayerInfo> players = new Dictionary<Guid, PlayerInfo>();
 
@@ -150,10 +150,26 @@ namespace ServerClient
                 throw new Exception(Log.StDump("bad message type", mt));
         }
 
-        void NewPlayerProcess(PlayerInfo playerInfo, PlayerData pd, ManualLock<Guid> lck)
+        void NewPlayerProcess(IPEndPoint clientAddr, Guid id, int generation, PlayerData pd)
         {
-            OverlayEndpoint validatorClient = new OverlayEndpoint(playerInfo.validatorHost.addr, Client.hostName);
-            OverlayEndpoint playerClient = new OverlayEndpoint(playerInfo.playerHost.addr, Client.hostName);
+            MyAssert.Assert(!playerLocks.Contains(id));
+            ManualLock<Guid> lck = new ManualLock<Guid>(playerLocks, id);
+
+            if (!validatorPool.Any())
+                throw new Exception("no validators!");
+
+            string playerName = PlayerNameMap(playerCounter++);
+            string fullName = "player " + playerName + (generation == 0 ? "" : " (" + generation + ")");
+
+            OverlayEndpoint validatorHost = new OverlayEndpoint(validatorPool.Random(n => r.Next(n)),
+                new OverlayHostName("validator " + fullName));
+
+            OverlayEndpoint playerNewHost = new OverlayEndpoint(clientAddr, new OverlayHostName("agent " + fullName));
+
+            OverlayEndpoint playerClient = new OverlayEndpoint(clientAddr, Client.hostName);
+            OverlayEndpoint validatorClient = new OverlayEndpoint(validatorHost.addr, Client.hostName);
+
+            PlayerInfo playerInfo = new PlayerInfo(id, playerNewHost, validatorHost, playerName, generation);
 
             RemoteAction
                 .Send(myHost, validatorClient, MessageType.PLAYER_VALIDATOR_ASSIGN, playerInfo, pd)
@@ -179,42 +195,12 @@ namespace ServerClient
         void OnNewPlayerRequest(PlayerInfo inf, PlayerData pd)
         {
             MyAssert.Assert(players.ContainsKey(inf.id));
-            MyAssert.Assert(!playerLocks.Contains(inf.id));
-
-            if (!validatorPool.Any())
-                throw new Exception("no validators!");
-
-            ManualLock<Guid> lck = new ManualLock<Guid>(playerLocks, inf.id);
-
-            inf.generation++;
-
-            string hostName = "validator player " + inf.name + " (" + inf.generation + ")"; ;
-            OverlayEndpoint validatorHost = new OverlayEndpoint(validatorPool.Random(n => r.Next(n)),
-                new OverlayHostName(hostName));
-
-            inf.validatorHost = validatorHost;
-
-            NewPlayerProcess(inf, pd, lck);
+            NewPlayerProcess(inf.playerHost.addr, inf.id, inf.generation + 1, pd);
         }
         void OnNewPlayerRequest(Guid playerId, OverlayEndpoint playerClient)
         {
             MyAssert.Assert(!players.ContainsKey(playerId));
-            MyAssert.Assert(!playerLocks.Contains(playerId));
-
-            if (!validatorPool.Any())
-                throw new Exception("no validators!");
-
-            ManualLock<Guid> lck = new ManualLock<Guid>(playerLocks, playerId);
-
-            string name = PlayerNameMap(playerCounter++);
-
-            OverlayEndpoint validatorHost = new OverlayEndpoint(validatorPool.Random(n => r.Next(n)),
-                new OverlayHostName("validator player " + name));
-
-            OverlayEndpoint playerNewHost = new OverlayEndpoint(playerClient.addr, new OverlayHostName("agent player " + name));
-            PlayerInfo playerInfo = new PlayerInfo(playerId, playerNewHost, validatorHost, name);
-
-            NewPlayerProcess(playerInfo, new PlayerData(), lck);
+            NewPlayerProcess(playerClient.addr, playerId, 0, new PlayerData());
         }
 
         void OnNewValidator(IPEndPoint ip)
@@ -267,8 +253,8 @@ namespace ServerClient
             OverlayEndpoint validatorHost = new OverlayEndpoint(validatorPool.Random(n => r.Next(n)), new OverlayHostName(hostName));
 
             WorldInitializer init;
-            WorldInfo info = new WorldInfo(worldPos, validatorHost, generation);
-            bool hasSpawn;
+            WorldInfo info;
+            bool hasSpawn = false;
 
             if (ser == null)
             {
@@ -277,19 +263,20 @@ namespace ServerClient
                 if (serverSpawnDensity == 0)
                 {
                     if (worldPos == Point.Zero)
-                        seed.hasSpawn = true;
+                        hasSpawn = true;
                 }
                 else if ((worldPos.x % serverSpawnDensity == 0) && (worldPos.y % serverSpawnDensity == 0))
                 {
-                    seed.hasSpawn = true;
+                    hasSpawn = true;
                 }
 
-                hasSpawn = seed.hasSpawn;
+                info = new WorldInfo(worldPos, validatorHost, generation, hasSpawn);
                 init = new WorldInitializer(info, seed);
             }
             else
             {
                 hasSpawn = ser.spawnPos.HasValue;
+                info = new WorldInfo(worldPos, validatorHost, generation, hasSpawn);
                 init = new WorldInitializer(info, ser);
             }
 
@@ -303,8 +290,8 @@ namespace ServerClient
                     if(res != Response.SUCCESS)
                         throw new Exception( Log.StDump("unexpected", res) );
                     
-                    if (hasSpawn == true)
-                        spawnWorlds.Add(worldPos);
+                    //if (hasSpawn == true)
+                    //    spawnWorlds.Add(worldPos);
 
                     worlds.Add(info.position, info);
 
@@ -348,6 +335,10 @@ namespace ServerClient
         {
             MyAssert.Assert(players.ContainsKey(playerId));
             PlayerInfo inf = players[playerId];
+
+            var spawnWorlds = ( from wi in worlds.Values
+                                where wi.hasSpawn
+                                select wi.position).ToList();
             
             if (!spawnWorlds.Any())
             {

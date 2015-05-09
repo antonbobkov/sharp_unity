@@ -43,13 +43,13 @@ namespace ServerClient
         public string name;
         public int generation;
 
-        public PlayerInfo(Guid id, OverlayEndpoint playerHost, OverlayEndpoint validatorHost, string name)
+        public PlayerInfo(Guid id, OverlayEndpoint playerHost, OverlayEndpoint validatorHost, string name, int generation)
         {
             this.id = id;
             this.playerHost = playerHost;
             this.validatorHost = validatorHost;
             this.name = name;
-            this.generation = 0;
+            this.generation = generation;
         }
 
         public override string ToString()
@@ -314,17 +314,14 @@ namespace ServerClient
     class PlayerAgent
     {
         private OverlayHost myHost;
-
         private OverlayEndpoint serverHost;
-
         private Client myClient;
+        private bool active = true;
 
         public PlayerInfo Info { get; private set; }
         public PlayerData Data { get; private set; }
 
         public Action<PlayerData> onDataHook = (a) => { };
-        //public Action<WorldInfo> onSpawnHook = (a) => { };
-        //public Action<WorldInfo, WorldInfo> onRealmMoveHook = (a, b) => { };
 
         public PlayerAgent(PlayerInfo info, GlobalHost globalHost, OverlayEndpoint serverHost, Client myClient)
         {
@@ -348,25 +345,31 @@ namespace ServerClient
             if (n.info.remote == serverHost)
                 return (mt, stm, nd) => { throw new Exception(Log.StDump(mt, nd.info, "unexpected")); };
             
-            //if (n.info.remote == info.validatorHost)
-            //    return (mt, stm, nd) => ProcessPlayerValidatorMessage(mt, stm, nd);
+            if (n.info.remote == Info.validatorHost)
+                return (mt, stm, nd) => ProcessPlayerValidatorMessage(mt, stm, nd);
 
-            if (role == NodeRole.PLAYER_VALIDATOR)
-            {
-                PlayerInfo inf = Serializer.Deserialize<PlayerInfo>(nodeInfo);
-                return (mt, stm, nd) => ProcessPlayerValidatorMessage(mt, stm, nd, inf);
-            }
+            //if (role == NodeRole.PLAYER_VALIDATOR)
+            //{
+            //    PlayerInfo inf = Serializer.Deserialize<PlayerInfo>(nodeInfo);
+            //    return (mt, stm, nd) => ProcessPlayerValidatorMessage(mt, stm, nd, inf);
+            //}
 
             if (role == NodeRole.WORLD_VALIDATOR)
                 return (mt, stm, nd) => { throw new Exception(Log.StDump(mt, nd.info, "unexpected")); };
 
             throw new Exception(Log.StDump(n.info, role, "unexpected"));
         }
-        private void ProcessPlayerValidatorMessage(MessageType mt, Stream stm, Node n, PlayerInfo info)
+        private void ProcessPlayerValidatorMessage(MessageType mt, Stream stm, Node n)
         {
-            if (n.info.remote != info.validatorHost)
+            //if (n.info.remote != info.validatorHost)
+            //{
+            //    Log.Dump(mt, "ignored", n.info.remote, info.validatorHost);
+            //    return;
+            //}
+
+            if (!active)
             {
-                Log.Dump(mt, "ignored", n.info.remote, info.validatorHost);
+                Log.Dump(mt, "ignored - not active");
                 return;
             }
             
@@ -433,14 +436,20 @@ namespace ServerClient
         {
             myHost.ConnectSendMessage(worldInfo.host, MessageType.TAKE_BLOCK, blockPos);
         }
-        public void ChangeInfo(PlayerInfo inf)
-        {
-            MyAssert.Assert(Info.generation < inf.generation);
-            Info = inf;
-            Data = null;
-            myHost.ConnectAsync(inf.validatorHost);
+        //public void ChangeInfo(PlayerInfo inf)
+        //{
+        //    MyAssert.Assert(Info.generation < inf.generation);
+        //    Info = inf;
+        //    Data = null;
+        //    myHost.ConnectAsync(inf.validatorHost);
 
-            Log.Dump(inf);
+        //    Log.Dump(inf);
+        //}
+
+        public void Deactivate()
+        {
+            MyAssert.Assert(active == true);
+            active = false;
         }
     }
 }
