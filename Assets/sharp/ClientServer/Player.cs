@@ -34,8 +34,6 @@ namespace ServerClient
 
     }
 
-    public enum WorldMove { LEAVE, JOIN };
-    
     [Serializable]
     public struct PlayerInfo
     {
@@ -43,13 +41,15 @@ namespace ServerClient
         public OverlayEndpoint playerHost;
         public OverlayEndpoint validatorHost;
         public string name;
+        public int generation;
 
-        public PlayerInfo(Guid id_, OverlayEndpoint playerHost_, OverlayEndpoint validatorHost_, string name_)
+        public PlayerInfo(Guid id, OverlayEndpoint playerHost, OverlayEndpoint validatorHost, string name)
         {
-            id = id_;
-            playerHost = playerHost_;
-            validatorHost = validatorHost_;
-            name = name_;
+            this.id = id;
+            this.playerHost = playerHost;
+            this.validatorHost = validatorHost;
+            this.name = name;
+            this.generation = 0;
         }
 
         public override string ToString()
@@ -114,7 +114,7 @@ namespace ServerClient
         private PlayerInfo info;
         private Node playerAgentNode = null;
 
-        private PlayerData playerData = new PlayerData();
+        private PlayerData playerData;
 
         private RemoteAction locked = null;
         private Queue<Action> delayedActions = new Queue<Action>();
@@ -142,10 +142,11 @@ namespace ServerClient
             }
         }
 
-        public PlayerValidator(PlayerInfo info, GlobalHost globalHost, OverlayEndpoint serverHost)
+        public PlayerValidator(PlayerInfo info, GlobalHost globalHost, OverlayEndpoint serverHost, PlayerData playerData)
         {
             this.info = info;
             this.serverHost = serverHost;
+            this.playerData = playerData;
 
             myHost = globalHost.NewHost(info.validatorHost.hostname, Game.Convert(AssignProcessor),
                 BasicInfo.GenerateHandshake(NodeRole.PLAYER_VALIDATOR, info), Aggregator.longInactivityWait);
@@ -230,14 +231,14 @@ namespace ServerClient
             
             if (locked != null)
             {
-                Log.Dump(info, "already locked");
+                Log.Dump(info, n.info.remote, "already locked");
                 RemoteAction.Fail(n, remoteActionId);
                 return;
             }
 
             if (finalizing)
             {
-                Log.Dump(info, "cannot lock, finializing");
+                Log.Dump(info, n.info.remote, "cannot lock, finializing");
                 RemoteAction.Fail(n, remoteActionId);
                 return;
             }
@@ -312,24 +313,25 @@ namespace ServerClient
 
     class PlayerAgent
     {
-        OverlayHost myHost;
+        private OverlayHost myHost;
 
-        OverlayEndpoint serverHost;
+        private OverlayEndpoint serverHost;
 
-        Client myClient;
+        private Client myClient;
 
-        public readonly PlayerInfo info;
-        public PlayerData data = null;
+        public PlayerInfo Info { get; private set; }
+        public PlayerData Data { get; private set; }
 
         public Action<PlayerData> onDataHook = (a) => { };
         //public Action<WorldInfo> onSpawnHook = (a) => { };
         //public Action<WorldInfo, WorldInfo> onRealmMoveHook = (a, b) => { };
 
-        public PlayerAgent(PlayerInfo info_, GlobalHost globalHost, OverlayEndpoint serverHost_, Client myClient_)
+        public PlayerAgent(PlayerInfo info, GlobalHost globalHost, OverlayEndpoint serverHost, Client myClient)
         {
-            info = info_;
-            serverHost = serverHost_;
-            myClient = myClient_;
+            this.Info = info;
+            this.serverHost = serverHost;
+            this.myClient = myClient;
+            this.Data = null;
 
             myHost = globalHost.NewHost(info.playerHost.hostname, Game.Convert(AssignProcessor),
                 BasicInfo.GenerateHandshake(NodeRole.PLAYER_AGENT, info), Aggregator.longInactivityWait);
@@ -339,24 +341,35 @@ namespace ServerClient
             Log.Console("Player Agent {0}", info.GetShortInfo());
         }
 
-        Game.MessageProcessor AssignProcessor(Node n, MemoryStream nodeInfo)
+        private Game.MessageProcessor AssignProcessor(Node n, MemoryStream nodeInfo)
         {
             NodeRole role = Serializer.Deserialize<NodeRole>(nodeInfo);
 
             if (n.info.remote == serverHost)
                 return (mt, stm, nd) => { throw new Exception(Log.StDump(mt, nd.info, "unexpected")); };
             
-            if (n.info.remote == info.validatorHost)
-                return (mt, stm, nd) => ProcessPlayerValidatorMessage(mt, stm, nd);
-            
+            //if (n.info.remote == info.validatorHost)
+            //    return (mt, stm, nd) => ProcessPlayerValidatorMessage(mt, stm, nd);
+
+            if (role == NodeRole.PLAYER_VALIDATOR)
+            {
+                PlayerInfo inf = Serializer.Deserialize<PlayerInfo>(nodeInfo);
+                return (mt, stm, nd) => ProcessPlayerValidatorMessage(mt, stm, nd, inf);
+            }
+
             if (role == NodeRole.WORLD_VALIDATOR)
                 return (mt, stm, nd) => { throw new Exception(Log.StDump(mt, nd.info, "unexpected")); };
 
             throw new Exception(Log.StDump(n.info, role, "unexpected"));
         }
-
-        void ProcessPlayerValidatorMessage(MessageType mt, Stream stm, Node n)
+        private void ProcessPlayerValidatorMessage(MessageType mt, Stream stm, Node n, PlayerInfo info)
         {
+            if (n.info.remote != info.validatorHost)
+            {
+                Log.Dump(mt, "ignored", n.info.remote, info.validatorHost);
+                return;
+            }
+            
             if (mt == MessageType.PLAYER_INFO_VAR)
             {
                 PlayerData pd = Serializer.Deserialize<PlayerData>(stm);
@@ -365,49 +378,45 @@ namespace ServerClient
             else
                 throw new Exception(Log.StDump(mt, "unexpected"));
         }
-
-        void OnPlayerData(PlayerData pd)
+        private void OnPlayerData(PlayerData pd)
         {
             try
             {
                 onDataHook(pd);
                 
-                if (data == null)   // initialize
+                if (Data == null)   // initialize
                     return;
 
-                if (data.ToString() == pd.ToString())
-                    throw new Exception(Log.StDump(data, pd, "unchanged"));
+                if (Data.ToString() == pd.ToString())
+                    throw new Exception(Log.StDump(Data, pd, "unchanged"));
 
-                if (!data.IsConnected) // spawn
+                if (!Data.IsConnected) // spawn
                     OnSpawn(pd.world.Value);
                 else if (!pd.IsConnected) // despawn
                 { }
-                else if (data.world.Value.position != pd.world.Value.position)  // realm move
-                    OnChangeRealm(data.world.Value, pd.world.Value);
+                else if (Data.world.Value.position != pd.world.Value.position)  // realm move
+                    OnChangeRealm(Data.world.Value, pd.world.Value);
 
-                if (data.inventory != pd.inventory) // inventory change
+                if (Data.inventory != pd.inventory) // inventory change
                 { }
             }
             finally
             {
-                data = pd;
+                Data = pd;
             }
         }
-
-        void OnChangeRealm(WorldInfo oldWorld, WorldInfo newWorld)
+        private void OnChangeRealm(WorldInfo oldWorld, WorldInfo newWorld)
         {
             //onRealmMoveHook(oldWorld, newWorld);
-
-            myClient.connectedPlayers.Set(info.id, newWorld);
+            myClient.connectedPlayers.Set(Info.id, newWorld);
         }
-
-        void OnSpawn(WorldInfo newWorld)
+        private void OnSpawn(WorldInfo newWorld)
         {
             //onSpawnHook(newWorld);
 
-            myClient.connectedPlayers.Set(info.id, newWorld);
+            myClient.connectedPlayers.Set(Info.id, newWorld);
         }
-        
+
         public void Spawn()
         {
             myHost.ConnectSendMessage(serverHost, MessageType.SPAWN_REQUEST);
@@ -423,6 +432,15 @@ namespace ServerClient
         public void TakeBlock(WorldInfo worldInfo, Point blockPos)
         {
             myHost.ConnectSendMessage(worldInfo.host, MessageType.TAKE_BLOCK, blockPos);
+        }
+        public void ChangeInfo(PlayerInfo inf)
+        {
+            MyAssert.Assert(Info.generation < inf.generation);
+            Info = inf;
+            Data = null;
+            myHost.ConnectAsync(inf.validatorHost);
+
+            Log.Dump(inf);
         }
     }
 }

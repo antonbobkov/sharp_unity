@@ -248,7 +248,7 @@ namespace ServerClient
         //public Action<World> onNewWorldHook = (a) => { };
         //public Action<World> onDeleteWorldHook = (a) => { };
 
-        public Action<PlayerInfo> onNewMyPlayerHook = (a) => { };
+        //public Action<PlayerInfo> onNewMyPlayerHook = (a) => { };
 
         //public Action<World, PlayerInfo, Point, ActionValidity> onMoveHook = (a, b, c, d) => { };
         //public Action<World, PlayerInfo, bool> onPlayerLeaveHook = (a, b, c) => { };
@@ -310,7 +310,8 @@ namespace ServerClient
             {
                 Guid remoteActionId = Serializer.Deserialize<Guid>(stm);
                 PlayerInfo info = Serializer.Deserialize<PlayerInfo>(stm);
-                OnPlayerValidateRequest(n, remoteActionId, info);
+                PlayerData pd = Serializer.Deserialize<PlayerData>(stm);
+                OnPlayerValidateRequest(n, remoteActionId, info, pd);
             }
             else if (mt == MessageType.WORLD_VALIDATOR_ASSIGN)
             {
@@ -377,8 +378,6 @@ namespace ServerClient
         {
             MyAssert.Assert(myPlayerAgents.Contains(inf.id));
             all.AddPlayerAgent(inf);
-
-            onNewMyPlayerHook(inf);
         }
 
         void OnNewWorldVar(WorldInitializer wrld)
@@ -389,9 +388,9 @@ namespace ServerClient
             
         }
 
-        void OnPlayerValidateRequest(Node n, Guid actionId, PlayerInfo info)
+        void OnPlayerValidateRequest(Node n, Guid actionId, PlayerInfo info, PlayerData pd)
         {
-            all.AddPlayerValidator(info);
+            all.AddPlayerValidator(info, pd);
             //Log.LogWriteLine("Validating for {0}", info);
             //myHost.SendMessage(serverHost, MessageType.ACCEPT, actionId);
             RemoteAction.Sucess(n, actionId);

@@ -136,20 +136,25 @@ namespace ServerClient
             MyAssert.Assert(!worldValidators.ContainsKey(init.info.position));
             worldValidators.Add(init.info.position, new WorldValidator(init, host, myClient.serverHost));
         }
-        public void AddPlayerValidator(PlayerInfo info)
+        public void AddPlayerValidator(PlayerInfo info, PlayerData pd)
         {
             MyAssert.Assert(!playerValidators.ContainsKey(info.id));
-            playerValidators.Add(info.id, new PlayerValidator(info, host, myClient.serverHost));
+            playerValidators.Add(info.id, new PlayerValidator(info, host, myClient.serverHost, pd));
         }
         public void AddPlayerAgent(PlayerInfo info)
         {
-            MyAssert.Assert(!playerAgents.ContainsKey(info.id));
-
-            PlayerAgent pa = new PlayerAgent(info, host, myClient.serverHost, myClient);
-
-            onNewPlayerAgentHook(pa);
-            
-            playerAgents.Add(info.id, pa);
+            if (info.generation == 0)
+            {
+                MyAssert.Assert(!playerAgents.ContainsKey(info.id));
+                PlayerAgent pa = new PlayerAgent(info, host, myClient.serverHost, myClient);
+                onNewPlayerAgentHook(pa);
+                playerAgents.Add(info.id, pa);
+            }
+            else
+            {
+                MyAssert.Assert(playerAgents.ContainsKey(info.id));
+                playerAgents[info.id].ChangeInfo(info);
+            }
         }
 
         public void SpawnAll()
@@ -168,11 +173,11 @@ namespace ServerClient
 
         public void Disengage()
         {
-            //myClient.StopValidating();
+            myClient.StopValidating();
 
-            //foreach (var wv in worldValidators.Values)
-            //    wv.FinalizeWorld();
-            //worldValidators.Clear();
+            foreach (var wv in worldValidators.Values)
+                wv.FinalizeWorld();
+            worldValidators.Clear();
 
             foreach (var pv in playerValidators.Values)
                 pv.FinalizeVerifier();

@@ -79,7 +79,7 @@ namespace ServerClient
             if (role == NodeRole.PLAYER_AGENT)
             {
                 PlayerInfo inf = Serializer.Deserialize<PlayerInfo>(nodeInfo);
-                return (mt, stm, nd) => ProcessPlayerMessage(mt, stm, nd, inf);
+                return (mt, stm, nd) => ProcessPlayerMessage(mt, stm, nd, inf.id);
             }
 
             if (role == NodeRole.PLAYER_VALIDATOR)
@@ -129,11 +129,11 @@ namespace ServerClient
             else
                 throw new Exception(Log.StDump("bad message type", mt));
         }
-        void ProcessPlayerMessage(MessageType mt, Stream stm, Node n, PlayerInfo inf)
+        void ProcessPlayerMessage(MessageType mt, Stream stm, Node n, Guid id)
         {
             if (mt == MessageType.SPAWN_REQUEST)
             {
-                OnSpawnRequest(inf);
+                OnSpawnRequest(id);
                 //n.SoftDisconnect();
             }
             else
@@ -150,6 +150,52 @@ namespace ServerClient
                 throw new Exception(Log.StDump("bad message type", mt));
         }
 
+        void NewPlayerProcess(PlayerInfo playerInfo, PlayerData pd, ManualLock<Guid> lck)
+        {
+            OverlayEndpoint validatorClient = new OverlayEndpoint(playerInfo.validatorHost.addr, Client.hostName);
+            OverlayEndpoint playerClient = new OverlayEndpoint(playerInfo.playerHost.addr, Client.hostName);
+
+            RemoteAction
+                .Send(myHost, validatorClient, MessageType.PLAYER_VALIDATOR_ASSIGN, playerInfo, pd)
+                .Respond(remoteActions, lck, (res, stm) =>
+                {
+                    if (playerInfo.generation == 0)
+                    {
+                        MyAssert.Assert(!players.ContainsKey(playerInfo.id));
+                        players.Add(playerInfo.id, playerInfo);
+                    }
+                    else
+                    {
+                        MyAssert.Assert(players.ContainsKey(playerInfo.id));
+                        players[playerInfo.id] = playerInfo;
+                    }
+
+                    myHost.ConnectSendMessage(playerClient, MessageType.NEW_PLAYER_REQUEST_SUCCESS, playerInfo);
+
+                    Log.Console("New player " + playerInfo.name + " validated by " + playerInfo.validatorHost.addr);
+                });
+        }
+
+        void OnNewPlayerRequest(PlayerInfo inf, PlayerData pd)
+        {
+            MyAssert.Assert(players.ContainsKey(inf.id));
+            MyAssert.Assert(!playerLocks.Contains(inf.id));
+
+            if (!validatorPool.Any())
+                throw new Exception("no validators!");
+
+            ManualLock<Guid> lck = new ManualLock<Guid>(playerLocks, inf.id);
+
+            inf.generation++;
+
+            string hostName = "validator player " + inf.name + " (" + inf.generation + ")"; ;
+            OverlayEndpoint validatorHost = new OverlayEndpoint(validatorPool.Random(n => r.Next(n)),
+                new OverlayHostName(hostName));
+
+            inf.validatorHost = validatorHost;
+
+            NewPlayerProcess(inf, pd, lck);
+        }
         void OnNewPlayerRequest(Guid playerId, OverlayEndpoint playerClient)
         {
             MyAssert.Assert(!players.ContainsKey(playerId));
@@ -168,33 +214,9 @@ namespace ServerClient
             OverlayEndpoint playerNewHost = new OverlayEndpoint(playerClient.addr, new OverlayHostName("agent player " + name));
             PlayerInfo playerInfo = new PlayerInfo(playerId, playerNewHost, validatorHost, name);
 
-            OverlayEndpoint validatorClient = new OverlayEndpoint(validatorHost.addr, Client.hostName);
-
-            RemoteAction
-                .Send(myHost, validatorClient, MessageType.PLAYER_VALIDATOR_ASSIGN, playerInfo)
-                .Respond(remoteActions, lck, (res, stm) =>
-                {
-                    players.Add(playerId, playerInfo);
-
-                    myHost.ConnectSendMessage(playerClient, MessageType.NEW_PLAYER_REQUEST_SUCCESS, playerInfo);
-                    
-                     Log.Console("New player " + name + " validated by " + validatorHost.addr);
-                });
-
-
-            //myHost.SendMessage(validatorClient, MessageType.PLAYER_VALIDATOR_ASSIGN, actionId, playerInfo);
-
-            //DelayedAction da = new DelayedAction()
-            //{
-            //    ep = validatorClient,
-            //    a = () =>
-            //    {
-                    //gameInfo.NET_AddPlayer(playerInfo);
-            //    }
-            //};
-
-            //delayedActions.Add(actionId, da);
+            NewPlayerProcess(playerInfo, new PlayerData(), lck);
         }
+
         void OnNewValidator(IPEndPoint ip)
         {
             MyAssert.Assert(!validatorPool.Where((valip) => valip == ip).Any());
@@ -322,8 +344,11 @@ namespace ServerClient
 
         }
 
-        void OnSpawnRequest(PlayerInfo inf)
+        void OnSpawnRequest(Guid playerId)
         {
+            MyAssert.Assert(players.ContainsKey(playerId));
+            PlayerInfo inf = players[playerId];
+            
             if (!spawnWorlds.Any())
             {
                 Log.Dump("No spawn worlds", inf);
@@ -357,6 +382,7 @@ namespace ServerClient
         void OnPlayerHostDisconnect(PlayerInfo inf, PlayerData pd)
         {
             Log.Dump(inf, pd);
+            OnNewPlayerRequest(inf, pd);
         }
 
         public void PrintStats()

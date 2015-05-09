@@ -113,7 +113,7 @@ public class minecraft : MonoBehaviour
 
         all.onNewPlayerAgentHook = (pa) =>
         {
-            if (pa.info.id == me)
+            if (pa.Info.id == me)
             {
                 myAgent = pa;
 

@@ -67,7 +67,7 @@ namespace ServerClient
             MyAssert.Assert(myClient.myPlayerAgents.Contains(playerId));
 
             PlayerAgent pa = all.playerAgents.GetValue(playerId);
-            PlayerData playerData = pa.data;
+            PlayerData playerData = pa.Data;
 
             if (playerData == null)
                 return longSleep;
