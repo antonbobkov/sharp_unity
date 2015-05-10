@@ -138,14 +138,22 @@ namespace Network
         public NodeException(string s): base(s) {}
     }
 
+    struct NodeDisconnectInfo
+    {
+        public Node node;
+        public Exception exception;
+        public DisconnectType disconnectType;
+    }
+
     class Node
     {
         public delegate void MessageProcessor(MemoryStream stm, Node n);
+        public delegate void DisconnectProcessor(NodeDisconnectInfo di);
 
         public ILog LogR { get; private set; }
         public ILog LogW { get; private set; }
 
-        public Node(Handshake info_, ActionSyncronizerProxy actionQueue_, Action<Node, Exception, DisconnectType> processDisonnect_)
+        public Node(Handshake info_, ActionSyncronizerProxy actionQueue_, DisconnectProcessor processDisonnect_)
         {
             info = info_;
             sync = actionQueue_;
@@ -260,7 +268,7 @@ namespace Network
         internal ReadStatus readerStatus { get; private set; }
 
         ActionSyncronizerProxy sync;
-        Action<Node, Exception, DisconnectType> notifyDisonnect;
+        internal DisconnectProcessor notifyDisonnect;
 
         internal void AcceptReaderConnection(Socket readingSocket,
             MessageProcessor messageProcessor)
@@ -333,7 +341,7 @@ namespace Network
 
             TerminateThreads();
 
-            notifyDisonnect(this, ex, dt);
+            notifyDisonnect(new NodeDisconnectInfo() { node = this, exception = ex, disconnectType = dt });
         }
 
         void TerminateThreads()

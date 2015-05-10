@@ -129,6 +129,18 @@ namespace Network
         }
     }
 
+    class NodeProcessors
+    {
+        public Node.MessageProcessor Message { get; set; }
+        public Node.DisconnectProcessor Disconnect { get; set; }
+
+        public NodeProcessors(Node.MessageProcessor message, Node.DisconnectProcessor disconnect)
+        {
+            this.Message = message;
+            this.Disconnect = disconnect;
+        }
+    }
+
     class OverlayHost
     {
         OverlayHostName hostName;
@@ -136,11 +148,11 @@ namespace Network
 
         Dictionary<OverlayEndpoint, Node> nodes = new Dictionary<OverlayEndpoint, Node>();
 
-        public delegate Node.MessageProcessor ProcessorAssigner(Node n, MemoryStream extraInfo);
+        public delegate NodeProcessors ProcessorAssigner(Node n, MemoryStream extraInfo);
         
         public Action<Node> onNewConnectionHook = (n) => { };
         
-        ProcessorAssigner messageProcessorAssigner;
+        ProcessorAssigner processorAssigner;
 
         ActionSyncronizerProxy processQueue;
 
@@ -158,7 +170,7 @@ namespace Network
             this.hostName = hostName;
             this.IpAddress = address;
             this.processQueue = processQueue;
-            this.messageProcessorAssigner = messageProcessorAssigner;
+            this.processorAssigner = messageProcessorAssigner;
 
             this.extraHandshakeInfo = extraHandshakeInfo;
 
@@ -187,13 +199,6 @@ namespace Network
                 }
         }
 
-        void ProcessDisconnect(Node n, Exception ioex, DisconnectType ds)
-        {
-            Log.Entry(log, 0, (ds == DisconnectType.WRITE_CONNECT_FAIL) ? LogParam.CONSOLE : LogParam.NO_OPTION,
-                "{0} disconnected on {1} ({2})", n.info.remote, ds, (ioex == null) ? "" : ioex.Message);
-            
-            RemoveNode(n);
-        }
         internal void NewIncomingConnection(Handshake info, Socket sck)
         {
             try
@@ -208,9 +213,15 @@ namespace Network
                 bool newConnection = (targetNode == null);
                 if (newConnection)
                 {
-                    targetNode = new Node(info, processQueue, (n, e, t) => this.ProcessDisconnect(n, e, t));
+                    targetNode = new Node(info, processQueue, null);
                     AddNode(targetNode);
                 }
+
+                NodeProcessors proc = processorAssigner(targetNode, remoteExtraInfo);
+                proc.Message = ProcessMessageWrap(proc.Message);
+                proc.Disconnect = ProcessDisconnectWrap(proc.Disconnect);
+
+                targetNode.notifyDisonnect = proc.Disconnect;
 
                 MyAssert.Assert(targetNode.readerStatus != Node.ReadStatus.DISCONNECTED);
                 MyAssert.Assert(targetNode.writerStatus != Node.WriteStatus.DISCONNECTED);
@@ -223,7 +234,7 @@ namespace Network
                     return;
                 }
 
-                targetNode.AcceptReaderConnection(sck, ProcessMessageWrap(messageProcessorAssigner(targetNode, remoteExtraInfo)));
+                targetNode.AcceptReaderConnection(sck, proc.Message);
 
                 if (newConnection)
                     onNewConnectionHook.Invoke(targetNode);
@@ -240,8 +251,6 @@ namespace Network
 
         Node.MessageProcessor ProcessMessageWrap(Node.MessageProcessor messageProcessor)
         {
-            //return messageProcessor;
-
             return (str, n) =>
                 {
                     if (n.IsClosed)
@@ -250,21 +259,25 @@ namespace Network
                     n.UpdateUseTime();
 
                     messageProcessor(str, n);
-
-                    //try
-                    //{
-                    //    messageProcessor(str, n);
-                    //}
-                    //catch (XmlSerializerException e)
-                    //{
-                    //    Log.Console("Error while reading from socket:\n{0}\n\nLast read:{1}", e, Serializer.lastRead.GetData());
-                    //    throw new Exception("Fatal");
-                    //}
                 };
         }
-        
-        public Node ConnectAsync(OverlayEndpoint theirInfo)
+
+        Node.DisconnectProcessor ProcessDisconnectWrap(Node.DisconnectProcessor disconnectProcessor)
         {
+            return (di) =>
+            {
+                Log.Entry(log, 0, (di.disconnectType == DisconnectType.WRITE_CONNECT_FAIL) ? LogParam.CONSOLE : LogParam.NO_OPTION,
+                    "{0} disconnected on {1} ({2})", di.node.info.remote, di.disconnectType, (di.exception == null) ? "" : di.exception.Message);
+
+                RemoveNode(di.node);
+
+                disconnectProcessor(di);
+            };
+        }
+
+        public Node ConnectAsync(OverlayEndpoint theirInfo, Node.DisconnectProcessor dp)
+        {
+            dp = ProcessDisconnectWrap(dp);
             Node targetNode = FindNode(theirInfo);
 
             Handshake info = new Handshake(Address, theirInfo, extraHandshakeInfo);
@@ -272,7 +285,7 @@ namespace Network
             bool newConnection = (targetNode == null);
             if (newConnection)
             {
-                targetNode = new Node(info, processQueue, (n, e, t) => this.ProcessDisconnect(n, e, t));
+                targetNode = new Node(info, processQueue, dp);
                 AddNode(targetNode);
             }
 
@@ -290,11 +303,11 @@ namespace Network
 
             return targetNode;
         }
-        public Node TryConnectAsync(OverlayEndpoint theirInfo)
+        public Node TryConnectAsync(OverlayEndpoint theirInfo, Node.DisconnectProcessor dp)
         {
             try
             {
-                return ConnectAsync(theirInfo);
+                return ConnectAsync(theirInfo, dp);
             }
             catch (NodeException)
             {
@@ -365,14 +378,14 @@ namespace Network
             n.SendMessage(nm);
         }
 
-        public void ConnectSendMessage(OverlayEndpoint remote, NetworkMessage nm)
-        {
-            Node n = FindNode(remote);
-            if (n == null)
-                n = ConnectAsync(remote);
+        //public void ConnectSendMessage(OverlayEndpoint remote, NetworkMessage nm)
+        //{
+        //    Node n = FindNode(remote);
+        //    if (n == null)
+        //        n = ConnectAsync(remote);
 
-            n.SendMessage(nm);
-        }
+        //    n.SendMessage(nm);
+        //}
 
         public void BroadcastGroup(Func<Node, bool> group, NetworkMessage nm)
         {

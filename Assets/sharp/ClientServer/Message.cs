@@ -180,7 +180,8 @@ namespace ServerClient
             rar.AddAction(this);
         }
 
-        static public RemoteAction Send(OverlayHost myHost, OverlayEndpoint remoteHost, MessageType mt, params object[] args)
+        static public RemoteAction Send(OverlayHost myHost, OverlayEndpoint remoteHost, Node.DisconnectProcessor dp,
+            MessageType mt, params object[] args)
         {
             RemoteAction ra = new RemoteAction();
 
@@ -205,7 +206,9 @@ namespace ServerClient
                 args = lst.ToArray();
             }
 
-            myHost.ConnectSendMessage(remoteHost, mt, args);
+            if(dp != null)
+                myHost.TryConnectAsync(remoteHost, dp);
+            myHost.SendMessage(remoteHost, mt, args);
 
             return ra;
         }

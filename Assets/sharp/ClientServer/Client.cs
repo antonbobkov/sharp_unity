@@ -57,11 +57,13 @@ namespace ServerClient
         }
     }
 
-    class TrackedWorldData
+    struct TrackedWorldData
     {
-        public OverlayHost host;
-        public Action<WorldInfo> recordWorldInfo;
         public Func<WorldInitializer, World> generateWorld;
+
+        public Action<WorldInfo> recordWorldInfo;
+        public Action<WorldInfo> subscribe;
+        public Action<WorldInfo> unsubscribe;
     }
 
     class TrackedWorld
@@ -104,7 +106,8 @@ namespace ServerClient
             if (tracker > 0 && !isSubscribed && Info != null)
             {
                 isSubscribed = true;
-                data.host.ConnectSendMessage(Info.Value.host, MessageType.SUBSCRIBE);
+                data.subscribe(Info.Value);
+                //data.host.ConnectSendMessage(Info.Value.host, MessageType.SUBSCRIBE);
             }
         }
         private void Unsubscribe()
@@ -113,7 +116,8 @@ namespace ServerClient
             {
                 isSubscribed = false;
                 MyAssert.Assert(Info != null);
-                data.host.ConnectSendMessage(Info.Value.host, MessageType.UNSUBSCRIBE);
+                data.unsubscribe(Info.Value);
+                //data.host.ConnectSendMessage(Info.Value.host, MessageType.UNSUBSCRIBE);
 
                 if (world != null)
                 {
@@ -268,31 +272,48 @@ namespace ServerClient
 
             myHost.onNewConnectionHook = ProcessNewConnection;
 
+            Action<WorldInfo> subscribe = wi =>
+                {
+                    myHost.TryConnectAsync(wi.host, WorldDisconnect);
+                    myHost.SendMessage(wi.host, MessageType.SUBSCRIBE);
+                };
 
-            TrackedWorldData data = new TrackedWorldData() { host = myHost, generateWorld = generateWorld, recordWorldInfo = null };
+            Action<WorldInfo> unsubscribe = wi =>
+                {
+                    //myHost.TryConnectAsync(wi.host, WorldDisconnect);
+                    myHost.SendMessage(wi.host, MessageType.UNSUBSCRIBE);
+                };
+
+            TrackedWorldData data = new TrackedWorldData()
+                { generateWorld = generateWorld, recordWorldInfo = null,subscribe = subscribe, unsubscribe = unsubscribe };
+
             worlds = new WorldDatabase(data);
 
             connectedPlayers = new PlayerDatabase(p => worlds.At(p).Track(), p => worlds.At(p).Untrack(), 
                 inf => worlds.At(inf.position).SetWorldInfo(inf));
         }
 
-        Game.MessageProcessor AssignProcessor(Node n, MemoryStream nodeInfo)
+        GameNodeProcessors AssignProcessor(Node n, MemoryStream nodeInfo)
         {
             NodeRole role = Serializer.Deserialize<NodeRole>(nodeInfo);
 
             if (role == NodeRole.CLIENT)
-                return ProcessClientMessage;
+                return new GameNodeProcessors(ProcessClientMessage, ClientDisconnect);
 
             if (role == NodeRole.SERVER)
             {
                 MyAssert.Assert(serverHost == n.info.remote);
-                return ProcessServerMessage;
+                return new GameNodeProcessors(ProcessServerMessage, ServerDisconnect);
             }
 
             if (role == NodeRole.WORLD_VALIDATOR)
             {
                 WorldInfo inf = Serializer.Deserialize<WorldInfo>(nodeInfo);
-                return (mt, stm, nd) => ProcessWorldMessage(mt, stm, nd, inf);
+                return new GameNodeProcessors
+                    (
+                        (mt, stm, nd) => ProcessWorldMessage(mt, stm, nd, inf),
+                        WorldDisconnect
+                    );
             }
 
             throw new Exception(Log.StDump(n.info, role, "unexpected"));
@@ -346,6 +367,10 @@ namespace ServerClient
                 throw new Exception(Log.StDump(mt, inf, "unexpected"));
         }
 
+        void ClientDisconnect(NodeDisconnectInfo di) { }
+        void ServerDisconnect(NodeDisconnectInfo di) { }
+        void WorldDisconnect(NodeDisconnectInfo di) { }
+
         void ProcessNewConnection(Node n)
         {
             OverlayHostName remoteName = n.info.remote.hostname;
@@ -368,7 +393,7 @@ namespace ServerClient
 
                 Log.Console("Server at {0}", serverHost);
 
-                /*server = */myHost.ConnectAsync(serverHost);
+                myHost.ConnectAsync(serverHost, ServerDisconnect);
                 myHost.BroadcastGroup(Client.hostName, MessageType.SERVER_ADDRESS, serverHost);
 
                 onServerReadyHook();
@@ -408,7 +433,7 @@ namespace ServerClient
 
         public bool TryConnect(IPEndPoint ep)
         {
-            return myHost.TryConnectAsync(new OverlayEndpoint(ep, Client.hostName)) != null;
+            return myHost.TryConnectAsync(new OverlayEndpoint(ep, Client.hostName), ClientDisconnect) != null;
         }
         public void NewMyPlayer(Guid id)
         {
@@ -425,7 +450,7 @@ namespace ServerClient
         }
         public void StopValidating()
         {
-            myHost.ConnectSendMessage(serverHost, MessageType.STOP_VALIDATING);
+            myHost.SendMessage(serverHost, MessageType.STOP_VALIDATING);
         }
     }
 }

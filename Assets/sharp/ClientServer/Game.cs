@@ -125,19 +125,31 @@ namespace ServerClient
         }
     }
 
+    class GameNodeProcessors
+    {
+        public Game.MessageProcessor Message { get; private set; }
+        public Node.DisconnectProcessor Disconnect { get; private set; }
+
+        public GameNodeProcessors(Game.MessageProcessor message, Node.DisconnectProcessor disconnect)
+        {
+            this.Message = message;
+            this.Disconnect = disconnect;
+        }
+    }
+    
     static class Game
     {
         public delegate void MessageProcessor(MessageType mt, Stream stm, Node n);
 
-        public delegate Game.MessageProcessor ProcessorAssigner(Node n, MemoryStream extraInfo);
+        public delegate GameNodeProcessors ProcessorAssigner(Node n, MemoryStream extraInfo);
 
         public static OverlayHost.ProcessorAssigner Convert(Game.ProcessorAssigner pa)
         {
             return (node, handshake) =>
             {
-                Game.MessageProcessor gmp = pa(node, handshake);
+                GameNodeProcessors gnp = pa(node, handshake);
                 
-                return (stm, nd) => 
+                Node.MessageProcessor nmp = (stm, nd) => 
                     {
                         //if (nd.IsClosed)  done elsewhere
                         //    return;
@@ -157,7 +169,7 @@ namespace ServerClient
                                 Log.EntryVerbose(nd.LogR, sentMsg); 
                             }
 
-                            gmp(mt, stm, nd);
+                            gnp.Message(mt, stm, nd);
                         }
                         catch (XmlSerializerException e)
                         {
@@ -165,6 +177,8 @@ namespace ServerClient
                             throw new Exception("Fatal");
                         }
                     };
+
+                return new NodeProcessors(nmp, gnp.Disconnect);
             };
         }
     }
@@ -223,10 +237,10 @@ namespace ServerClient
             host.SendMessage(remote, new GameMessage(mt, objs));
         }
 
-        public static void ConnectSendMessage(this OverlayHost host, OverlayEndpoint remote, MessageType mt, params object[] objs)
-        {
-            host.ConnectSendMessage(remote, new GameMessage(mt, objs));
-        }
+        //public static void ConnectSendMessage(this OverlayHost host, OverlayEndpoint remote, MessageType mt, params object[] objs)
+        //{
+        //    host.ConnectSendMessage(remote, new GameMessage(mt, objs));
+        //}
 
         public static void BroadcastGroup(this OverlayHost host, Func<Node, bool> group, MessageType mt, params object[] objs)
         {
