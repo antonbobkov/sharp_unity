@@ -170,7 +170,7 @@ namespace ServerClient
                     WorldDisconnect);
             }
 
-            if (role == NodeRole.PLAYER_AGENT)
+            if (n.info.remote == info.playerHost)
                 return new GameNodeProcessors((mt, stm, nd) => { throw new Exception(Log.StDump(nd.info, mt, role, "unexpected")); },
                     PlayerDisconnect);
 
@@ -231,7 +231,7 @@ namespace ServerClient
         }
 
         void ServerDisconnect(NodeDisconnectInfo di) { }
-        void PlayerDisconnect(NodeDisconnectInfo di) { }
+        void PlayerDisconnect(NodeDisconnectInfo di) { playerAgentNode = null; }
         void WorldDisconnect(NodeDisconnectInfo di) { }
 
         void OnLock(Node n, Guid remoteActionId)

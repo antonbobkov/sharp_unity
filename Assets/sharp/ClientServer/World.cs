@@ -829,14 +829,9 @@ namespace ServerClient
                 return;
             
             if (mt == MessageType.SUBSCRIBE)
-            {
-                if(subscribers.Add(n.info.remote))
-                    n.SendMessage(MessageType.WORLD_VAR_INIT, world.Serialize());
-            }
+                Subscribe(n.info.remote);
             else if (mt == MessageType.UNSUBSCRIBE)
-            {
-                subscribers.Remove(n.info.remote);
-            }
+                Unsubscribe(n.info.remote);
             else
                 throw new Exception(Log.StDump("unexpected", world.Info, mt, n.info));
         }
@@ -845,7 +840,24 @@ namespace ServerClient
         void WorldDisconnect(NodeDisconnectInfo di) { }
         void PlayerDisconnect(NodeDisconnectInfo di) { }
         void ServerDisconnect(NodeDisconnectInfo di) { }
-        void ClientDisconnect(NodeDisconnectInfo di) { }
+        void ClientDisconnect(NodeDisconnectInfo di)
+        {
+            OverlayEndpoint addr = di.node.info.remote;
+            if(subscribers.Contains(addr))
+                Unsubscribe(addr);
+        }
+
+        void Subscribe(OverlayEndpoint addr)
+        {
+            MyAssert.Assert(!subscribers.Contains(addr));
+            subscribers.Add(addr);
+            myHost.SendMessage(addr, MessageType.WORLD_VAR_INIT, world.Serialize());
+        }
+        void Unsubscribe(OverlayEndpoint addr)
+        {
+            MyAssert.Assert(subscribers.Contains(addr));
+            subscribers.Remove(addr);
+        }
 
         void OnMoveHook(PlayerInfo inf, Point newPos, ActionValidity mv)
         {
