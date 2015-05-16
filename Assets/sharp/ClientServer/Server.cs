@@ -14,7 +14,7 @@ using Network;
 
 namespace ServerClient
 {
-    class Server
+    class Server : GameNode
     {
         public static readonly OverlayHostName hostName = new OverlayHostName("server");
 
@@ -25,8 +25,6 @@ namespace ServerClient
         //List<Point> spawnWorlds = new List<Point>();
         Dictionary<Point, WorldInfo> worlds = new Dictionary<Point, WorldInfo>();
         Dictionary<Guid, PlayerInfo> players = new Dictionary<Guid, PlayerInfo>();
-
-        OverlayHost myHost;
 
         int playerCounter = 1;
         static string PlayerNameMap(int value)
@@ -54,52 +52,59 @@ namespace ServerClient
         HashSet<Guid> playerLocks = new HashSet<Guid>();
         HashSet<Point> worldLocks = new HashSet<Point>();
 
-        public OverlayEndpoint Address { get { return myHost.Address; } }
+        public OverlayEndpoint Address { get { return Host.Address; } }
 
         int serverSpawnDensity;
 
         public Server(GlobalHost globalHost, ActionSyncronizer sync, int serverSpawnDensity)
         {
-            myHost = globalHost.NewHost(Server.hostName, Game.Convert(AssignProcessor),
+            Host = globalHost.NewHost(Server.hostName, Game.Convert(AssignProcessor),
                 BasicInfo.GenerateHandshake(NodeRole.SERVER), Aggregator.shortInactivityWait);
+
+            base.serverHost = Address;
 
             this.serverSpawnDensity = serverSpawnDensity;
         }
 
-        GameNodeProcessors AssignProcessor(Node n, MemoryStream nodeInfo)
-        {
-            NodeRole role = Serializer.Deserialize<NodeRole>(nodeInfo);
+        //GameNodeProcessors AssignProcessor(Node n, MemoryStream nodeInfo)
+        //{
+        //    NodeRole role = Serializer.Deserialize<NodeRole>(nodeInfo);
 
-            if (role == NodeRole.CLIENT)
-                return new GameNodeProcessors(ProcessClientMessage, ClientDisconnect);
+        //    if (role == NodeRole.CLIENT)
+        //        return new GameNodeProcessors(ProcessClientMessage, ClientDisconnect);
 
-            if (role == NodeRole.WORLD_VALIDATOR)
-                return new GameNodeProcessors(ProcessWorldMessage, WorldDisconnect);
+        //    if (role == NodeRole.WORLD_VALIDATOR)
+        //        return new GameNodeProcessors(ProcessWorldMessage, WorldDisconnect);
 
-            if (role == NodeRole.PLAYER_AGENT)
-            {
-                PlayerInfo inf = Serializer.Deserialize<PlayerInfo>(nodeInfo);
-                return new GameNodeProcessors
-                    (
-                        (mt, stm, nd) => ProcessPlayerMessage(mt, stm, nd, inf.id),
-                        PlayerDisconnect
-                    );
-            }
+        //    if (role == NodeRole.PLAYER_AGENT)
+        //    {
+        //        PlayerInfo inf = Serializer.Deserialize<PlayerInfo>(nodeInfo);
+        //        return new GameNodeProcessors
+        //            (
+        //                (mt, stm, nd) => ProcessPlayerMessage(mt, stm, nd, inf.id),
+        //                PlayerDisconnect
+        //            );
+        //    }
 
-            if (role == NodeRole.PLAYER_VALIDATOR)
-            {
-                PlayerInfo inf = Serializer.Deserialize<PlayerInfo>(nodeInfo);
-                return new GameNodeProcessors
-                    (
-                        (mt, stm, nd) => ProcessPlayerValidatorMessage(mt, stm, nd, inf),
-                        PlayerValidatorDisconnect
-                    );
-            }
+        //    if (role == NodeRole.PLAYER_VALIDATOR)
+        //    {
+        //        PlayerInfo inf = Serializer.Deserialize<PlayerInfo>(nodeInfo);
+        //        return new GameNodeProcessors
+        //            (
+        //                (mt, stm, nd) => ProcessPlayerValidatorMessage(mt, stm, nd, inf),
+        //                PlayerValidatorDisconnect
+        //            );
+        //    }
 
-            throw new Exception(Log.StDump(n.info, role, "unexpected"));
-        }
+        //    throw new Exception(Log.StDump(n.info, role, "unexpected"));
+        //}
 
-        void ProcessClientMessage(MessageType mt, Stream stm, Node n)
+        protected override bool AuthorizeClient(Node n) { return true; }
+        protected override bool AuthorizeWorld(Node n, WorldInfo inf) { return true; }
+        protected override bool AuthorizePlayerAgent(Node n, PlayerInfo inf) { return true; }
+        protected override bool AuthorizePlayerValidator(Node n, PlayerInfo inf) { return true; }
+
+        protected override void ProcessClientMessage(MessageType mt, Stream stm, Node n)
         {
             if (mt == MessageType.NEW_PLAYER_REQUEST)
             {
@@ -122,7 +127,7 @@ namespace ServerClient
             else
                 throw new Exception("Client.ProcessClientMessage bad message type " + mt.ToString());
         }
-        void ProcessWorldMessage(MessageType mt, Stream stm, Node n)
+        protected override void ProcessWorldMessage(MessageType mt, Stream stm, Node n, WorldInfo inf)
         {
             if (mt == MessageType.NEW_WORLD_REQUEST)
             {
@@ -137,17 +142,14 @@ namespace ServerClient
             else
                 throw new Exception(Log.StDump("bad message type", mt));
         }
-        void ProcessPlayerMessage(MessageType mt, Stream stm, Node n, Guid id)
+        protected override void ProcessPlayerAgentMessage(MessageType mt, Stream stm, Node n, PlayerInfo inf)
         {
             if (mt == MessageType.SPAWN_REQUEST)
-            {
-                OnSpawnRequest(id);
-                //n.SoftDisconnect();
-            }
+                OnSpawnRequest(inf.id);
             else
                 throw new Exception(Log.StDump("unexpected", mt));
         }
-        void ProcessPlayerValidatorMessage(MessageType mt, Stream stm, Node n, PlayerInfo inf)
+        protected override void ProcessPlayerValidatorMessage(MessageType mt, Stream stm, Node n, PlayerInfo inf)
         {
             if (mt == MessageType.PLAYER_HOST_DISCONNECT)
             {
@@ -157,11 +159,6 @@ namespace ServerClient
             else
                 throw new Exception(Log.StDump("bad message type", mt));
         }
-
-        void ClientDisconnect(NodeDisconnectInfo di) { }
-        void WorldDisconnect(NodeDisconnectInfo di) { }
-        void PlayerDisconnect(NodeDisconnectInfo di) { }
-        void PlayerValidatorDisconnect(NodeDisconnectInfo di) { }
 
         void NewPlayerProcess(IPEndPoint clientAddr, Guid id, int generation, PlayerData pd)
         {
@@ -185,7 +182,7 @@ namespace ServerClient
             PlayerInfo playerInfo = new PlayerInfo(id, playerNewHost, validatorHost, playerName, generation);
 
             RemoteAction
-                .Send(myHost, validatorClient, ClientDisconnect, MessageType.PLAYER_VALIDATOR_ASSIGN, playerInfo, pd)
+                .Send(Host, validatorClient, ProcessClientDisconnect, MessageType.PLAYER_VALIDATOR_ASSIGN, playerInfo, pd)
                 .Respond(remoteActions, lck, (res, stm) =>
                 {
                     if (playerInfo.generation == 0)
@@ -199,8 +196,7 @@ namespace ServerClient
                         players[playerInfo.id] = playerInfo;
                     }
 
-                    myHost.TryConnectAsync(playerClient, ClientDisconnect);
-                    myHost.SendMessage(playerClient, MessageType.NEW_PLAYER_REQUEST_SUCCESS, playerInfo);
+                    MessageClient(playerClient, MessageType.NEW_PLAYER_REQUEST_SUCCESS, playerInfo);
 
                     Log.Console("New player " + playerInfo.name + " validated by " + playerInfo.validatorHost.addr);
                 });
@@ -267,7 +263,7 @@ namespace ServerClient
             OverlayEndpoint validatorHost = new OverlayEndpoint(validatorPool.Random(n => r.Next(n)), new OverlayHostName(hostName));
 
             WorldInitializer init;
-            WorldInfo info;
+            WorldInfo newWorld;
             bool hasSpawn = false;
 
             if (ser == null)
@@ -284,21 +280,21 @@ namespace ServerClient
                     hasSpawn = true;
                 }
 
-                info = new WorldInfo(worldPos, validatorHost, generation, hasSpawn);
-                init = new WorldInitializer(info, seed);
+                newWorld = new WorldInfo(worldPos, validatorHost, generation, hasSpawn);
+                init = new WorldInitializer(newWorld, seed);
             }
             else
             {
                 hasSpawn = ser.spawnPos.HasValue;
-                info = new WorldInfo(worldPos, validatorHost, generation, hasSpawn);
-                init = new WorldInitializer(info, ser);
+                newWorld = new WorldInfo(worldPos, validatorHost, generation, hasSpawn);
+                init = new WorldInitializer(newWorld, ser);
             }
 
 
             OverlayEndpoint validatorClient = new OverlayEndpoint(validatorHost.addr, Client.hostName);
 
             RemoteAction
-                .Send(myHost, validatorClient, ClientDisconnect, MessageType.WORLD_VALIDATOR_ASSIGN, init)
+                .Send(Host, validatorClient, ProcessClientDisconnect, MessageType.WORLD_VALIDATOR_ASSIGN, init)
                 .Respond(remoteActions, lck, (res, stm) =>
                 {
                     if(res != Response.SUCCESS)
@@ -307,7 +303,7 @@ namespace ServerClient
                     //if (hasSpawn == true)
                     //    spawnWorlds.Add(worldPos);
 
-                    worlds.Add(info.position, info);
+                    worlds.Add(newWorld.position, newWorld);
 
                     //Log.LogWriteLine("New world " + worldPos + " validated by " + validatorHost.addr);
 
@@ -316,35 +312,17 @@ namespace ServerClient
                         if (p == Point.Zero)
                             continue;
 
-                        Point neighborPos = p + info.position;
+                        Point neighborPos = p + newWorld.position;
 
                         if (!worlds.ContainsKey(neighborPos))
                             continue;
 
                         WorldInfo neighborWorld = worlds[neighborPos];
 
-                        myHost.TryConnectAsync(neighborWorld.host, WorldDisconnect);
-                        myHost.TryConnectAsync(info.host, WorldDisconnect);
-                        
-                        myHost.SendMessage(neighborWorld.host, MessageType.NEW_NEIGHBOR, info);
-                        myHost.SendMessage(info.host, MessageType.NEW_NEIGHBOR, neighborWorld);
+                        MessageWorld(neighborWorld, MessageType.NEW_NEIGHBOR, newWorld);
+                        MessageWorld(newWorld, MessageType.NEW_NEIGHBOR, neighborWorld);
                     }
-
-                    //gameInfo.NET_AddWorld(info);
-                    //myHost.BroadcastGroup(Client.hostName, MessageType.NEW_WORLD, info);
                 });
-
-            //myHost.SendMessage(validatorClient, MessageType.WORLD_VALIDATOR_ASSIGN, validatorId, init);
-
-            //DelayedAction da = new DelayedAction()
-            //{
-            //    ep = validatorClient,
-            //    a = () =>
-            //    {
-            //    }
-            //};
-
-            //delayedActions.Add(validatorId, da);
 
         }
 
@@ -367,8 +345,7 @@ namespace ServerClient
 
             WorldInfo spawnWorld = worlds.GetValue(spawnWorldPos);
 
-            myHost.TryConnectAsync(spawnWorld.host, WorldDisconnect);
-            myHost.SendMessage(spawnWorld.host, MessageType.SPAWN_REQUEST, inf);
+            MessageWorld(spawnWorld, MessageType.SPAWN_REQUEST, inf);
         }
 
         void OnStopValidating(Node n)
@@ -396,7 +373,7 @@ namespace ServerClient
 
         public void PrintStats()
         {
-            myHost.PrintStats();
+            Host.PrintStats();
         }
     }
 }

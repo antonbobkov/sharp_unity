@@ -613,7 +613,7 @@ namespace ServerClient
         //}
     }
 
-    class WorldValidator
+    class WorldValidator : GameNode
     {
         private class WorldHook : WorldMutator
         {
@@ -630,10 +630,6 @@ namespace ServerClient
 
         World world;
         WorldHook worldHook;
-        OverlayHost myHost;
-
-        OverlayEndpoint serverHost;
-        //Aggregator all;
 
         RemoteActionRepository remoteActions = new RemoteActionRepository();
         bool finalizing = false;
@@ -642,53 +638,58 @@ namespace ServerClient
 
         HashSet<OverlayEndpoint> subscribers = new HashSet<OverlayEndpoint>();
 
-        public WorldValidator(WorldInitializer init, GlobalHost globalHost, OverlayEndpoint serverHost)//, Aggregator all)
+        public WorldValidator(WorldInitializer init, GlobalHost globalHost, OverlayEndpoint serverHost)
         {
             this.serverHost = serverHost;
-//            this.all = all;
 
             World newWorld = new World(init, OnLootPickup);
             world = new ForwardProxy<World>(newWorld, RemoteFunctionForward).GetProxy();
             worldHook = new WorldHook(this);
 
-            myHost = globalHost.NewHost(init.info.host.hostname, Game.Convert(AssignProcessor),
+            Host = globalHost.NewHost(init.info.host.hostname, Game.Convert(AssignProcessor),
                 BasicInfo.GenerateHandshake(NodeRole.WORLD_VALIDATOR, init.info), Aggregator.longInactivityWait);
 
         }
 
-        GameNodeProcessors AssignProcessor(Node n, MemoryStream nodeInfo)
-        {
-            NodeRole role = Serializer.Deserialize<NodeRole>(nodeInfo);
+        //GameNodeProcessors AssignProcessor(Node n, MemoryStream nodeInfo)
+        //{
+        //    NodeRole role = Serializer.Deserialize<NodeRole>(nodeInfo);
 
-            if (role == NodeRole.CLIENT)
-                return new GameNodeProcessors(ProcessClientMessage, ClientDisconnect);
+        //    if (role == NodeRole.CLIENT)
+        //        return new GameNodeProcessors(ProcessClientMessage, ClientDisconnect);
 
-            if (n.info.remote == serverHost)
-                return new GameNodeProcessors(ProcessServerMessage, ServerDisconnect);
+        //    if (n.info.remote == serverHost)
+        //        return new GameNodeProcessors(ProcessServerMessage, ServerDisconnect);
             
-            if (role == NodeRole.PLAYER_VALIDATOR)
-            {
-                PlayerInfo inf = Serializer.Deserialize<PlayerInfo>(nodeInfo);
-                return new GameNodeProcessors((mt, stm, nd) => ProcessPlayerValidatorMessage(mt, stm, nd, inf), PlayerValidatorDisconnect);
-            }
+        //    if (role == NodeRole.PLAYER_VALIDATOR)
+        //    {
+        //        PlayerInfo inf = Serializer.Deserialize<PlayerInfo>(nodeInfo);
+        //        return new GameNodeProcessors((mt, stm, nd) => ProcessPlayerValidatorMessage(mt, stm, nd, inf), PlayerValidatorDisconnect);
+        //    }
             
-            if (role == NodeRole.PLAYER_AGENT)
-            {
-                PlayerInfo inf = Serializer.Deserialize<PlayerInfo>(nodeInfo);
-                return new GameNodeProcessors((mt, stm, nd) => ProcessPlayerMessage(mt, stm, nd, inf), PlayerDisconnect);
+        //    if (role == NodeRole.PLAYER_AGENT)
+        //    {
+        //        PlayerInfo inf = Serializer.Deserialize<PlayerInfo>(nodeInfo);
+        //        return new GameNodeProcessors((mt, stm, nd) => ProcessPlayerMessage(mt, stm, nd, inf), PlayerDisconnect);
 
-            }
+        //    }
 
-            if (role == NodeRole.WORLD_VALIDATOR)
-            {
-                WorldInfo inf = Serializer.Deserialize<WorldInfo>(nodeInfo);
-                return new GameNodeProcessors((mt, stm, nd) => ProcessWorldValidatorMessage(mt, stm, nd, inf), WorldDisconnect);
-            }
+        //    if (role == NodeRole.WORLD_VALIDATOR)
+        //    {
+        //        WorldInfo inf = Serializer.Deserialize<WorldInfo>(nodeInfo);
+        //        return new GameNodeProcessors((mt, stm, nd) => ProcessWorldValidatorMessage(mt, stm, nd, inf), WorldDisconnect);
+        //    }
 
-            throw new Exception(Log.StDump(n.info, role, "unexpected"));
-        }
-        
-        void ProcessPlayerValidatorMessage(MessageType mt, Stream stm, Node n, PlayerInfo inf)
+        //    throw new Exception(Log.StDump(n.info, role, "unexpected"));
+        //}
+
+        protected override bool AuthorizePlayerValidator(Node n, PlayerInfo inf) { return true; }
+        protected override bool AuthorizePlayerAgent(Node n, PlayerInfo inf) { return true; }
+        protected override bool AuthorizeWorld(Node n, WorldInfo inf) { return true; }
+        protected override bool AuthorizeServer(Node n) { return true; }
+        protected override bool AuthorizeClient(Node n) { return true; }
+
+        protected override void ProcessPlayerValidatorMessage(MessageType mt, Stream stm, Node n, PlayerInfo inf)
         {
             if (mt == MessageType.RESPONSE)
                 RemoteAction.Process(remoteActions, n, stm);
@@ -711,7 +712,7 @@ namespace ServerClient
                     throw new Exception("WorldValidator.ProcessClientMessage bad message type " + mt.ToString());
             }
         }
-        void ProcessWorldValidatorMessage(MessageType mt, Stream stm, Node n, WorldInfo inf)
+        protected override void ProcessWorldMessage(MessageType mt, Stream stm, Node n, WorldInfo inf)
         {
             if (mt == MessageType.RESPONSE)
                 RemoteAction.Process(remoteActions, n, stm);
@@ -756,7 +757,7 @@ namespace ServerClient
             else
                 throw new Exception(Log.StDump(mt, "bad message type"));
         }
-        void ProcessPlayerMessage(MessageType mt, Stream stm, Node n, PlayerInfo inf)
+        protected override void ProcessPlayerAgentMessage(MessageType mt, Stream stm, Node n, PlayerInfo inf)
         {
             if (finalizing)
             {
@@ -805,7 +806,7 @@ namespace ServerClient
             else
                 throw new Exception(Log.StDump(mt, inf, "unexpected message"));
         }
-        void ProcessServerMessage(MessageType mt, Stream stm, Node n)
+        protected override void ProcessServerMessage(MessageType mt, Stream stm, Node n)
         {
             if (finalizing)
                 return;
@@ -823,7 +824,7 @@ namespace ServerClient
             else
                 throw new Exception(Log.StDump("unexpected", world.Info, mt));
         }
-        void ProcessClientMessage(MessageType mt, Stream stm, Node n)
+        protected override void ProcessClientMessage(MessageType mt, Stream stm, Node n)
         {
             if (finalizing)
                 return;
@@ -836,11 +837,7 @@ namespace ServerClient
                 throw new Exception(Log.StDump("unexpected", world.Info, mt, n.info));
         }
 
-        void PlayerValidatorDisconnect(NodeDisconnectInfo di) { }
-        void WorldDisconnect(NodeDisconnectInfo di) { }
-        void PlayerDisconnect(NodeDisconnectInfo di) { }
-        void ServerDisconnect(NodeDisconnectInfo di) { }
-        void ClientDisconnect(NodeDisconnectInfo di)
+        protected override void ProcessClientDisconnect(NodeDisconnectInfo di)
         {
             OverlayEndpoint addr = di.node.info.remote;
             if(subscribers.Contains(addr))
@@ -851,7 +848,8 @@ namespace ServerClient
         {
             MyAssert.Assert(!subscribers.Contains(addr));
             subscribers.Add(addr);
-            myHost.SendMessage(addr, MessageType.WORLD_VAR_INIT, world.Serialize());
+            
+            MessageClient(addr, MessageType.WORLD_VAR_INIT, world.Serialize());
         }
         void Unsubscribe(OverlayEndpoint addr)
         {
@@ -879,7 +877,7 @@ namespace ServerClient
             ManualLock<Guid> lck = new ManualLock<Guid>(playerLocks, player.id);
 
             RemoteAction
-                .Send(myHost, player.validatorHost, PlayerValidatorDisconnect, MessageType.LOCK_VAR)
+                .Send(Host, player.validatorHost, di => ProcessPlayerValidatorDisconnect(di, player), MessageType.LOCK_VAR)
                 .Respond(remoteActions, lck, (res, stm) =>
                 {
                     if (res == Response.SUCCESS)
@@ -894,14 +892,10 @@ namespace ServerClient
                                 --pd.inventory.blocks;
                                 MyAssert.Assert(pd.inventory.blocks >= 0);
 
-                                //myHost.TryConnectAsync(player.validatorHost, PlayerValidatorDisconnect);
-                                myHost.SendMessage(player.validatorHost, MessageType.UNLOCK_VAR, Response.SUCCESS, remoteLockId, pd);
+                                MessagePlayerAgent(player, MessageType.UNLOCK_VAR, Response.SUCCESS, remoteLockId, pd);
                             }
                             else
-                            {
-                                //myHost.TryConnectAsync(player.validatorHost, PlayerValidatorDisconnect);
-                                myHost.SendMessage(player.validatorHost, MessageType.UNLOCK_VAR, Response.FAIL, remoteLockId);
-                            }
+                                MessagePlayerAgent(player, MessageType.UNLOCK_VAR, Response.FAIL, remoteLockId);
                         };
 
                         bool success = false;
@@ -962,7 +956,7 @@ namespace ServerClient
                 ManualLock<Guid> lck = new ManualLock<Guid>(playerLocks, player.id);
 
                 RemoteAction
-                    .Send(myHost, remoteRealm.host, WorldDisconnect, MessageType.REMOTE_PLACE_BLOCK, blockPos)
+                    .Send(Host, remoteRealm.host, di => ProcessWorldDisconnect(di, remoteRealm), MessageType.REMOTE_PLACE_BLOCK, blockPos)
                     .Respond(remoteActions, lck, (res, stm) =>
                     {
                         if (res == Response.SUCCESS)
@@ -1028,8 +1022,8 @@ namespace ServerClient
                 try
                 {
                     WorldInfo remoteRealm = GetRemoteRealm(ref blockPos);
-                    myHost.TryConnectAsync(remoteRealm.host, WorldDisconnect);
-                    myHost.SendMessage(remoteRealm.host, MessageType.REMOTE_TAKE_BLOCK, player, blockPos);
+
+                    MessageWorld(remoteRealm, MessageType.REMOTE_TAKE_BLOCK, player, blockPos);
                 }
                 catch (GetRealmException e)
                 {
@@ -1048,8 +1042,8 @@ namespace ServerClient
             }
 
             world.NET_RemoveBlock(blockPos);
-            myHost.TryConnectAsync(player.validatorHost, PlayerValidatorDisconnect);
-            myHost.SendMessage(player.validatorHost, MessageType.PICKUP_BLOCK);
+            
+            MessagePlayerValidator(player, MessageType.PICKUP_BLOCK);
 
             return true;
         }
@@ -1067,7 +1061,7 @@ namespace ServerClient
             }
 
             RemoteAction
-                .Send(myHost, player.validatorHost, PlayerValidatorDisconnect, MessageType.LOCK_VAR)
+                .Send(Host, player.validatorHost, di => ProcessPlayerValidatorDisconnect(di, player), MessageType.LOCK_VAR)
                 .Respond(remoteActions, lck, (res, stm) =>
                 {
                     if (res == Response.SUCCESS)
@@ -1107,9 +1101,9 @@ namespace ServerClient
                         finally
                         {
                             if(!spawnSuccess)
-                                myHost.SendMessage(player.validatorHost, MessageType.UNLOCK_VAR, Response.FAIL, remoteLockId);
+                                MessagePlayerValidator(player, MessageType.UNLOCK_VAR, Response.FAIL, remoteLockId);
                             else
-                                myHost.SendMessage(player.validatorHost, MessageType.UNLOCK_VAR, Response.SUCCESS, remoteLockId, pd);
+                                MessagePlayerValidator(player, MessageType.UNLOCK_VAR, Response.SUCCESS, remoteLockId, pd);
                         }
                     }
                     else
@@ -1144,7 +1138,7 @@ namespace ServerClient
             ManualLock<Guid> lck = new ManualLock<Guid>(playerLocks, player.id);
 
             RemoteAction
-                .Send(myHost, player.validatorHost, PlayerValidatorDisconnect, MessageType.LOCK_VAR)
+                .Send(Host, player.validatorHost, di => ProcessPlayerValidatorDisconnect(di, player), MessageType.LOCK_VAR)
                 .Respond(remoteActions, lck, (res, stm) =>
                 {
                     if (res == Response.SUCCESS)
@@ -1155,9 +1149,9 @@ namespace ServerClient
                         Action<Response> postProcess = (rs) =>
                         {
                             if (rs == Response.SUCCESS)
-                                myHost.SendMessage(player.validatorHost, MessageType.UNLOCK_VAR, Response.SUCCESS, remoteLockId, pd);
+                                MessagePlayerValidator(player, MessageType.UNLOCK_VAR, Response.SUCCESS, remoteLockId, pd);
                             else
-                                myHost.SendMessage(player.validatorHost, MessageType.UNLOCK_VAR, Response.FAIL, remoteLockId);
+                                MessagePlayerValidator(player, MessageType.UNLOCK_VAR, Response.FAIL, remoteLockId);
                         };
 
                         RealmMoveOut(player, newPos, pd, false, postProcess);
@@ -1212,7 +1206,7 @@ namespace ServerClient
                 ManualLock<Guid> lck = new ManualLock<Guid>(playerLocks, player.id);
 
                 RemoteAction
-                    .Send(myHost, targetRealm.host, WorldDisconnect, MessageType.REALM_MOVE, player, newPos, teleporting)
+                    .Send(Host, targetRealm.host, di => ProcessWorldDisconnect(di, targetRealm), MessageType.REALM_MOVE, player, newPos, teleporting)
                     .Respond(remoteActions, lck, (res, stm) =>
                     {
                         if (res == Response.SUCCESS)
@@ -1304,7 +1298,7 @@ namespace ServerClient
             ManualLock<Guid> lck = new ManualLock<Guid>(playerLocks, player.id);
 
             RemoteAction
-                .Send(myHost, player.validatorHost, PlayerValidatorDisconnect, MessageType.LOCK_VAR)
+                .Send(Host, player.validatorHost, di => ProcessPlayerValidatorDisconnect(di, player), MessageType.LOCK_VAR)
                 .Respond(remoteActions, lck, (res, stm) =>
                 {
                     if (res == Response.SUCCESS)
@@ -1319,10 +1313,10 @@ namespace ServerClient
                                 --pd.inventory.teleport;
                                 MyAssert.Assert(pd.inventory.teleport >= 0);
 
-                                myHost.SendMessage(player.validatorHost, MessageType.UNLOCK_VAR, Response.SUCCESS, remoteLockId, pd);
+                                MessagePlayerAgent(player, MessageType.UNLOCK_VAR, Response.SUCCESS, remoteLockId, pd);
                             }
                             else
-                                myHost.SendMessage(player.validatorHost, MessageType.UNLOCK_VAR, Response.FAIL, remoteLockId);
+                                MessagePlayerAgent(player, MessageType.UNLOCK_VAR, Response.FAIL, remoteLockId);
                         };
 
                         MyAssert.Assert(pd.inventory.teleport >= 0);
@@ -1383,15 +1377,13 @@ namespace ServerClient
         }
         void OnLootPickup(Point p, PlayerInfo inf)
         {
-            myHost.TryConnectAsync(inf.validatorHost, PlayerValidatorDisconnect);
-            myHost.SendMessage(inf.validatorHost, MessageType.PICKUP_TELEPORT);
+            MessagePlayerValidator(inf, MessageType.PICKUP_TELEPORT);
         }
 
         void BoundaryRequest()
         {
-            myHost.TryConnectAsync(serverHost, ServerDisconnect);
             foreach (Point p in world.GetUnknownNeighbors())
-                myHost.SendMessage(serverHost, MessageType.NEW_WORLD_REQUEST, p);
+                MessageServer(MessageType.NEW_WORLD_REQUEST, p);
         }
 
         void RemoteFunctionForward(ForwardFunctionCall ffc)
@@ -1399,7 +1391,7 @@ namespace ServerClient
             object[] ffc_ser = ffc.Serialize();
             
             foreach (OverlayEndpoint remote in subscribers)
-                myHost.SendMessage(remote, MessageType.WORLD_VAR_CHANGE, ffc_ser);
+                MessageClient(remote, MessageType.WORLD_VAR_CHANGE, ffc_ser);
 
             ffc.Apply(worldHook);
         }
@@ -1422,16 +1414,12 @@ namespace ServerClient
             foreach (var player in world.GetAllPlayers().ToArray())
             {
                 world.NET_RemovePlayer(player.id, false);
-                myHost.TryConnectAsync(player.validatorHost, PlayerValidatorDisconnect);
-                myHost.SendMessage(player.validatorHost, MessageType.PLAYER_DISCONNECT);
+                MessagePlayerValidator(player, MessageType.PLAYER_DISCONNECT);
             }
 
             Log.Dump("all player disconnects sent");
 
-            //all.worldValidators.Remove(world.Position);
-
-            myHost.TryConnectAsync(serverHost, ServerDisconnect);
-            myHost.SendMessage(serverHost, MessageType.WORLD_HOST_DISCONNECT, world.Serialize());
+            MessageServer(MessageType.WORLD_HOST_DISCONNECT, world.Serialize());
         }
     }
 }
