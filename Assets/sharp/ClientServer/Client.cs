@@ -235,13 +235,9 @@ namespace ServerClient
         }
     }
 
-    class Client
+    class Client : GameNode
     {
         public static readonly OverlayHostName hostName = new OverlayHostName("client");
-
-        public OverlayEndpoint serverHost = null;
-
-        OverlayHost myHost;
 
         Aggregator all;
 
@@ -267,22 +263,14 @@ namespace ServerClient
             this.all = all;
             //this.generateWorld = generateWorld;
 
-            myHost = globalHost.NewHost(Client.hostName, Game.Convert(AssignProcessor),
+            Host = globalHost.NewHost(Client.hostName, Game.Convert(AssignProcessor),
                 BasicInfo.GenerateHandshake(NodeRole.CLIENT), Aggregator.longInactivityWait);
 
-            myHost.onNewConnectionHook = ProcessNewConnection;
+            SetConnectionHook(ProcessNewConnection);
 
-            Action<WorldInfo> subscribe = wi =>
-                {
-                    myHost.TryConnectAsync(wi.host, WorldDisconnect);
-                    myHost.SendMessage(wi.host, MessageType.SUBSCRIBE);
-                };
+            Action<WorldInfo> subscribe = wi => MessageWorld(wi, MessageType.SUBSCRIBE);
 
-            Action<WorldInfo> unsubscribe = wi =>
-                {
-                    //myHost.TryConnectAsync(wi.host, WorldDisconnect);
-                    myHost.SendMessage(wi.host, MessageType.UNSUBSCRIBE);
-                };
+            Action<WorldInfo> unsubscribe = wi => MessageWorld(wi, MessageType.UNSUBSCRIBE);
 
             TrackedWorldData data = new TrackedWorldData()
                 { generateWorld = generateWorld, recordWorldInfo = null,subscribe = subscribe, unsubscribe = unsubscribe };
@@ -293,32 +281,7 @@ namespace ServerClient
                 inf => worlds.At(inf.position).SetWorldInfo(inf));
         }
 
-        GameNodeProcessors AssignProcessor(Node n, MemoryStream nodeInfo)
-        {
-            NodeRole role = Serializer.Deserialize<NodeRole>(nodeInfo);
-
-            if (role == NodeRole.CLIENT)
-                return new GameNodeProcessors(ProcessClientMessage, ClientDisconnect);
-
-            if (role == NodeRole.SERVER)
-            {
-                MyAssert.Assert(serverHost == n.info.remote);
-                return new GameNodeProcessors(ProcessServerMessage, ServerDisconnect);
-            }
-
-            if (role == NodeRole.WORLD_VALIDATOR)
-            {
-                WorldInfo inf = Serializer.Deserialize<WorldInfo>(nodeInfo);
-                return new GameNodeProcessors
-                    (
-                        (mt, stm, nd) => ProcessWorldMessage(mt, stm, nd, inf),
-                        WorldDisconnect
-                    );
-            }
-
-            throw new Exception(Log.StDump(n.info, role, "unexpected"));
-        }
-        void ProcessClientMessage(MessageType mt, Stream stm, Node n)
+        protected override void ProcessClientMessage(MessageType mt, Stream stm, Node n)
         {
             if (mt == MessageType.SERVER_ADDRESS)
             {
@@ -328,7 +291,7 @@ namespace ServerClient
             else
                 throw new Exception("Client.ProcessClientMessage bad message type " + mt.ToString());
         }
-        void ProcessServerMessage(MessageType mt, Stream stm, Node n)
+        protected override void ProcessServerMessage(MessageType mt, Stream stm, Node n)
         {
             if (mt == MessageType.PLAYER_VALIDATOR_ASSIGN)
             {
@@ -351,7 +314,7 @@ namespace ServerClient
             else
                 throw new Exception("Client.ProcessServerMessage bad message type " + mt.ToString());
         }
-        void ProcessWorldMessage(MessageType mt, Stream stm, Node n, WorldInfo inf)
+        protected override void ProcessWorldMessage(MessageType mt, Stream stm, Node n, WorldInfo inf)
         {
             if (mt == MessageType.WORLD_VAR_INIT)
             {
@@ -366,10 +329,6 @@ namespace ServerClient
             else
                 throw new Exception(Log.StDump(mt, inf, "unexpected"));
         }
-
-        void ClientDisconnect(NodeDisconnectInfo di) { }
-        void ServerDisconnect(NodeDisconnectInfo di) { }
-        void WorldDisconnect(NodeDisconnectInfo di) { }
 
         void ProcessNewConnection(Node n)
         {
@@ -393,8 +352,8 @@ namespace ServerClient
 
                 Log.Console("Server at {0}", serverHost);
 
-                myHost.ConnectAsync(serverHost, ServerDisconnect);
-                myHost.BroadcastGroup(Client.hostName, MessageType.SERVER_ADDRESS, serverHost);
+                ConnectAsync(serverHost, ProcessServerDisconnect);
+                Host.BroadcastGroup(Client.hostName, MessageType.SERVER_ADDRESS, serverHost);
 
                 onServerReadyHook();
             }
@@ -433,24 +392,26 @@ namespace ServerClient
 
         public bool TryConnect(IPEndPoint ep)
         {
-            return myHost.TryConnectAsync(new OverlayEndpoint(ep, Client.hostName), ClientDisconnect) != null;
+            return Host.TryConnectAsync(new OverlayEndpoint(ep, Client.hostName), ProcessClientDisconnect) != null;
         }
         public void NewMyPlayer(Guid id)
         {
             myPlayerAgents.Add(id);
-            myHost.SendMessage(serverHost, MessageType.NEW_PLAYER_REQUEST, id);
+            MessageServer(MessageType.NEW_PLAYER_REQUEST, id);
         }
         public void NewWorld(Point pos)
         {
-            myHost.SendMessage(serverHost, MessageType.NEW_WORLD_REQUEST, pos);
+            MessageServer(MessageType.NEW_WORLD_REQUEST, pos);
         }
         public void Validate()
         {
-            myHost.SendMessage(serverHost, MessageType.NEW_VALIDATOR);
+            MessageServer(MessageType.NEW_VALIDATOR);
         }
         public void StopValidating()
         {
-            myHost.SendMessage(serverHost, MessageType.STOP_VALIDATING);
+            MessageServer(MessageType.STOP_VALIDATING);
         }
+
+        public OverlayEndpoint GetServer() { return serverHost; }
     }
 }

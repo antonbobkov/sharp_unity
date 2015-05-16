@@ -66,6 +66,7 @@
     <Compile Include="Network\SocketListener.cs" />
     <Compile Include="Network\SocketReader.cs" />
     <Compile Include="Network\SocketWriter.cs" />
+    <Compile Include="GameNode.cs" />
     <Compile Include="World.cs" />
   </ItemGroup>
   <ItemGroup>

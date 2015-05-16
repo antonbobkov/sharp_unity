@@ -28,6 +28,23 @@ namespace ServerClient
         PLACE_BLOCK, TAKE_BLOCK,
         REMOTE_PLACE_BLOCK, REMOTE_TAKE_BLOCK,
     };
+    public enum NodeRole { CLIENT, SERVER, PLAYER_AGENT, PLAYER_VALIDATOR, WORLD_VALIDATOR };
+
+    static class BasicInfo
+    {
+        static public MemoryStream GenerateHandshake(NodeRole nr, params object[] info)
+        {
+            MemoryStream ms = new MemoryStream();
+
+            List<object> args = new List<object>();
+            args.Add(nr);
+            args.AddRange(info);
+
+            Serializer.Serialize(ms, args.ToArray());
+
+            return ms;
+        }
+    }
     
     [Serializable]
     public struct Point

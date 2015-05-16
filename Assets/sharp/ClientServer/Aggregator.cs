@@ -134,12 +134,12 @@ namespace ServerClient
         public void AddWorldValidator(WorldInitializer init)
         {
             MyAssert.Assert(!worldValidators.ContainsKey(init.info.position));
-            worldValidators.Add(init.info.position, new WorldValidator(init, host, myClient.serverHost));
+            worldValidators.Add(init.info.position, new WorldValidator(init, host, myClient.GetServer()));
         }
         public void AddPlayerValidator(PlayerInfo info, PlayerData pd)
         {
             MyAssert.Assert(!playerValidators.ContainsKey(info.id));
-            playerValidators.Add(info.id, new PlayerValidator(info, host, myClient.serverHost, pd));
+            playerValidators.Add(info.id, new PlayerValidator(info, host, myClient.GetServer(), pd));
         }
         public void AddPlayerAgent(PlayerInfo info)
         {
@@ -152,7 +152,7 @@ namespace ServerClient
                 playerAgents.Remove(info.id);
             }
 
-            PlayerAgent pa = new PlayerAgent(info, host, myClient.serverHost, myClient);
+            PlayerAgent pa = new PlayerAgent(info, host, myClient.GetServer(), myClient);
             onNewPlayerAgentHook(pa);
             playerAgents.Add(info.id, pa);
         }
