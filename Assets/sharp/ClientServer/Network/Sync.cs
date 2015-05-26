@@ -123,31 +123,52 @@ namespace Network
         }
     }
 
-
-    class TimedAction
+    interface ITickable
     {
-        private int ticksLeft;
-        private int period;
-        private Action a;
+        void Tick(TimeSpan tickPeriod);
+        bool IsDiscarded { get; }
+    }
 
-        public TimedAction(Action a, int period = 1)
+    class TimedAction : ITickable
+    {
+        public bool ZeroPeriodAction { get { return period == TimeSpan.Zero; } }
+
+        public TimedAction(Action a):this(a, TimeSpan.Zero) { }
+        public TimedAction(Action a, TimeSpan period)
         {
-            MyAssert.Assert(period >= 1);
-            
+            MyAssert.Assert(period > TimeSpan.Zero);
+
             this.a = a;
             this.period = period;
-            this.ticksLeft = period;
+            this.timeLeft = period;
         }
 
-        public void Tick()
+        public void Tick(TimeSpan tickPeriod)
         {
-            if (--ticksLeft == 0)
+            MyAssert.Assert(a != null);
+            
+            timeLeft -= tickPeriod;
+            
+            if (timeLeft <= TimeSpan.Zero)
             {
                 a.Invoke();
-                ticksLeft = period;
+                timeLeft = period;
             }
         }
+        public bool IsDiscarded { get { return a == null; } }
+
+        public void Discard() { a = null; }
+
+        private TimeSpan timeLeft;
+        private TimeSpan period;
+        private Action a;
     };
+
+    class NoSpamAction : TimedAction
+    {
+        public void EarlyTrigger();
+
+    }
 
     class TimerThread
     {
@@ -186,6 +207,11 @@ namespace Network
                 sync.Add(this.ProcessTick);
             }
         }
+
+    }
+
+    class TimedEvent
+    {
 
     }
 }
