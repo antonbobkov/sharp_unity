@@ -5,6 +5,8 @@ They can place and collect blocks.
 Each world segment is assigned a different server (verifier).
 Moving between segments transitions the player from one server to the other.
 
+C#.NET, Unity3D, TCP/IP
+
 Below are some screenshots from the server and from the clients (note the overlap between the client screens).
 
 * Server:
